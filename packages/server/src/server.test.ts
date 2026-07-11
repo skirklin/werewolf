@@ -87,7 +87,6 @@ class TestSocket {
 const CONFIG_1_WOLF = {
   selection: { mode: "exact" as const, roleCounts: { werewolf: 1 } },
   revealRoleOnDeath: true,
-  seerLearnsExactRole: false,
   nightSummary: "discreet" as const,
 };
 
@@ -135,7 +134,7 @@ describe("websocket transport", () => {
       g.send({ type: "joinRoom", code: hj.code, name });
       await g.waitFor("joined");
     }
-    host.send({ type: "startGame", config: { selection: { mode: "exact", roleCounts: { werewolf: 1 } }, revealRoleOnDeath: true, seerLearnsExactRole: false, nightSummary: "discreet" } });
+    host.send({ type: "startGame", config: { selection: { mode: "exact", roleCounts: { werewolf: 1 } }, revealRoleOnDeath: true, nightSummary: "discreet" } });
     const started = await host.awaitView((v) => v.phase === "roleReveal");
     const myRole = started.you.roleId;
 

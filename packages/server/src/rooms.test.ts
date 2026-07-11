@@ -26,7 +26,6 @@ class FakeClient implements Client {
 const exact = (roleCounts: Record<string, number>): GameConfig => ({
   selection: { mode: "exact", roleCounts },
   revealRoleOnDeath: true,
-  seerLearnsExactRole: false,
   nightSummary: "discreet",
 });
 

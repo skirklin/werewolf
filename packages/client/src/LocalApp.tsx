@@ -100,18 +100,22 @@ function LocalPlay({
   const [seenRole, setSeenRole] = useState<Set<string>>(new Set());
   if (!state || !view) return null;
 
-  // Seer's own vision — allowed knowledge, so computed from the true role.
+  // The inspector's own vision — allowed knowledge, computed from the true role.
+  // Granularity comes from the acting role (Seer = exact, Aura Seer = werewolf-or-not).
   const resolveInspect = (targetId: string) => {
     const t = state.players.find((p) => p.id === targetId)!;
+    const seatId = "seatId" in turn ? turn.seatId : "";
+    const reveal = getRole(state.players.find((p) => p.id === seatId)!.roleId!).night?.reveal;
     const isWolf = getRole(t.roleId!).team === "werewolf";
     return {
       name: t.name,
       isWolf,
-      label: state.config.seerLearnsExactRole
-        ? `is the ${getRole(t.roleId!).name}`
-        : isWolf
-          ? "is a Werewolf!"
-          : "is not a werewolf.",
+      label:
+        reveal === "exactRole"
+          ? `is the ${getRole(t.roleId!).name}`
+          : isWolf
+            ? "is a Werewolf!"
+            : "is not a werewolf.",
     };
   };
 

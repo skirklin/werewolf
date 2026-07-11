@@ -184,19 +184,6 @@ function SharedToggles({
         />
       </label>
       <label className="chip" style={{ cursor: "pointer" }}>
-        <span className="avatar">🔮</span>
-        <div className="grow">
-          <div className="name">Seer learns exact role</div>
-          <div className="muted small">Off = just werewolf-or-not</div>
-        </div>
-        <input
-          type="checkbox"
-          style={{ width: 24, minHeight: 24 }}
-          checked={config.seerLearnsExactRole}
-          onChange={(e) => onChange({ ...config, seerLearnsExactRole: e.target.checked })}
-        />
-      </label>
-      <label className="chip" style={{ cursor: "pointer" }}>
         <span className="avatar">📢</span>
         <div className="grow">
           <div className="name">Detailed night recap</div>

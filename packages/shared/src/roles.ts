@@ -26,8 +26,16 @@ export const ROLES: Record<string, RoleDef> = {
     name: "Seer",
     team: "village",
     emoji: "🔮",
-    blurb: "Each night, inspect one player to learn whether they are a werewolf.",
-    night: { kind: "inspect", order: 20, canTargetSelf: false },
+    blurb: "Each night, inspect one player to learn their exact role.",
+    night: { kind: "inspect", order: 20, canTargetSelf: false, reveal: "exactRole" },
+  },
+  auraSeer: {
+    id: "auraSeer",
+    name: "Aura Seer",
+    team: "village",
+    emoji: "👁️",
+    blurb: "Each night, read one player's aura to learn only whether they are a werewolf.",
+    night: { kind: "inspect", order: 21, canTargetSelf: false, reveal: "isWerewolf" },
   },
   doctor: {
     id: "doctor",

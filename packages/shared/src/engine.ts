@@ -170,11 +170,13 @@ function nightChoice(state: GameState, actorId: PlayerId, targetId: PlayerId): G
   let inspects = state.inspects;
   if (step.kind === "inspect") {
     const target = playerById(state, targetId)!;
-    const reveal = state.config.seerLearnsExactRole
-      ? target.roleId!
-      : getRole(target.roleId!).team === "werewolf"
-        ? "werewolf"
-        : "not-werewolf";
+    const ability = getRole(actor.roleId).night!;
+    const reveal =
+      ability.reveal === "exactRole"
+        ? target.roleId!
+        : getRole(target.roleId!).team === "werewolf"
+          ? "werewolf"
+          : "not-werewolf";
     inspects = [
       ...inspects,
       { round: state.round, seerId: actorId, targetId, reveal },
@@ -303,8 +305,7 @@ export function createGame(code: string, seed: number): GameState {
     players: [],
     config: {
       selection: { mode: "exact", roleCounts: {} },
-      revealRoleOnDeath: true,
-      seerLearnsExactRole: false,
+      revealRoleOnDeath: false,
       nightSummary: "discreet",
     },
     round: 0,

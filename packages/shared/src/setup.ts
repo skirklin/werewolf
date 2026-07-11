@@ -34,8 +34,7 @@ export function recommendedConfig(_playerCount: number): GameConfig {
       pool: villageSpecialRoles().map((r) => r.id),
       werewolfRatio: DEFAULT_WEREWOLF_RATIO,
     },
-    revealRoleOnDeath: true,
-    seerLearnsExactRole: false,
+    revealRoleOnDeath: false,
     nightSummary: "discreet",
   };
 }

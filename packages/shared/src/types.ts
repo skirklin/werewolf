@@ -20,6 +20,12 @@ export interface NightAbility {
   group?: boolean;
   /** May the actor target themselves? */
   canTargetSelf?: boolean;
+  /**
+   * For `inspect` roles: how much the vision reveals.
+   *  - "exactRole": the target's precise role (classic Seer).
+   *  - "isWerewolf": only werewolf-or-not (Aura Seer).
+   */
+  reveal?: "exactRole" | "isWerewolf";
 }
 
 export interface RoleDef {
@@ -69,8 +75,6 @@ export interface GameConfig {
   selection: RoleSelection;
   /** Reveal a lynched/killed player's role to everyone. */
   revealRoleOnDeath: boolean;
-  /** Seer learns exact role (true) vs. just werewolf-or-not (false). */
-  seerLearnsExactRole: boolean;
   /**
    * How much the public night recap gives away.
    *  - "discreet" (default): a protected kill is reported as a quiet night, so

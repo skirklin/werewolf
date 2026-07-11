@@ -15,7 +15,6 @@ import { makeRng } from "./rng.js";
 const exact = (roleCounts: Record<string, number>): GameConfig => ({
   selection: { mode: "exact", roleCounts },
   revealRoleOnDeath: true,
-  seerLearnsExactRole: false,
   nightSummary: "discreet",
 });
 
@@ -66,7 +65,7 @@ describe("role selection", () => {
     }));
     const config: GameConfig = {
       selection: { mode: "pool", pool: ["seer", "doctor"], werewolfRatio: 0.26 },
-      revealRoleOnDeath: true, seerLearnsExactRole: false, nightSummary: "discreet",
+      revealRoleOnDeath: true, nightSummary: "discreet",
     };
     const dealt = dealRoles(players, config, makeRng(42));
     const counts = countRoles(dealt);
@@ -82,7 +81,7 @@ describe("role selection", () => {
     }));
     const config: GameConfig = {
       selection: { mode: "pool", pool: ["seer", "doctor"], werewolfRatio: 0.26 },
-      revealRoleOnDeath: true, seerLearnsExactRole: false, nightSummary: "discreet",
+      revealRoleOnDeath: true, nightSummary: "discreet",
     };
     const counts = countRoles(dealRoles(players, config, makeRng(1)));
     // 4 players, 1 wolf, 3 non-wolf slots but only 2 specials available.
@@ -241,24 +240,30 @@ describe("night edge cases", () => {
     expect(living(s).some((p) => p.id === "p1")).toBe(true);
   });
 
-  it("two seers each learn independently", () => {
-    let s = gameWith(["werewolf", "seer", "seer", "villager", "villager"]);
+  it("the Seer learns a target's exact role", () => {
+    let s = gameWith(["werewolf", "seer", "doctor", "villager"]);
     s = reduce(s, { type: "startNight" });
-    s = reduce(s, { type: "nightChoice", actorId: "p1", targetId: "p0" }); // seer1 -> wolf
-    s = reduce(s, { type: "nightChoice", actorId: "p2", targetId: "p3" }); // seer2 -> villager
-    expect(projectView(s, "p1").myInspects.at(-1)).toMatchObject({ reveal: "werewolf" });
-    expect(projectView(s, "p2").myInspects.at(-1)).toMatchObject({ reveal: "not-werewolf" });
-    expect(projectView(s, "p1").myInspects).toHaveLength(1); // can't see the other seer's
+    s = reduce(s, { type: "nightChoice", actorId: "p1", targetId: "p2" }); // seer -> doctor
+    expect(projectView(s, "p1").myInspects.at(-1)!.reveal).toBe("doctor");
   });
 
-  it("seer learns the exact role when configured", () => {
-    let s = gameWith(["werewolf", "seer", "doctor", "villager"], {
-      selection: { mode: "exact", roleCounts: {} },
-      seerLearnsExactRole: true,
-    });
+  it("the Aura Seer learns only werewolf-or-not", () => {
+    let s = gameWith(["werewolf", "auraSeer", "doctor", "villager"]);
     s = reduce(s, { type: "startNight" });
-    s = reduce(s, { type: "nightChoice", actorId: "p1", targetId: "p2" });
-    expect(projectView(s, "p1").myInspects.at(-1)!.reveal).toBe("doctor");
+    s = reduce(s, { type: "nightChoice", actorId: "p1", targetId: "p0" }); // aura -> wolf
+    expect(projectView(s, "p1").myInspects.at(-1)!.reveal).toBe("werewolf");
+    s = reduce(s, { type: "nightChoice", actorId: "p1", targetId: "p2" }); // aura -> doctor
+    expect(projectView(s, "p1").myInspects.at(-1)!.reveal).toBe("not-werewolf"); // not "doctor"
+  });
+
+  it("a Seer and an Aura Seer act as independent, differently-revealing steps", () => {
+    let s = gameWith(["werewolf", "seer", "auraSeer", "villager", "villager"]);
+    s = reduce(s, { type: "startNight" });
+    s = reduce(s, { type: "nightChoice", actorId: "p1", targetId: "p3" }); // seer -> villager
+    s = reduce(s, { type: "nightChoice", actorId: "p2", targetId: "p3" }); // aura -> same villager
+    expect(projectView(s, "p1").myInspects.at(-1)!.reveal).toBe("villager");
+    expect(projectView(s, "p2").myInspects.at(-1)!.reveal).toBe("not-werewolf");
+    expect(projectView(s, "p1").myInspects).toHaveLength(1); // can't see the other's vision
   });
 });
 
