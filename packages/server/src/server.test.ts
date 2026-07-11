@@ -73,10 +73,23 @@ class TestSocket {
     });
   }
 
+  /** This socket's assigned player id (once it has joined). */
+  get playerId(): string {
+    const j = this.received.find((m) => m.type === "joined");
+    return j && j.type === "joined" ? j.playerId : "";
+  }
+
   close() {
     this.ws.close();
   }
 }
+
+const CONFIG_1_WOLF = {
+  selection: { mode: "exact" as const, roleCounts: { werewolf: 1 } },
+  revealRoleOnDeath: true,
+  seerLearnsExactRole: false,
+  nightSummary: "discreet" as const,
+};
 
 describe("websocket transport", () => {
   it("create + join + broadcast a shared roster", async () => {
@@ -134,5 +147,57 @@ describe("websocket transport", () => {
     const restored = await back.awaitView((v) => v.phase === "roleReveal");
     expect(restored.you.roleId).toBe(myRole);
     back.close();
+  });
+
+  it("plays a whole 4-player game over live sockets to a village win", async () => {
+    // Seat host + 3 guests over real WebSockets.
+    const host = new TestSocket(url);
+    await host.ready;
+    host.send({ type: "createRoom", name: "Host" });
+    const hj = await host.waitFor("joined");
+    const socks = [host];
+    for (const name of ["A", "B", "C"]) {
+      const g = new TestSocket(url);
+      await g.ready;
+      g.send({ type: "joinRoom", code: hj.code, name });
+      await g.waitFor("joined");
+      socks.push(g);
+    }
+    await host.awaitView((v) => v.players.length === 4);
+
+    // Deal 1 werewolf + 3 villagers; each socket learns its own role privately.
+    host.send({ type: "startGame", config: CONFIG_1_WOLF });
+    const roles = await Promise.all(
+      socks.map((s) => s.awaitView((v) => v.phase === "roleReveal").then((v) => v.you.roleId))
+    );
+    const wolfIdx = roles.findIndex((r) => r === "werewolf");
+    expect(wolfIdx).toBeGreaterThanOrEqual(0);
+    const wolf = socks[wolfIdx];
+
+    // Night: the wolf devours a villager; the game auto-advances to day.
+    host.send({ type: "startNight" });
+    const wolfView = await wolf.awaitView((v) => v.phase === "night" && !!v.nightPrompt);
+    const victimId = wolfView.nightPrompt!.targetIds[0];
+    wolf.send({ type: "nightChoice", targetId: victimId });
+    await host.awaitView((v) => v.phase === "dayDiscussion");
+
+    // The dead villager's own socket should now see itself as dead.
+    const victimSock = socks.find((s) => s.playerId === victimId)!;
+    expect((await victimSock.awaitView((v) => v.phase === "dayDiscussion")).you.alive).toBe(false);
+
+    // Day vote: every living player votes out the wolf; it auto-resolves.
+    host.send({ type: "startVote" });
+    await host.awaitView((v) => v.phase === "dayVote");
+    for (const s of socks) {
+      if (s.playerId === victimId) continue; // dead players can't vote
+      s.send({ type: "castVote", targetId: wolf.playerId });
+    }
+
+    const over = await host.awaitView((v) => v.phase === "gameOver");
+    expect(over.winner).toBe("village");
+    // Roles are revealed to everyone at the end.
+    expect(over.players.every((p) => p.roleId !== null)).toBe(true);
+
+    for (const s of socks) s.close();
   });
 });
