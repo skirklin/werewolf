@@ -1,0 +1,27 @@
+{
+  "name": "werewolf",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/shared",
+    "packages/server",
+    "packages/client"
+  ],
+  "scripts": {
+    "dev": "concurrently -n server,client -c blue,magenta \"npm:dev:server\" \"npm:dev:client\"",
+    "dev:server": "npm -w @werewolf/server run dev",
+    "dev:client": "npm -w @werewolf/client run dev",
+    "build": "npm -w @werewolf/client run build",
+    "start": "npm -w @werewolf/server run start",
+    "test": "npm run test --workspaces --if-present",
+    "typecheck": "tsc -b --pretty"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0",
+    "typescript": "^5.7.2"
+  },
+  "overrides": {
+    "vite": "^6.0.0"
+  }
+}

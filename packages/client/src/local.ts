@@ -1,0 +1,104 @@
+import { useMemo, useState } from "react";
+import {
+  createGame,
+  reduce,
+  projectView,
+  getRole,
+  passDeviceTurn,
+  nightAckKey,
+  allNightStepsDone,
+  allVotesIn,
+  living,
+  type GameState,
+  type GameConfig,
+  type Player,
+  type PlayerView,
+  type Turn,
+} from "@werewolf/shared";
+
+function randomSeed(): number {
+  return Math.floor(Math.random() * 2 ** 31);
+}
+
+export interface LocalGame {
+  state: GameState | null;
+  turn: Turn;
+  /** Redacted view for the seat currently holding the device (or a public one). */
+  view: PlayerView | null;
+  start: (names: string[], config: GameConfig) => void;
+  submitNight: (targetId: string) => void;
+  passNight: () => void;
+  callVote: () => void;
+  submitVote: (targetId: string | null) => void;
+  reset: () => void;
+}
+
+export function useLocalGame(): LocalGame {
+  const [state, setState] = useState<GameState | null>(null);
+  const [acks, setAcks] = useState<Set<string>>(new Set());
+
+  // Role reveal is folded into the first night, so there is no separate reveal
+  // pass — an empty `revealed` set keeps the sequencer in its night branch.
+  const turn = useMemo<Turn>(() => passDeviceTurn(state, new Set(), acks), [state, acks]);
+
+  const view = useMemo<PlayerView | null>(() => {
+    if (!state) return null;
+    const seatId = "seatId" in turn ? turn.seatId : state.players[0]?.id;
+    return seatId ? projectView(state, seatId) : null;
+  }, [state, turn]);
+
+  const start = (names: string[], config: GameConfig) => {
+    const players: Player[] = names.map((name, i) => ({
+      id: `s${i}`,
+      name: name.trim() || `Player ${i + 1}`,
+      roleId: null,
+      alive: true,
+      connected: true,
+      isHost: i === 0,
+    }));
+    const base = { ...createGame("LOCAL", randomSeed()), phase: "lobby" as const, players };
+    // Deal roles, then go straight into the first night (single pass around).
+    const dealt = reduce(base, { type: "startGame", config });
+    setAcks(new Set());
+    setState(reduce(dealt, { type: "startNight" }));
+  };
+
+  /** Mark a living player's night turn done; end the night once all have gone. */
+  const advanceNight = (s: GameState, seatId: string): GameState => {
+    const key = nightAckKey(s.round, seatId);
+    const nextAcks = new Set(acks).add(key);
+    setAcks(nextAcks);
+    const allDone =
+      living(s).every((p) => nextAcks.has(nightAckKey(s.round, p.id))) && allNightStepsDone(s);
+    return allDone ? reduce(s, { type: "endNight" }) : s;
+  };
+
+  const submitNight = (targetId: string) => {
+    if (!state || turn.kind !== "night") return;
+    const acted = reduce(state, { type: "nightChoice", actorId: turn.seatId, targetId });
+    setState(advanceNight(acted, turn.seatId));
+  };
+
+  const passNight = () => {
+    if (!state || turn.kind !== "nightPass") return;
+    setState(advanceNight(state, turn.seatId));
+  };
+
+  const callVote = () => state && setState(reduce(state, { type: "startVote" }));
+
+  const submitVote = (targetId: string | null) => {
+    if (!state || turn.kind !== "vote") return;
+    let next = reduce(state, { type: "castVote", voterId: turn.seatId, targetId });
+    if (allVotesIn(next)) next = reduce(next, { type: "resolveVote" });
+    setState(next);
+  };
+
+  const reset = () => {
+    setState(null);
+    setAcks(new Set());
+  };
+
+  return { state, turn, view, start, submitNight, passNight, callVote, submitVote, reset };
+}
+
+export { getRole };
