@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import QRCode from "qrcode";
 import {
   recommendedConfig,
   validateConfig,
@@ -34,7 +35,10 @@ export function OnlineApp({ onExit }: { onExit: () => void }) {
 
 function Landing({ game, onExit }: { game: ReturnType<typeof useOnlineGame>; onExit: () => void }) {
   const [name, setName] = useState("");
-  const [joinCode, setJoinCode] = useState("");
+  // Pre-fill the code when arriving via a shared invite link (?room=CODE).
+  const [joinCode, setJoinCode] = useState(
+    () => new URLSearchParams(location.search).get("room")?.toUpperCase().slice(0, 4) ?? ""
+  );
   return (
     <div className="app">
       <TopBar onExit={onExit} error={game.error} />
@@ -71,6 +75,62 @@ function Landing({ game, onExit }: { game: ReturnType<typeof useOnlineGame>; onE
   );
 }
 
+/** Share the room: a QR to scan plus a one-tap share/copy of the invite link. */
+function RoomInvite({ code }: { code: string }) {
+  const url = `${location.origin}/?room=${code}`;
+  const [qr, setQr] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    QRCode.toDataURL(url, { margin: 1, width: 320, color: { dark: "#0f1020", light: "#ffffff" } })
+      .then((d) => alive && setQr(d))
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [url]);
+
+  const canShare = "share" in navigator;
+  const share = async () => {
+    const shareData = { title: "Werewolf", text: `Join my Werewolf game (code ${code})`, url };
+    if (canShare) {
+      try {
+        await navigator.share(shareData);
+        return;
+      } catch {
+        /* user cancelled — fall through to copy */
+      }
+    }
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    } catch {
+      /* clipboard blocked — the code + QR are still shown */
+    }
+  };
+
+  return (
+    <div className="card stack center">
+      <div className="muted small">Others join by scanning, or with the code</div>
+      <div className="big" style={{ letterSpacing: 8 }}>{code}</div>
+      {qr && (
+        <img
+          src={qr}
+          alt={`QR code to join room ${code}`}
+          width={200}
+          height={200}
+          style={{ borderRadius: 12, alignSelf: "center" }}
+        />
+      )}
+      <button className="primary full lg" onClick={share}>
+        {copied ? "✓ Link copied" : canShare ? "📲 Share invite link" : "🔗 Copy invite link"}
+      </button>
+    </div>
+  );
+}
+
 function Lobby({
   view,
   send,
@@ -89,11 +149,7 @@ function Lobby({
   return (
     <div className="app">
       <TopBar code={view.code} error={error} onExit={onExit} />
-      <div className="phase-banner">
-        <div className="muted small">Room code</div>
-        <div className="big" style={{ letterSpacing: 6 }}>{view.code}</div>
-        <p className="muted small">Others join at this device's URL with the code above.</p>
-      </div>
+      <RoomInvite code={view.code} />
 
       <div className="stack">
         <div className="spread">

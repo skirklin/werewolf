@@ -26,6 +26,19 @@ export function LocalApp({ onExit }: { onExit: () => void }) {
 // Setup
 // ---------------------------------------------------------------------------
 
+/** Last game's roster (so families don't retype names every time), min 4 rows. */
+function loadNames(): string[] {
+  let saved: string[] = [];
+  try {
+    const raw = localStorage.getItem("werewolf.localNames");
+    if (raw) saved = (JSON.parse(raw) as string[]).filter((n) => typeof n === "string");
+  } catch {
+    /* ignore */
+  }
+  while (saved.length < 4) saved.push("");
+  return saved;
+}
+
 function Setup({
   onStart,
   onExit,
@@ -33,10 +46,19 @@ function Setup({
   onStart: (names: string[], config: GameConfig) => void;
   onExit: () => void;
 }) {
-  const [names, setNames] = useState<string[]>(["", "", "", ""]);
+  const [names, setNames] = useState<string[]>(loadNames);
   const [config, setConfig] = useState<GameConfig>(recommendedConfig(4));
   const filled = names.map((n) => n.trim()).filter(Boolean);
   const problems = validateConfig(config, filled.length);
+
+  const start = () => {
+    try {
+      localStorage.setItem("werewolf.localNames", JSON.stringify(filled));
+    } catch {
+      /* ignore storage errors */
+    }
+    onStart(filled, config);
+  };
 
   const setName = (i: number, v: string) =>
     setNames((ns) => ns.map((n, j) => (j === i ? v : n)));
@@ -68,11 +90,7 @@ function Setup({
         <div className="divider" />
         <RoleConfigEditor config={config} playerCount={filled.length} onChange={setConfig} />
 
-        <button
-          className="primary full lg"
-          disabled={problems.length > 0}
-          onClick={() => onStart(filled, config)}
-        >
+        <button className="primary full lg" disabled={problems.length > 0} onClick={start}>
           Deal roles & start
         </button>
       </div>

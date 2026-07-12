@@ -93,8 +93,14 @@ export function useOnlineGame(): OnlineGame {
     };
   }, [rawSend]);
 
-  // On mount, if we have stored creds, try to rejoin the existing game.
+  // On mount, if we have stored creds, try to rejoin the existing game — unless
+  // an invite link points at a different room, which should take precedence.
   useEffect(() => {
+    const invite = new URLSearchParams(location.search).get("room")?.toUpperCase();
+    if (credsRef.current && invite && invite !== credsRef.current.code) {
+      localStorage.removeItem(STORE_KEY);
+      credsRef.current = null;
+    }
     if (credsRef.current) {
       onOpenRef.current = () => {
         const c = credsRef.current!;
