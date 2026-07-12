@@ -462,10 +462,11 @@ function endNight(state: GameState): GameState {
   for (const id of deaths) if (id !== victimId) log.push({ type: "poisoned", round: state.round, playerId: id });
 
   const killed = markDead(state.players, [...deaths]);
-  // Troublemaker: swap two living players' roles (takes effect going forward).
-  const swapped = applySwaps(killed.players, witchPotions, { ...state.mediumUsed }, steps);
-  // Medium: raise a dead player back to life (one-time, spends the power).
-  const raised = applyRaises(swapped.players, swapped.mediumUsed, steps, log, state.round);
+  // Medium: raise a dead player (spends the power). BEFORE swaps, so the spent
+  // flag is written under the current id and then travels with the role.
+  const raised = applyRaises(killed.players, { ...state.mediumUsed }, steps, log, state.round);
+  // Troublemaker: swap two living players' roles (role state follows the role).
+  const swapped = applySwaps(raised.players, witchPotions, raised.mediumUsed, steps);
 
   // Silencer: whoever is silenced can't vote in the coming day.
   const silenced: PlayerId[] = [];
@@ -475,9 +476,9 @@ function endNight(state: GameState): GameState {
 
   const next: GameState = {
     ...state,
-    players: raised.players,
+    players: swapped.players,
     witchPotions: swapped.witchPotions,
-    mediumUsed: raised.mediumUsed,
+    mediumUsed: swapped.mediumUsed,
     silenced,
     night: null,
     log,

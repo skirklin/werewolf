@@ -353,6 +353,24 @@ describe("Silencer", () => {
     expect(alive(s, "p4")).toBe(false); // lynched 2-1
   });
 
+  it("a day with no eligible voters resolves to no lynch (can't dead-end)", () => {
+    let s = gameWith(["werewolf", "silencer", "villager"]);
+    // Everyone living is silenced — the degenerate case the local mode guards.
+    s = { ...s, phase: "dayVote", silenced: living(s).map((p) => p.id), votes: {} };
+    expect(allVotesIn(s)).toBe(true); // vacuously — nobody may vote
+    s = reduce(s, { type: "resolveVote" });
+    expect(s.phase).toBe("night"); // continues, nobody lynched
+  });
+
+  it("does not list a silenced player who has died", () => {
+    let s = gameWith(["werewolf", "silencer", "villager", "villager"]);
+    s = reduce(s, { type: "startNight" });
+    s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p2" }); // wolves kill p2
+    s = reduce(s, { type: "nightChoice", actorId: "p1", targetId: "p2" }); // silencer also picked p2
+    s = reduce(s, { type: "endNight" });
+    expect(projectView(s, "p0").silencedIds).not.toContain("p2"); // dead, so not shown
+  });
+
   it("silence lasts a single day, then expires", () => {
     let s = gameWith(["werewolf", "silencer", "villager", "villager", "villager"]);
     s = reduce(s, { type: "startNight" });
@@ -430,6 +448,31 @@ describe("Medium", () => {
     for (const p of living(s)) s = reduce(s, { type: "castVote", voterId: p.id, targetId: null });
     s = reduce(s, { type: "resolveVote" });
     expect(projectView(s, "p1").nightPrompt?.kind).not.toBe("raise");
+  });
+
+  it("stays one-time even when the Medium is swapped the same night (spent flag follows the role)", () => {
+    // p0 wolf, p1 medium, p2 troublemaker, p3-p5 villagers
+    let s = gameWith(["werewolf", "medium", "troublemaker", "villager", "villager", "villager"]);
+    s = reduce(s, { type: "startNight" });
+    s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p3" }); // p3 dies
+    s = reduce(s, { type: "endNight" });
+    s = reduce(s, { type: "startVote" });
+    for (const p of living(s)) s = reduce(s, { type: "castVote", voterId: p.id, targetId: null });
+    s = reduce(s, { type: "resolveVote" }); // -> night 2
+    // Medium raises p3, Troublemaker swaps the Medium (p1) with villager p5.
+    s = reduce(s, { type: "raiseAction", actorId: "p1", targetId: "p3" });
+    s = reduce(s, { type: "swapAction", actorId: "p2", aId: "p1", bId: "p5" });
+    s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p4" });
+    s = reduce(s, { type: "endNight" });
+    expect(alive(s, "p3")).toBe(true); // raised
+    expect(s.players.find((p) => p.id === "p5")!.roleId).toBe("medium"); // role moved
+    expect(s.mediumUsed["p5"]).toBe(true); // ...carrying the SPENT flag
+    expect(s.mediumUsed["p1"]).toBeUndefined();
+    // The new Medium (p5) gets no raise step — the power is truly gone.
+    s = reduce(s, { type: "startVote" });
+    for (const p of living(s)) s = reduce(s, { type: "castVote", voterId: p.id, targetId: null });
+    s = reduce(s, { type: "resolveVote" });
+    expect(projectView(s, "p5").nightPrompt?.kind).not.toBe("raise");
   });
 
   it("holding the power does not spend it, and dead players only", () => {

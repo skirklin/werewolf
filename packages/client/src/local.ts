@@ -118,7 +118,14 @@ export function useLocalGame(): LocalGame {
     setState(reduce(state, { type: "shoot", hunterId: turn.seatId, targetId }));
   };
 
-  const callVote = () => state && setState(reduce(state, { type: "startVote" }));
+  const callVote = () => {
+    if (!state) return;
+    let next = reduce(state, { type: "startVote" });
+    // If nobody may vote (e.g. everyone silenced), resolve straight away so the
+    // day can't dead-end — there's no host "force" button in pass-device.
+    if (allVotesIn(next)) next = reduce(next, { type: "resolveVote" });
+    setState(next);
+  };
 
   const submitVote = (targetId: string | null) => {
     if (!state || turn.kind !== "vote") return;

@@ -249,7 +249,9 @@ export function projectView(state: GameState, viewerId: PlayerId): PlayerView {
     shootPrompt,
     myInspects,
     myDetections,
-    silencedIds: state.silenced,
+    // Only surface silenced players who are still alive (a silenced-then-killed
+    // player shouldn't linger on the day board).
+    silencedIds: state.silenced.filter((id) => playerById(state, id)?.alive),
     myVote: viewerId in state.votes ? state.votes[viewerId] : undefined,
     voteTally,
     votesRemaining,
