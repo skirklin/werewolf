@@ -182,6 +182,7 @@ function nightChoice(state: GameState, actorId: PlayerId, targetId: PlayerId): G
   assert(actor.roleId, "Actor has no role.");
   const step = state.night.steps.find((s) => s.actorIds.includes(actorId));
   assert(step, "You have no night action.");
+  assert(!step.done, "That action is already locked in.");
   const targets = validNightTargets(state, actorId);
   assert(targets.some((t) => t.id === targetId), "Invalid target.");
 
@@ -241,6 +242,7 @@ function witchAction(
   assert(actor?.alive && actor.roleId === "witch", "You are not the Witch.");
   const step = state.night.steps.find((s) => s.kind === "witch" && s.actorIds.includes(actorId));
   assert(step, "You have no night action.");
+  assert(!step.done, "You have already acted.");
   // The Witch may only act once the wolves have locked in their victim.
   const killStep = state.night.steps.find((s) => s.kind === "kill");
   assert(!killStep || killStep.done, "Wait for the wolves to choose first.");
@@ -270,6 +272,7 @@ function swapAction(state: GameState, actorId: PlayerId, aId: PlayerId, bId: Pla
   assert(actor?.alive && actor.roleId === "troublemaker", "You are not the Troublemaker.");
   const step = state.night.steps.find((s) => s.kind === "swap" && s.actorIds.includes(actorId));
   assert(step, "You have no night action.");
+  assert(!step.done, "You have already acted.");
   assert(aId !== bId, "Pick two different players.");
   for (const id of [aId, bId]) {
     assert(id !== actorId, "Swap two other players, not yourself.");
@@ -379,38 +382,41 @@ function endNight(state: GameState): GameState {
     if (step.kind !== "witch") continue;
     for (const [actorId, sub] of Object.entries(step.subs)) {
       if (sub.t !== "witch") continue;
-      const potions = witchPotions[actorId] ?? { heal: false, poison: false };
-      if (sub.save && potions.heal && victimId) {
+      let cur = witchPotions[actorId] ?? { heal: false, poison: false };
+      if (sub.save && cur.heal && victimId) {
         protectedIds.add(victimId);
-        witchPotions[actorId] = { ...potions, heal: false };
+        cur = { ...cur, heal: false };
       }
-      if (sub.poison !== null && potions.poison) {
+      if (sub.poison !== null && cur.poison) {
         poisonIds.push(sub.poison);
-        witchPotions[actorId] = { ...(witchPotions[actorId] ?? potions), poison: false };
+        cur = { ...cur, poison: false };
       }
+      witchPotions[actorId] = cur;
     }
   }
 
-  // Assemble deaths, then log the night in a way that respects the recap setting.
+  // Assemble deaths. Poison bypasses protection, so a protected wolf-victim who
+  // is also poisoned still dies — and must be logged as a death, not "saved".
   const deaths = new Set<PlayerId>();
-  const wolfSaved = victimId !== null && protectedIds.has(victimId);
-  if (victimId && !wolfSaved) deaths.add(victimId);
+  const wolfProtected = victimId !== null && protectedIds.has(victimId);
+  if (victimId && !wolfProtected) deaths.add(victimId);
   for (const id of poisonIds) if (playerById(state, id)?.alive) deaths.add(id);
 
   const log = state.log.slice();
   if (!victimId) log.push({ type: "noDeath", round: state.round, cause: "wolves" });
-  else if (wolfSaved) log.push({ type: "saved", round: state.round, playerId: victimId });
-  else log.push({ type: "death", round: state.round, playerId: victimId, cause: "wolves" });
+  else if (!deaths.has(victimId)) log.push({ type: "saved", round: state.round, playerId: victimId });
+  else if (!wolfProtected) log.push({ type: "death", round: state.round, playerId: victimId, cause: "wolves" });
+  else log.push({ type: "poisoned", round: state.round, playerId: victimId }); // protected but poisoned
   for (const id of deaths) if (id !== victimId) log.push({ type: "poisoned", round: state.round, playerId: id });
 
   const killed = markDead(state.players, [...deaths]);
   // Troublemaker: swap two living players' roles (takes effect going forward).
-  const players = applySwaps(killed.players, steps);
+  const swapped = applySwaps(killed.players, witchPotions, steps);
 
   const next: GameState = {
     ...state,
-    players,
-    witchPotions,
+    players: swapped.players,
+    witchPotions: swapped.witchPotions,
     night: null,
     log,
     pendingShots: [...state.pendingShots, ...killed.deadShooters],
@@ -418,23 +424,38 @@ function endNight(state: GameState): GameState {
   return enterReckoning(next, "day");
 }
 
-/** Apply every Troublemaker swap for which both targets are still alive. */
-function applySwaps(players: Player[], steps: NightStep[]): Player[] {
-  let next = players;
+/**
+ * Apply every Troublemaker swap for which both targets are still alive. Potions
+ * travel with the role, so a player swapped into the Witch inherits her
+ * remaining potions (and the ex-Witch loses them).
+ */
+function applySwaps(
+  players: Player[],
+  witchPotions: GameState["witchPotions"],
+  steps: NightStep[]
+): { players: Player[]; witchPotions: GameState["witchPotions"] } {
+  let nextPlayers = players;
+  const nextPotions = { ...witchPotions };
   for (const step of steps) {
     if (step.kind !== "swap") continue;
     for (const sub of Object.values(step.subs)) {
       if (sub.t !== "swap") continue;
-      const a = next.find((p) => p.id === sub.a);
-      const b = next.find((p) => p.id === sub.b);
+      const a = nextPlayers.find((p) => p.id === sub.a);
+      const b = nextPlayers.find((p) => p.id === sub.b);
       if (!a?.alive || !b?.alive) continue;
       const roleA = a.roleId;
-      next = next.map((p) =>
+      nextPlayers = nextPlayers.map((p) =>
         p.id === sub.a ? { ...p, roleId: b.roleId } : p.id === sub.b ? { ...p, roleId: roleA } : p
       );
+      const potA = nextPotions[sub.a];
+      const potB = nextPotions[sub.b];
+      delete nextPotions[sub.a];
+      delete nextPotions[sub.b];
+      if (potB) nextPotions[sub.a] = potB;
+      if (potA) nextPotions[sub.b] = potA;
     }
   }
-  return next;
+  return { players: nextPlayers, witchPotions: nextPotions };
 }
 
 function shoot(state: GameState, hunterId: PlayerId, targetId: PlayerId): GameState {

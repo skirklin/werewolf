@@ -136,6 +136,18 @@ describe("role selection", () => {
     expect(validateConfig(exact({ werewolf: 1, seer: 1 }), 6)).toEqual([]);
     expect(validateConfig(recommendedConfig(7), 7)).toEqual([]);
   });
+
+  it("rejects a pool with no village side (and an empty pool)", () => {
+    const pool = (ids: string[]) =>
+      validateConfig(
+        { selection: { mode: "pool", pool: ids, werewolfRatio: 0.26 }, revealRoleOnDeath: false, nightSummary: "discreet" },
+        6
+      );
+    expect(pool([]).length).toBeGreaterThan(0); // empty
+    expect(pool(["tanner"]).length).toBeGreaterThan(0); // solo-only, no town
+    expect(pool(["villager"])).toEqual([]); // villagers count as a village side
+    expect(pool(["seer"])).toEqual([]); // a village role counts too
+  });
 });
 
 describe("night resolution", () => {
@@ -267,13 +279,22 @@ describe("night edge cases", () => {
     expect(projectView(s, "p1").myInspects.at(-1)!.reveal).toBe("doctor");
   });
 
-  it("the Aura Seer learns only werewolf-or-not", () => {
-    let s = gameWith(["werewolf", "auraSeer", "doctor", "villager"]);
+  it("the Aura Seer learns only werewolf-or-not (one inspect per night)", () => {
+    const inspect = (targetId: string) => {
+      let s = gameWith(["werewolf", "auraSeer", "doctor", "villager"]);
+      s = reduce(s, { type: "startNight" });
+      s = reduce(s, { type: "nightChoice", actorId: "p1", targetId });
+      return projectView(s, "p1").myInspects.at(-1)!.reveal;
+    };
+    expect(inspect("p0")).toBe("werewolf"); // the wolf
+    expect(inspect("p2")).toBe("not-werewolf"); // the doctor — not "doctor"
+  });
+
+  it("a role may only act once per night (the step locks when done)", () => {
+    let s = gameWith(["werewolf", "seer", "villager", "villager"]);
     s = reduce(s, { type: "startNight" });
-    s = reduce(s, { type: "nightChoice", actorId: "p1", targetId: "p0" }); // aura -> wolf
-    expect(projectView(s, "p1").myInspects.at(-1)!.reveal).toBe("werewolf");
-    s = reduce(s, { type: "nightChoice", actorId: "p1", targetId: "p2" }); // aura -> doctor
-    expect(projectView(s, "p1").myInspects.at(-1)!.reveal).toBe("not-werewolf"); // not "doctor"
+    s = reduce(s, { type: "nightChoice", actorId: "p1", targetId: "p0" });
+    expect(() => reduce(s, { type: "nightChoice", actorId: "p1", targetId: "p2" })).toThrow();
   });
 
   it("a Seer and an Aura Seer act as independent, differently-revealing steps", () => {

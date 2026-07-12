@@ -265,6 +265,17 @@ describe("Witch", () => {
       reduce(s, { type: "witchAction", actorId: "p1", save: false, poisonTargetId: "p1" })
     ).toThrow();
   });
+
+  it("healing AND poisoning the same victim still kills them, and logs a death", () => {
+    let s = gameWith(["werewolf", "witch", "villager", "villager", "villager"]);
+    s = reduce(s, { type: "startNight" });
+    s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p2" }); // wolves target p2
+    s = reduce(s, { type: "witchAction", actorId: "p1", save: true, poisonTargetId: "p2" }); // heal + poison p2
+    s = reduce(s, { type: "endNight" });
+    expect(alive(s, "p2")).toBe(false); // poison bypasses the heal
+    expect(s.log.some((e) => e.type === "poisoned" && e.playerId === "p2")).toBe(true);
+    expect(s.log.some((e) => e.type === "saved" && (e as any).playerId === "p2")).toBe(false);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -296,6 +307,21 @@ describe("Troublemaker", () => {
     s = reduce(s, { type: "startNight" });
     expect(() => reduce(s, { type: "swapAction", actorId: "p1", aId: "p1", bId: "p2" })).toThrow(); // self
     expect(() => reduce(s, { type: "swapAction", actorId: "p1", aId: "p2", bId: "p2" })).toThrow(); // same
+  });
+
+  it("potions follow the role when a Witch is swapped", () => {
+    // p0 wolf, p1 troublemaker, p2 witch, p3 villager, p4 villager
+    let s = gameWith(["werewolf", "troublemaker", "witch", "villager", "villager"]);
+    s = reduce(s, { type: "startNight" });
+    s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p3" });
+    s = reduce(s, { type: "swapAction", actorId: "p1", aId: "p2", bId: "p4" }); // swap witch & villager
+    // Witch (p2) must act before night ends; she does nothing this round.
+    s = reduce(s, { type: "witchAction", actorId: "p2", save: false, poisonTargetId: null });
+    s = reduce(s, { type: "endNight" });
+    // p4 is now the Witch and holds the potions; p2 no longer does.
+    expect(s.players.find((p) => p.id === "p4")!.roleId).toBe("witch");
+    expect(s.witchPotions["p4"]).toEqual({ heal: true, poison: true });
+    expect(s.witchPotions["p2"]).toBeUndefined();
   });
 });
 

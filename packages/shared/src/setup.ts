@@ -70,6 +70,11 @@ export function validateConfig(config: GameConfig, playerCount: number): ConfigP
         problems.push({ message: "Don't add werewolves to the pool — their count comes from the ratio." });
     }
     if (sel.pool.length === 0) problems.push({ message: "Add at least one role to the pool." });
+    const hasVillageSide = sel.pool.some(
+      (id) => id === VILLAGER_ROLE_ID || getRole(id).team === "village"
+    );
+    if (sel.pool.length > 0 && !hasVillageSide)
+      problems.push({ message: "Add a Villager or a village role so the town has a side." });
     if (sel.werewolfRatio <= 0) problems.push({ message: "Werewolf ratio must be above zero." });
   }
   return problems;
