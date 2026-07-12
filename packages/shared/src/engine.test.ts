@@ -109,6 +109,12 @@ describe("role selection", () => {
     });
   });
 
+  it("never previews negative counts (e.g. before any players are added)", () => {
+    const c = previewComposition(recommendedConfig(0), 0);
+    expect(c.villageSpecials).toBeGreaterThanOrEqual(0);
+    expect(c.villagers).toBeGreaterThanOrEqual(0);
+  });
+
   it("flags impossible configs", () => {
     expect(validateConfig(exact({ werewolf: 0 }), 5))
       .toEqual(expect.arrayContaining([{ message: "Need at least 1 werewolf." }]));
@@ -280,6 +286,15 @@ describe("illegal moves are rejected", () => {
     s = reduce(s, { type: "endNight" });
     s = reduce(s, { type: "startVote" });
     expect(() => reduce(s, { type: "castVote", voterId: "p1", targetId: "p0" })).toThrow();
+  });
+
+  it("cannot vote for yourself", () => {
+    let s = gameWith(["werewolf", "villager", "villager", "villager"]);
+    s = reduce(s, { type: "startNight" });
+    s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p1" });
+    s = reduce(s, { type: "endNight" });
+    s = reduce(s, { type: "startVote" });
+    expect(() => reduce(s, { type: "castVote", voterId: "p2", targetId: "p2" })).toThrow();
   });
 
   it("cannot vote for a dead player", () => {

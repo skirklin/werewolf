@@ -10,6 +10,7 @@ export type Turn =
   | { kind: "startNight" }
   | { kind: "night"; seatId: string; roleId: string }
   | { kind: "nightPass"; seatId: string }
+  | { kind: "shoot"; seatId: string }
   | { kind: "vote"; seatId: string }
   | { kind: "public" };
 
@@ -42,6 +43,11 @@ export function passDeviceTurn(
       return { kind: "nightPass", seatId: p.id };
     }
     return { kind: "public" };
+  }
+
+  if (state.phase === "hunterShot") {
+    const shooter = state.pendingShots[0];
+    return shooter ? { kind: "shoot", seatId: shooter } : { kind: "public" };
   }
 
   if (state.phase === "dayVote") {

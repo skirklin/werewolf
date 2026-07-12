@@ -184,12 +184,14 @@ describe("websocket transport", () => {
     const victimSock = socks.find((s) => s.playerId === victimId)!;
     expect((await victimSock.awaitView((v) => v.phase === "dayDiscussion")).you.alive).toBe(false);
 
-    // Day vote: every living player votes out the wolf; it auto-resolves.
+    // Day vote: everyone votes out the wolf; the wolf (can't self-vote) votes a decoy.
     host.send({ type: "startVote" });
     await host.awaitView((v) => v.phase === "dayVote");
+    const decoy = socks.find((s) => s.playerId !== wolf.playerId && s.playerId !== victimId)!;
     for (const s of socks) {
       if (s.playerId === victimId) continue; // dead players can't vote
-      s.send({ type: "castVote", targetId: wolf.playerId });
+      const target = s.playerId === wolf.playerId ? decoy.playerId : wolf.playerId;
+      s.send({ type: "castVote", targetId: target });
     }
 
     const over = await host.awaitView((v) => v.phase === "gameOver");

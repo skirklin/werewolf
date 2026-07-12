@@ -20,7 +20,7 @@ export function publicLog(state: GameState): LogEntry[] {
   );
 }
 import { getRole } from "./roles.js";
-import { living, validNightTargets, playerById } from "./engine.js";
+import { living, validNightTargets, validShootTargets, playerById } from "./engine.js";
 
 /** A player as visible to someone else — role hidden unless it should be shown. */
 export interface PublicPlayer {
@@ -62,6 +62,8 @@ export interface PlayerView {
   nightPrompt: NightPrompt | null;
   /** Number of night actors across the table still to submit. */
   nightWaitingOn: number;
+  /** If you are a fallen Hunter whose dying shot is pending, who you may hit. */
+  shootPrompt: { targetIds: PlayerId[] } | null;
   /** Your seer inspections across all rounds (only yours). */
   myInspects: InspectResult[];
   /** Your current vote this round (undefined if not cast). */
@@ -71,6 +73,8 @@ export interface PlayerView {
   votesRemaining: number;
   log: LogEntry[];
   winner: Team | null;
+  /** The player who won a solo victory (e.g. a lynched Tanner), if any. */
+  soloWinnerId: PlayerId | null;
   config: GameConfig;
 }
 
@@ -115,13 +119,23 @@ export function projectView(state: GameState, viewerId: PlayerId): PlayerView {
   const you = playerById(state, viewerId);
   if (!you) throw new Error(`No such player: ${viewerId}`);
 
+  // The Drunk is shown a disguised role and never learns the truth (until the end).
+  const displayRoleId =
+    state.phase !== "gameOver" && you.roleId
+      ? getRole(you.roleId).disguiseAs ?? you.roleId
+      : you.roleId;
+
   const players: PublicPlayer[] = state.players.map((p) => ({
     id: p.id,
     name: p.name,
     alive: p.alive,
     isHost: p.isHost,
     connected: p.connected,
-    roleId: roleVisibleTo(state, p.id, viewerId) ? p.roleId : null,
+    roleId: !roleVisibleTo(state, p.id, viewerId)
+      ? null
+      : p.id === viewerId
+        ? displayRoleId // keep the disguise consistent with the role card
+        : p.roleId,
   }));
 
   const packmates =
@@ -154,13 +168,20 @@ export function projectView(state: GameState, viewerId: PlayerId): PlayerView {
         : undefined;
       nightPrompt = {
         kind: myStep.kind,
-        roleId: myStep.roleId,
+        // Show the disguise (Drunk sees itself acting as the Seer).
+        roleId: getRole(myStep.roleId).disguiseAs ?? myStep.roleId,
         targetIds: validNightTargets(state, viewerId).map((p) => p.id),
         canTargetSelf: !!ability.canTargetSelf,
         groupChoices,
       };
     }
   }
+
+  // A fallen Hunter at the front of the queue gets to take their shot.
+  const shootPrompt =
+    state.phase === "hunterShot" && state.pendingShots[0] === viewerId
+      ? { targetIds: validShootTargets(state).map((p) => p.id) }
+      : null;
 
   const myInspects = state.inspects.filter((r) => r.seerId === viewerId);
 
@@ -180,7 +201,7 @@ export function projectView(state: GameState, viewerId: PlayerId): PlayerView {
     you: {
       id: you.id,
       name: you.name,
-      roleId: you.roleId,
+      roleId: displayRoleId,
       alive: you.alive,
       isHost: you.isHost,
     },
@@ -188,12 +209,14 @@ export function projectView(state: GameState, viewerId: PlayerId): PlayerView {
     packmates,
     nightPrompt,
     nightWaitingOn,
+    shootPrompt,
     myInspects,
     myVote: viewerId in state.votes ? state.votes[viewerId] : undefined,
     voteTally,
     votesRemaining,
     log: publicLog(state),
     winner: state.winner,
+    soloWinnerId: state.soloWinnerId,
     config: state.config,
   };
 }

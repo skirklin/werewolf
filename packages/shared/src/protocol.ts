@@ -25,6 +25,8 @@ export type ClientMessage =
   | { type: "startVote" }
   | { type: "castVote"; targetId: PlayerId | null }
   | { type: "resolveVote" }
+  | { type: "shoot"; targetId: PlayerId }
+  | { type: "skipShot" }
   | { type: "kick"; playerId: PlayerId };
 
 /** Messages the server sends to a client. */

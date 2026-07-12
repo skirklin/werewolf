@@ -24,8 +24,9 @@ export interface NightAbility {
    * For `inspect` roles: how much the vision reveals.
    *  - "exactRole": the target's precise role (classic Seer).
    *  - "isWerewolf": only werewolf-or-not (Aura Seer).
+   *  - "fabricated": a fake, meaningless result (the deluded Drunk).
    */
-  reveal?: "exactRole" | "isWerewolf";
+  reveal?: "exactRole" | "isWerewolf" | "fabricated";
 }
 
 export interface RoleDef {
@@ -37,12 +38,19 @@ export interface RoleDef {
   /** Emoji used as the role's avatar in the UI. */
   emoji: string;
   night?: NightAbility;
+  /** On death (night or lynch), this player takes someone down with them. */
+  onDeathShoot?: boolean;
+  /** A solo role that wins immediately if the town lynches them (Tanner). */
+  winsIfLynched?: boolean;
+  /** Shown to this player as a different role — they never learn the truth (Drunk). */
+  disguiseAs?: string;
 }
 
 export type Phase =
   | "lobby"
   | "roleReveal"
   | "night"
+  | "hunterShot"
   | "dayDiscussion"
   | "dayVote"
   | "gameOver";
@@ -113,10 +121,11 @@ export interface NightState {
 export type LogEntry =
   | { type: "gameStart"; round: number }
   | { type: "night"; round: number }
-  | { type: "death"; round: number; playerId: PlayerId; cause: "wolves" | "lynch" }
+  | { type: "death"; round: number; playerId: PlayerId; cause: "wolves" }
   | { type: "saved"; round: number; playerId: PlayerId }
   | { type: "noDeath"; round: number; cause: "wolves" | "lynch" }
   | { type: "lynch"; round: number; playerId: PlayerId }
+  | { type: "hunterShot"; round: number; playerId: PlayerId }
   | { type: "voteTie"; round: number }
   | { type: "gameOver"; round: number; winner: Team };
 
@@ -131,7 +140,13 @@ export interface GameState {
   inspects: InspectResult[];
   /** voterId -> targetId, or null for an explicit skip. */
   votes: Record<PlayerId, PlayerId | null>;
+  /** Hunters who have died and owe a dying shot, resolved front-first. */
+  pendingShots: PlayerId[];
+  /** Where to continue once all pending shots resolve. */
+  afterReckoning: "day" | "night" | null;
   log: LogEntry[];
   seed: number;
   winner: Team | null;
+  /** The specific player who won a solo victory (e.g. a lynched Tanner). */
+  soloWinnerId: PlayerId | null;
 }

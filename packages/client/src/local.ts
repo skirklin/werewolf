@@ -28,6 +28,7 @@ export interface LocalGame {
   start: (names: string[], config: GameConfig) => void;
   submitNight: (targetId: string) => void;
   passNight: () => void;
+  submitShoot: (targetId: string) => void;
   callVote: () => void;
   submitVote: (targetId: string | null) => void;
   reset: () => void;
@@ -84,6 +85,11 @@ export function useLocalGame(): LocalGame {
     setState(advanceNight(state, turn.seatId));
   };
 
+  const submitShoot = (targetId: string) => {
+    if (!state || turn.kind !== "shoot") return;
+    setState(reduce(state, { type: "shoot", hunterId: turn.seatId, targetId }));
+  };
+
   const callVote = () => state && setState(reduce(state, { type: "startVote" }));
 
   const submitVote = (targetId: string | null) => {
@@ -98,7 +104,7 @@ export function useLocalGame(): LocalGame {
     setAcks(new Set());
   };
 
-  return { state, turn, view, start, submitNight, passNight, callVote, submitVote, reset };
+  return { state, turn, view, start, submitNight, passNight, submitShoot, callVote, submitVote, reset };
 }
 
 export { getRole };

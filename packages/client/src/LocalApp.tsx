@@ -3,6 +3,7 @@ import {
   recommendedConfig,
   validateConfig,
   getRole,
+  fabricatedReveal,
   publicPlayers,
   publicLog,
   type GameConfig,
@@ -100,23 +101,22 @@ function LocalPlay({
   const [seenRole, setSeenRole] = useState<Set<string>>(new Set());
   if (!state || !view) return null;
 
-  // The inspector's own vision — allowed knowledge, computed from the true role.
-  // Granularity comes from the acting role (Seer = exact, Aura Seer = werewolf-or-not).
+  // The inspector's own vision — computed from the acting role's reveal type.
+  // Seer = exact, Aura Seer = werewolf-or-not, Drunk = a fabricated (fake) result
+  // matching what the engine will record.
   const resolveInspect = (targetId: string) => {
     const t = state.players.find((p) => p.id === targetId)!;
     const seatId = "seatId" in turn ? turn.seatId : "";
     const reveal = getRole(state.players.find((p) => p.id === seatId)!.roleId!).night?.reveal;
+    // The Drunk (fabricated) is disguised as the exact-role Seer, so its fake
+    // result must also read as an exact role — matching the engine's record.
+    const shownRoleId =
+      reveal === "fabricated" ? fabricatedReveal(state.seed, state.round, targetId) : t.roleId!;
+    if (reveal === "exactRole" || reveal === "fabricated") {
+      return { name: t.name, isWolf: shownRoleId === "werewolf", label: `is the ${getRole(shownRoleId).name}` };
+    }
     const isWolf = getRole(t.roleId!).team === "werewolf";
-    return {
-      name: t.name,
-      isWolf,
-      label:
-        reveal === "exactRole"
-          ? `is the ${getRole(t.roleId!).name}`
-          : isWolf
-            ? "is a Werewolf!"
-            : "is not a werewolf.",
-    };
+    return { name: t.name, isWolf, label: isWolf ? "is a Werewolf!" : "is not a werewolf." };
   };
 
   if (state.phase === "gameOver") {
@@ -185,11 +185,22 @@ function LocalPlay({
           <button className="primary full lg" onClick={game.passNight}>Tap to pass on</button>
         </div>
       );
+    case "shoot":
+      return <ShootTurn view={view} onSubmit={game.submitShoot} />;
     case "vote":
       return <VoteTurn view={view} onSubmit={game.submitVote} />;
     default:
       return null;
   }
+}
+
+function ShootTurn({ view, onSubmit }: { view: PlayerView; onSubmit: (id: string) => void }) {
+  return (
+    <div className="app">
+      <div className="phase-banner"><div className="big">🏹</div><h2>{view.you.name}, your dying shot</h2><p className="muted">You've fallen — take one player down with you.</p></div>
+      <TargetGrid view={view} ids={view.shootPrompt!.targetIds} selected={null} onPick={onSubmit} />
+    </div>
+  );
 }
 
 function NightTurn({

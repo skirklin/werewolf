@@ -19,6 +19,8 @@ export interface Client {
 }
 
 const CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"; // no ambiguous chars
+/** How long an in-game room may sit empty before it's reclaimed. */
+const EMPTY_ROOM_GRACE_MS = 15 * 60_000;
 
 function randomCode(): string {
   let s = "";
@@ -31,6 +33,8 @@ class Room {
   state: GameState;
   private clients = new Map<PlayerId, Client>();
   private tokens = new Map<PlayerId, string>();
+  /** When the room last became empty (for sweeping), or null while occupied. */
+  emptySince: number | null = null;
 
   constructor(code: string) {
     this.state = createGame(code, Math.floor(Math.random() * 2 ** 31));
@@ -59,6 +63,7 @@ class Room {
     });
     this.tokens.set(playerId, token);
     this.clients.set(playerId, client);
+    this.emptySince = null;
     this.broadcast();
     return { playerId, token };
   }
@@ -69,6 +74,7 @@ class Room {
     if (!player) return false;
     player.connected = true;
     this.clients.set(playerId, client);
+    this.emptySince = null;
     this.broadcast();
     return true;
   }
@@ -83,12 +89,25 @@ class Room {
         if (this.state.phase === "lobby") {
           this.state.players = this.state.players.filter((p) => p.id !== pid);
           this.tokens.delete(pid);
-          if (player?.isHost && this.state.players.length > 0)
-            this.state.players[0].isHost = true;
         }
+        // Hand off host if the host left and someone is still connected (any phase).
+        if (player?.isHost) this.reassignHostFrom(pid);
+        if (this.empty) this.emptySince = Date.now();
         this.broadcast();
         return;
       }
+    }
+  }
+
+  /** Move host to the first connected player when the current host is gone. */
+  private reassignHostFrom(formerHostId: PlayerId) {
+    const stillHost = this.state.players.some((p) => p.isHost && this.clients.has(p.id));
+    if (stillHost) return;
+    const heir =
+      this.state.players.find((p) => p.id !== formerHostId && this.clients.has(p.id)) ??
+      this.state.players.find((p) => this.clients.has(p.id));
+    if (heir) {
+      for (const p of this.state.players) p.isHost = p.id === heir.id;
     }
   }
 
@@ -125,6 +144,13 @@ class Room {
         break;
       case "castVote":
         this.apply({ type: "castVote", voterId: playerId, targetId: msg.targetId });
+        break;
+      case "shoot":
+        this.apply({ type: "shoot", hunterId: playerId, targetId: msg.targetId });
+        break;
+      case "skipShot":
+        hostOnly(); // recovery when a fallen Hunter has left before shooting
+        this.apply({ type: "skipShot" });
         break;
       case "resolveVote":
         hostOnly();
@@ -183,10 +209,17 @@ export class RoomManager {
     return this.rooms.get(code.toUpperCase());
   }
 
-  /** Remove empty, pre-game rooms so codes don't leak. */
-  sweep() {
+  /**
+   * Reclaim rooms so they don't leak: empty pre-game lobbies immediately, and
+   * any room that has sat empty past the grace period (players who all vanished
+   * mid-game get time to reconnect first).
+   */
+  sweep(now: number = Date.now(), graceMs = EMPTY_ROOM_GRACE_MS) {
     for (const [code, room] of this.rooms) {
-      if (room.empty && room.state.phase === "lobby") this.rooms.delete(code);
+      if (!room.empty) continue;
+      if (room.state.phase === "lobby") this.rooms.delete(code);
+      else if (room.emptySince !== null && now - room.emptySince > graceMs)
+        this.rooms.delete(code);
     }
   }
 }

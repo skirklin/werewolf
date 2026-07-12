@@ -74,7 +74,9 @@ export type Action =
   | { type: "endNight" }
   | { type: "startVote" }
   | { type: "castVote"; voterId: PlayerId; targetId: PlayerId | null }
-  | { type: "resolveVote" };
+  | { type: "resolveVote" }
+  | { type: "shoot"; hunterId: PlayerId; targetId: PlayerId }
+  | { type: "skipShot" };
 
 export class EngineError extends Error {}
 
@@ -104,6 +106,10 @@ export function reduce(state: GameState, action: Action): GameState {
       return castVote(state, action.voterId, action.targetId);
     case "resolveVote":
       return resolveVote(state);
+    case "shoot":
+      return shoot(state, action.hunterId, action.targetId);
+    case "skipShot":
+      return skipShot(state);
   }
 }
 
@@ -174,9 +180,11 @@ function nightChoice(state: GameState, actorId: PlayerId, targetId: PlayerId): G
     const reveal =
       ability.reveal === "exactRole"
         ? target.roleId!
-        : getRole(target.roleId!).team === "werewolf"
-          ? "werewolf"
-          : "not-werewolf";
+        : ability.reveal === "fabricated"
+          ? fabricatedReveal(state.seed, state.round, targetId)
+          : getRole(target.roleId!).team === "werewolf"
+            ? "werewolf"
+            : "not-werewolf";
     inspects = [
       ...inspects,
       { round: state.round, seerId: actorId, targetId, reveal },
@@ -202,6 +210,66 @@ function pluralityTarget(step: NightStep, rng: () => number): PlayerId | null {
   return top[0][0];
 }
 
+/**
+ * A stable, fake inspect result for the deluded Drunk. Because the Drunk is
+ * disguised as the exact-role Seer, the fake must also look like an exact role
+ * (villager-heavy, with the occasional werewolf) — never a binary answer, or
+ * the disguise would give itself away on night one. Independent of the target's
+ * true role, so it leaks nothing.
+ */
+const FAKE_REVEALS = ["villager", "villager", "villager", "villager", "werewolf", "seer", "doctor"];
+export function fabricatedReveal(seed: number, round: number, targetId: PlayerId): string {
+  let h = 0;
+  for (const ch of targetId) h = (h * 31 + ch.charCodeAt(0)) | 0;
+  const idx = Math.floor(makeRng(seed + round * 131 + h)() * FAKE_REVEALS.length);
+  return FAKE_REVEALS[idx];
+}
+
+/** Mark players dead (only those currently alive); collect any who owe a dying shot. */
+function markDead(
+  players: Player[],
+  ids: PlayerId[]
+): { players: Player[]; deadShooters: PlayerId[] } {
+  const deadShooters: PlayerId[] = [];
+  let next = players;
+  for (const id of ids) {
+    const p = next.find((x) => x.id === id);
+    if (!p || !p.alive) continue;
+    next = next.map((x) => (x.id === id ? { ...x, alive: false } : x));
+    if (p.roleId && getRole(p.roleId).onDeathShoot) deadShooters.push(id);
+  }
+  return { players: next, deadShooters };
+}
+
+/** Living players a pending shooter could still target. */
+export function validShootTargets(state: GameState): Player[] {
+  return living(state);
+}
+
+/**
+ * Enter the dying-shot phase if any shooter has a target; otherwise carry on to
+ * the next phase. The single seam that Hunter-style on-death effects hook into.
+ *
+ * Note: the winner is finalised in `continueAfter`, i.e. only once all pending
+ * shots have fired. This is intentional — a dying Hunter shoots even when the
+ * math already looks decided, and that shot can change the outcome.
+ */
+function enterReckoning(state: GameState, next: "day" | "night"): GameState {
+  const pending = state.pendingShots.filter((id) => living(state).some((p) => p.id !== id));
+  if (pending.length === 0)
+    return continueAfter({ ...state, pendingShots: [], afterReckoning: null }, next);
+  return { ...state, phase: "hunterShot", pendingShots: pending, afterReckoning: next };
+}
+
+/** Resolve the game or advance to the pending day/night once deaths settle. */
+function continueAfter(state: GameState, next: "day" | "night"): GameState {
+  const winner = checkWinner(state);
+  if (winner) return finish(state, winner);
+  return next === "day"
+    ? { ...state, phase: "dayDiscussion", afterReckoning: null }
+    : beginNight({ ...state, afterReckoning: null });
+}
+
 function endNight(state: GameState): GameState {
   assert(state.phase === "night" && state.night, "Not night.");
   const rng = makeRng(state.seed + state.round);
@@ -220,19 +288,49 @@ function endNight(state: GameState): GameState {
 
   const log = state.log.slice();
   let players = state.players;
+  let deadShooters: PlayerId[] = [];
   if (victimId && protectedIds.has(victimId)) {
     log.push({ type: "saved", round: state.round, playerId: victimId });
   } else if (victimId) {
-    players = players.map((p) => (p.id === victimId ? { ...p, alive: false } : p));
+    const r = markDead(players, [victimId]);
+    players = r.players;
+    deadShooters = r.deadShooters;
     log.push({ type: "death", round: state.round, playerId: victimId, cause: "wolves" });
   } else {
     log.push({ type: "noDeath", round: state.round, cause: "wolves" });
   }
 
-  const next: GameState = { ...state, players, night: null, log };
-  const winner = checkWinner(next);
-  if (winner) return finish(next, winner);
-  return { ...next, phase: "dayDiscussion" };
+  const next: GameState = {
+    ...state,
+    players,
+    night: null,
+    log,
+    pendingShots: [...state.pendingShots, ...deadShooters],
+  };
+  return enterReckoning(next, "day");
+}
+
+function shoot(state: GameState, hunterId: PlayerId, targetId: PlayerId): GameState {
+  assert(state.phase === "hunterShot", "No dying shot pending.");
+  assert(state.pendingShots[0] === hunterId, "It's not your shot.");
+  const target = playerById(state, targetId);
+  assert(target?.alive, "Can't shoot a dead player.");
+  assert(targetId !== hunterId, "You can't shoot yourself.");
+
+  const { players, deadShooters } = markDead(state.players, [targetId]);
+  const log: typeof state.log = [
+    ...state.log,
+    { type: "hunterShot", round: state.round, playerId: targetId },
+  ];
+  const pendingShots = [...state.pendingShots.slice(1), ...deadShooters];
+  return enterReckoning({ ...state, players, log, pendingShots }, state.afterReckoning ?? "day");
+}
+
+/** Host recovery: drop the pending shooter without firing (e.g. they left). */
+function skipShot(state: GameState): GameState {
+  assert(state.phase === "hunterShot", "No dying shot pending.");
+  const pendingShots = state.pendingShots.slice(1);
+  return enterReckoning({ ...state, pendingShots }, state.afterReckoning ?? "day");
 }
 
 function startVote(state: GameState): GameState {
@@ -245,6 +343,7 @@ function castVote(state: GameState, voterId: PlayerId, targetId: PlayerId | null
   const voter = playerById(state, voterId);
   assert(voter?.alive, "Dead players can't vote.");
   if (targetId !== null) {
+    assert(targetId !== voterId, "You can't vote for yourself.");
     const target = playerById(state, targetId);
     assert(target?.alive, "Can't vote for a dead player.");
   }
@@ -265,34 +364,47 @@ function resolveVote(state: GameState): GameState {
   }
 
   const log = state.log.slice();
-  let players = state.players;
+
   if (tally.size === 0) {
     log.push({ type: "noDeath", round: state.round, cause: "lynch" });
-  } else {
-    const max = Math.max(...tally.values());
-    const top = [...tally.entries()].filter(([, c]) => c === max);
-    if (top.length > 1) {
-      // Tie: no one is lynched. (Deliberate rule — keeps stalls harmless.)
-      log.push({ type: "voteTie", round: state.round });
-    } else {
-      const lynchedId = top[0][0];
-      players = players.map((p) => (p.id === lynchedId ? { ...p, alive: false } : p));
-      log.push({ type: "lynch", round: state.round, playerId: lynchedId });
-    }
+    return continueAfter({ ...state, votes: {}, log }, "night");
+  }
+  const max = Math.max(...tally.values());
+  const top = [...tally.entries()].filter(([, c]) => c === max);
+  if (top.length > 1) {
+    // Tie: no one is lynched. (Deliberate rule — keeps stalls harmless.)
+    log.push({ type: "voteTie", round: state.round });
+    return continueAfter({ ...state, votes: {}, log }, "night");
   }
 
-  const next: GameState = { ...state, players, votes: {}, log };
-  const winner = checkWinner(next);
-  if (winner) return finish(next, winner);
-  return beginNight(next);
+  const lynchedId = top[0][0];
+  const lynched = playerById(state, lynchedId)!;
+  const { players, deadShooters } = markDead(state.players, [lynchedId]);
+  log.push({ type: "lynch", round: state.round, playerId: lynchedId });
+
+  // A lynched Tanner wins outright, before any Hunter shot or team check.
+  if (lynched.roleId && getRole(lynched.roleId).winsIfLynched) {
+    return finish({ ...state, players, votes: {}, log }, "solo", lynchedId);
+  }
+
+  const next: GameState = {
+    ...state,
+    players,
+    votes: {},
+    log,
+    pendingShots: [...state.pendingShots, ...deadShooters],
+  };
+  return enterReckoning(next, "night");
 }
 
-function finish(state: GameState, winner: Team): GameState {
+function finish(state: GameState, winner: Team, soloWinnerId: PlayerId | null = null): GameState {
   return {
     ...state,
     phase: "gameOver",
     winner,
+    soloWinnerId,
     night: null,
+    pendingShots: [],
     log: [...state.log, { type: "gameOver", round: state.round, winner }],
   };
 }
@@ -312,8 +424,11 @@ export function createGame(code: string, seed: number): GameState {
     night: null,
     inspects: [],
     votes: {},
+    pendingShots: [],
+    afterReckoning: null,
     log: [],
     seed,
     winner: null,
+    soloWinnerId: null,
   };
 }

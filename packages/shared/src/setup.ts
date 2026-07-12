@@ -1,9 +1,12 @@
 import type { GameConfig, Player, RoleSelection } from "./types.js";
-import { getRole, ROLES, VILLAGER_ROLE_ID } from "./roles.js";
+import { getRole, VILLAGER_ROLE_ID } from "./roles.js";
 import { shuffle } from "./rng.js";
 
 /** Default target fraction of werewolves in pool mode (~1 per 4 players). */
 export const DEFAULT_WEREWOLF_RATIO = 0.26;
+
+/** A conservative, familiar default pool (the rest can be toggled on). */
+const DEFAULT_POOL = ["seer", "doctor"];
 
 function clamp(n: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, n));
@@ -15,13 +18,6 @@ export function werewolfCountFor(playerCount: number, ratio: number): number {
   return clamp(Math.round(playerCount * ratio), 1, max);
 }
 
-/** Village-team special roles available to seed a pool. */
-export function villageSpecialRoles() {
-  return Object.values(ROLES).filter(
-    (r) => r.team === "village" && r.id !== VILLAGER_ROLE_ID
-  );
-}
-
 /**
  * Recommend a balanced setup. Defaults to pool mode so the werewolf count
  * always scales with the table — the fix for the "bad random selection"
@@ -31,7 +27,7 @@ export function recommendedConfig(_playerCount: number): GameConfig {
   return {
     selection: {
       mode: "pool",
-      pool: villageSpecialRoles().map((r) => r.id),
+      pool: [...DEFAULT_POOL],
       werewolfRatio: DEFAULT_WEREWOLF_RATIO,
     },
     revealRoleOnDeath: false,
@@ -99,8 +95,12 @@ export function previewComposition(
     };
   }
   const wolves = werewolfCountFor(playerCount, sel.werewolfRatio);
-  const villageSpecials = Math.min(sel.pool.length, playerCount - wolves);
-  return { werewolves: wolves, villageSpecials, villagers: playerCount - wolves - villageSpecials };
+  const villageSpecials = Math.max(0, Math.min(sel.pool.length, playerCount - wolves));
+  return {
+    werewolves: wolves,
+    villageSpecials,
+    villagers: Math.max(0, playerCount - wolves - villageSpecials),
+  };
 }
 
 /** Build and shuffle the role deck, then deal it. Fair Fisher-Yates over the RNG. */

@@ -156,6 +156,25 @@ export function VoteAction({ view, send }: { view: PlayerView; send: Send }) {
   );
 }
 
+/** A fallen Hunter's dying shot. Assumes view.shootPrompt is present. */
+export function ShootAction({ view, send }: { view: PlayerView; send: Send }) {
+  return (
+    <div className="stack">
+      <div className="phase-banner">
+        <div className="big">🏹</div>
+        <h2>Your dying shot</h2>
+        <p className="muted">You've fallen — take one player down with you.</p>
+      </div>
+      <TargetGrid
+        view={view}
+        ids={view.shootPrompt!.targetIds}
+        selected={null}
+        onPick={(id) => send({ type: "shoot", targetId: id })}
+      />
+    </div>
+  );
+}
+
 export function PlayerList({ players, youId }: { players: PublicPlayer[]; youId: string }) {
   return (
     <div className="players">
@@ -167,12 +186,23 @@ export function PlayerList({ players, youId }: { players: PublicPlayer[]; youId:
 }
 
 export function GameOver({ view, onExit }: { view: PlayerView; onExit: () => void }) {
-  const won = view.winner === "village" ? "The Village" : "The Werewolves";
+  const soloWinner = view.soloWinnerId
+    ? view.players.find((p) => p.id === view.soloWinnerId)
+    : undefined;
+  const { emoji, headline } =
+    view.winner === "solo"
+      ? {
+          emoji: soloWinner?.roleId ? roleEmoji(soloWinner.roleId) : "🃏",
+          headline: `${soloWinner?.name ?? "The Tanner"} wins alone!`,
+        }
+      : view.winner === "village"
+        ? { emoji: "🎉", headline: "The Village wins!" }
+        : { emoji: "🐺", headline: "The Werewolves win!" };
   return (
     <div className="stack">
       <div className="phase-banner">
-        <div className="big">{view.winner === "village" ? "🎉" : "🐺"}</div>
-        <h1>{won} win!</h1>
+        <div className="big">{emoji}</div>
+        <h1>{headline}</h1>
       </div>
       <div className="card stack">
         <b>Everyone's role</b>

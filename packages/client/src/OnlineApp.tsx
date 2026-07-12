@@ -9,20 +9,25 @@ import {
 import { useOnlineGame } from "./net.js";
 import { RoleConfigEditor } from "./config.js";
 import { RoleCard, InspectHistory, LogFeed } from "./ui.js";
-import { NightAction, DayBoard, VoteAction, GameOver, PlayerList } from "./phases.js";
+import { NightAction, DayBoard, VoteAction, ShootAction, GameOver, PlayerList } from "./phases.js";
 
 export function OnlineApp({ onExit }: { onExit: () => void }) {
   const game = useOnlineGame();
   const { view, code, error } = game;
+  // Leaving clears saved creds so a reload doesn't auto-rejoin a finished game.
+  const exit = () => {
+    game.leave();
+    onExit();
+  };
 
-  if (!code) return <Landing game={game} onExit={onExit} />;
-  if (!view) return <Centered title="Connecting…" onExit={onExit} error={error} />;
-  if (view.phase === "lobby") return <Lobby view={view} send={game.send} error={error} onExit={onExit} />;
+  if (!code) return <Landing game={game} onExit={exit} />;
+  if (!view) return <Centered title="Connecting…" onExit={exit} error={error} />;
+  if (view.phase === "lobby") return <Lobby view={view} send={game.send} error={error} onExit={exit} />;
 
   return (
     <div className="app">
-      <TopBar code={code} error={error} onExit={onExit} />
-      <GameView view={view} send={game.send} onExit={onExit} />
+      <TopBar code={code} error={error} onExit={exit} />
+      <GameView view={view} send={game.send} onExit={exit} />
     </div>
   );
 }
@@ -135,6 +140,15 @@ function GameView({
   send: (m: ClientMessage) => void;
   onExit: () => void;
 }) {
+  return (
+    <>
+      {renderPhase(view, send, onExit)}
+      <HostRecovery view={view} send={send} />
+    </>
+  );
+}
+
+function renderPhase(view: PlayerView, send: (m: ClientMessage) => void, onExit: () => void) {
   const dead = !view.you.alive;
 
   switch (view.phase) {
@@ -159,7 +173,16 @@ function GameView({
         <div className="stack">
           <div className="phase-banner"><div className="big">🌙</div><h2>Night falls</h2></div>
           <InspectHistory view={view} />
-          <p className="center muted">Waiting on {view.nightWaitingOn} player(s) to act…</p>
+          <p className="center muted">Waiting for the night to end…</p>
+        </div>
+      );
+
+    case "hunterShot":
+      if (view.shootPrompt) return <ShootAction view={view} send={send} />;
+      return (
+        <div className="stack">
+          <div className="phase-banner"><div className="big">🏹</div><h2>A shot rings out</h2></div>
+          <p className="center muted">A fallen Hunter is taking someone with them…</p>
         </div>
       );
 
@@ -176,6 +199,30 @@ function GameView({
     default:
       return null;
   }
+}
+
+/**
+ * A subtle host-only escape hatch for phases that wait on one player. If someone
+ * goes idle or drops, the host can force the game forward so it never wedges.
+ */
+function HostRecovery({ view, send }: { view: PlayerView; send: (m: ClientMessage) => void }) {
+  if (!view.you.isHost) return null;
+  const action =
+    view.phase === "night"
+      ? { label: "Force end night (someone's away)", msg: { type: "endNight" } as ClientMessage }
+      : view.phase === "dayVote"
+        ? { label: "Force the vote (someone's away)", msg: { type: "resolveVote" } as ClientMessage }
+        : view.phase === "hunterShot"
+          ? { label: "Skip the shot (Hunter's away)", msg: { type: "skipShot" } as ClientMessage }
+          : null;
+  if (!action) return null;
+  return (
+    <div style={{ marginTop: 16 }}>
+      <button className="ghost full small" onClick={() => send(action.msg)}>
+        {action.label}
+      </button>
+    </div>
+  );
 }
 
 function Spectator({ view, label }: { view: PlayerView; label: string }) {

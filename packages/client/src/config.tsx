@@ -1,6 +1,6 @@
 import {
   assignableSpecialRoles,
-  villageSpecialRoles,
+  poolEligibleRoles,
   recommendedConfig,
   validateConfig,
   previewComposition,
@@ -109,7 +109,7 @@ function PoolEditor({
       </div>
 
       <div className="muted small">Roles allowed in the pool (may exceed player count — drawn at random)</div>
-      {villageSpecialRoles().map((role) => {
+      {poolEligibleRoles().map((role) => {
         const on = sel.pool.includes(role.id);
         return (
           <button

@@ -45,6 +45,32 @@ export const ROLES: Record<string, RoleDef> = {
     blurb: "Each night, protect one player from the wolves. You may protect yourself.",
     night: { kind: "protect", order: 30, canTargetSelf: true },
   },
+  hunter: {
+    id: "hunter",
+    name: "Hunter",
+    team: "village",
+    emoji: "🏹",
+    blurb: "If you die — by wolves or by the vote — you fire one last shot, taking another player with you.",
+    onDeathShoot: true,
+  },
+  drunk: {
+    id: "drunk",
+    name: "Village Drunk",
+    team: "village",
+    emoji: "🍺",
+    // Presents itself as the Seer; the player never learns they're the Drunk.
+    blurb: "Each night, inspect one player to learn their exact role.",
+    disguiseAs: "seer",
+    night: { kind: "inspect", order: 22, canTargetSelf: false, reveal: "fabricated" },
+  },
+  tanner: {
+    id: "tanner",
+    name: "Tanner",
+    team: "solo",
+    emoji: "🃏",
+    blurb: "You hate your life. You win — alone — if the town votes to lynch you.",
+    winsIfLynched: true,
+  },
 };
 
 export const VILLAGER_ROLE_ID = "villager";
@@ -58,4 +84,14 @@ export function getRole(id: string): RoleDef {
 /** All roles that can be configured into a game (everything except plain villager). */
 export function assignableSpecialRoles(): RoleDef[] {
   return Object.values(ROLES).filter((r) => r.id !== VILLAGER_ROLE_ID);
+}
+
+/**
+ * Roles eligible for a pool: any non-villager, non-werewolf role. Wolves are
+ * excluded because their count comes from the team ratio, not the pool.
+ */
+export function poolEligibleRoles(): RoleDef[] {
+  return Object.values(ROLES).filter(
+    (r) => r.id !== VILLAGER_ROLE_ID && r.team !== "werewolf"
+  );
 }

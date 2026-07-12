@@ -87,6 +87,39 @@ describe("lobby", () => {
     expect(clients[1].view!.players).toHaveLength(2);
     expect(clients[1].view!.players.some((p) => p.isHost)).toBe(true);
   });
+
+  it("hands off host to a connected player if the host leaves mid-game", () => {
+    const { room, clients } = seatPlayers(4);
+    room.handle(clients[0].playerId, { type: "startGame", config: exact({ werewolf: 1 }) });
+    room.disconnect(clients[0]); // host drops mid-game
+    const stillHere = clients.find((c) => c.playerId !== clients[0].playerId)!;
+    const host = stillHere.view!.players.find((p) => p.isHost)!;
+    expect(host.id).not.toBe(clients[0].playerId);
+    expect(stillHere.view!.players.find((p) => p.id === host.id)!.connected).toBe(true);
+  });
+});
+
+describe("room reclamation", () => {
+  it("sweeps empty lobbies immediately but gives in-game rooms a grace period", () => {
+    const lobby = mgr.create();
+    const lobbyClient = new FakeClient();
+    lobby.addPlayer("Solo", lobbyClient);
+    lobby.disconnect(lobbyClient); // now an empty lobby
+
+    const started = mgr.create();
+    const players = [new FakeClient(), new FakeClient(), new FakeClient()];
+    players.forEach((c, i) => (c.playerId = started.addPlayer(`P${i}`, c).playerId));
+    started.handle(players[0].playerId, { type: "startGame", config: exact({ werewolf: 1 }) });
+    for (const c of players) started.disconnect(c); // in-game room now empty
+
+    const now = Date.now();
+    mgr.sweep(now, 15 * 60_000);
+    expect(mgr.get(lobby.code)).toBeUndefined(); // empty lobby reclaimed now
+    expect(mgr.get(started.code)).toBeDefined(); // in-game room within grace
+
+    mgr.sweep(now + 16 * 60_000, 15 * 60_000);
+    expect(mgr.get(started.code)).toBeUndefined(); // reclaimed after grace
+  });
 });
 
 describe("redaction over the wire", () => {
@@ -133,11 +166,13 @@ describe("a full game", () => {
     expect(host.view!.phase).toBe("dayDiscussion");
     expect(byId(victimId).view!.you.alive).toBe(false);
 
-    // Vote out the wolf.
+    // Vote out the wolf. The wolf can't vote itself, so it votes elsewhere.
     room.handle(host.playerId, { type: "startVote" });
     const livingClients = clients.filter((c) => c.view!.you.alive);
+    const decoy = livingClients.find((c) => c.playerId !== wolf.playerId)!;
     for (const c of livingClients) {
-      room.handle(c.playerId, { type: "castVote", targetId: wolf.playerId });
+      const target = c.playerId === wolf.playerId ? decoy.playerId : wolf.playerId;
+      room.handle(c.playerId, { type: "castVote", targetId: target });
     }
     // With all votes in it auto-resolves.
     expect(host.view!.phase).toBe("gameOver");
@@ -161,6 +196,28 @@ describe("a full game", () => {
     expect(clients[0].view!.phase).toBe("dayDiscussion");
     const victim = clients.find((c) => c.playerId === victimId)!;
     expect(victim.view!.you.alive).toBe(true);
+  });
+});
+
+describe("hunter over the room layer", () => {
+  it("auto-advances into hunterShot and resolves the shot", () => {
+    const { room, clients } = seatPlayers(5);
+    room.handle(clients[0].playerId, { type: "startGame", config: exact({ werewolf: 1, hunter: 1 }) });
+    room.handle(clients[0].playerId, { type: "startNight" });
+
+    const wolf = clients.find((c) => c.view!.you.roleId === "werewolf")!;
+    const hunter = clients.find((c) => c.view!.you.roleId === "hunter")!;
+    // Wolf eats the hunter; the room auto-resolves the night into hunterShot.
+    room.handle(wolf.playerId, { type: "nightChoice", targetId: hunter.playerId });
+
+    expect(clients[0].view!.phase).toBe("hunterShot");
+    expect(hunter.view!.shootPrompt).not.toBeNull();
+
+    // The fallen hunter takes a villager (not the wolf, so the game continues).
+    const victim = hunter.view!.shootPrompt!.targetIds.find((id) => id !== wolf.playerId)!;
+    room.handle(hunter.playerId, { type: "shoot", targetId: victim });
+    expect(clients[0].view!.phase).toBe("dayDiscussion");
+    expect(clients.find((c) => c.playerId === victim)!.view!.you.alive).toBe(false);
   });
 });
 
