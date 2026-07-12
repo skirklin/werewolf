@@ -27,6 +27,8 @@ export interface LocalGame {
   view: PlayerView | null;
   start: (names: string[], config: GameConfig) => void;
   submitNight: (targetId: string) => void;
+  submitWitch: (save: boolean, poisonTargetId: string | null) => void;
+  submitSwap: (aId: string, bId: string) => void;
   passNight: () => void;
   submitShoot: (targetId: string) => void;
   callVote: () => void;
@@ -80,6 +82,18 @@ export function useLocalGame(): LocalGame {
     setState(advanceNight(acted, turn.seatId));
   };
 
+  const submitWitch = (save: boolean, poisonTargetId: string | null) => {
+    if (!state || turn.kind !== "night") return;
+    const acted = reduce(state, { type: "witchAction", actorId: turn.seatId, save, poisonTargetId });
+    setState(advanceNight(acted, turn.seatId));
+  };
+
+  const submitSwap = (aId: string, bId: string) => {
+    if (!state || turn.kind !== "night") return;
+    const acted = reduce(state, { type: "swapAction", actorId: turn.seatId, aId, bId });
+    setState(advanceNight(acted, turn.seatId));
+  };
+
   const passNight = () => {
     if (!state || turn.kind !== "nightPass") return;
     setState(advanceNight(state, turn.seatId));
@@ -104,7 +118,10 @@ export function useLocalGame(): LocalGame {
     setAcks(new Set());
   };
 
-  return { state, turn, view, start, submitNight, passNight, submitShoot, callVote, submitVote, reset };
+  return {
+    state, turn, view, start,
+    submitNight, submitWitch, submitSwap, passNight, submitShoot, callVote, submitVote, reset,
+  };
 }
 
 export { getRole };

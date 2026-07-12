@@ -21,6 +21,8 @@ export type ClientMessage =
   | { type: "startGame"; config: GameConfig }
   | { type: "startNight" }
   | { type: "nightChoice"; targetId: PlayerId }
+  | { type: "witchAction"; save: boolean; poisonTargetId: PlayerId | null }
+  | { type: "swapAction"; aId: PlayerId; bId: PlayerId }
   | { type: "endNight" }
   | { type: "startVote" }
   | { type: "castVote"; targetId: PlayerId | null }

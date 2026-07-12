@@ -112,6 +112,8 @@ function describe(e: LogEntry, name: (id: string) => string): string | null {
       return `🗳️ Day ${e.round}: ${name(e.playerId)} was voted out.`;
     case "hunterShot":
       return `🏹 ${name(e.playerId)} was struck down by a dying Hunter's shot.`;
+    case "poisoned":
+      return `☠️ ${name(e.playerId)} was found dead in the night.`;
     case "voteTie":
       return `🗳️ Day ${e.round}: the vote tied — no one was eliminated.`;
     default:

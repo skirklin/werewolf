@@ -1,12 +1,12 @@
 import type { GameConfig, Player, RoleSelection } from "./types.js";
 import { getRole, VILLAGER_ROLE_ID } from "./roles.js";
-import { shuffle } from "./rng.js";
+import { shuffle, pick } from "./rng.js";
 
 /** Default target fraction of werewolves in pool mode (~1 per 4 players). */
 export const DEFAULT_WEREWOLF_RATIO = 0.26;
 
 /** A conservative, familiar default pool (the rest can be toggled on). */
-const DEFAULT_POOL = ["seer", "doctor"];
+const DEFAULT_POOL = ["villager", "seer", "doctor"];
 
 function clamp(n: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, n));
@@ -69,6 +69,7 @@ export function validateConfig(config: GameConfig, playerCount: number): ConfigP
       if (role.team === "werewolf")
         problems.push({ message: "Don't add werewolves to the pool — their count comes from the ratio." });
     }
+    if (sel.pool.length === 0) problems.push({ message: "Add at least one role to the pool." });
     if (sel.werewolfRatio <= 0) problems.push({ message: "Werewolf ratio must be above zero." });
   }
   return problems;
@@ -95,11 +96,16 @@ export function previewComposition(
     };
   }
   const wolves = werewolfCountFor(playerCount, sel.werewolfRatio);
-  const villageSpecials = Math.max(0, Math.min(sel.pool.length, playerCount - wolves));
+  const slots = Math.max(0, playerCount - wolves);
+  const specialPoolLen = sel.pool.filter((r) => r !== VILLAGER_ROLE_ID).length;
+  const villagerAllowed = sel.pool.includes(VILLAGER_ROLE_ID);
+  const distinct = Math.min(specialPoolLen, slots);
+  // Without villagers, the remaining slots draw more (possibly repeated) specials.
+  const villageSpecials = villagerAllowed ? distinct : slots;
   return {
     werewolves: wolves,
     villageSpecials,
-    villagers: Math.max(0, playerCount - wolves - villageSpecials),
+    villagers: villagerAllowed ? slots - distinct : 0,
   };
 }
 
@@ -119,11 +125,16 @@ function buildDeck(sel: RoleSelection, playerCount: number, rng: () => number): 
   } else {
     const wolves = werewolfCountFor(playerCount, sel.werewolfRatio);
     for (let i = 0; i < wolves; i++) deck.push("werewolf");
-    // Fill remaining non-wolf slots by drawing village specials from the pool
-    // (each at most once), then top up with plain villagers.
-    const slots = playerCount - wolves;
-    const chosen = shuffle(sel.pool, rng).slice(0, Math.max(0, slots));
+    const slots = Math.max(0, playerCount - wolves);
+    const specialPool = sel.pool.filter((r) => r !== VILLAGER_ROLE_ID);
+    const villagerAllowed = sel.pool.includes(VILLAGER_ROLE_ID);
+    // Distinct specials first (each at most once)...
+    const chosen = shuffle(specialPool, rng).slice(0, slots);
     deck.push(...chosen);
+    // ...then fill the rest: villagers if allowed, else repeated specials.
+    for (let i = chosen.length; i < slots; i++) {
+      deck.push(villagerAllowed || specialPool.length === 0 ? VILLAGER_ROLE_ID : pick(specialPool, rng));
+    }
   }
   while (deck.length < playerCount) deck.push(VILLAGER_ROLE_ID);
   return deck.slice(0, playerCount);

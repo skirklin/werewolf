@@ -4,6 +4,7 @@ import type {
   PlayerId,
   NightState,
   NightStep,
+  NightSubmission,
   Team,
   GameConfig,
 } from "./types.js";
@@ -71,6 +72,8 @@ export type Action =
   | { type: "startGame"; config: GameConfig }
   | { type: "startNight" }
   | { type: "nightChoice"; actorId: PlayerId; targetId: PlayerId }
+  | { type: "witchAction"; actorId: PlayerId; save: boolean; poisonTargetId: PlayerId | null }
+  | { type: "swapAction"; actorId: PlayerId; aId: PlayerId; bId: PlayerId }
   | { type: "endNight" }
   | { type: "startVote" }
   | { type: "castVote"; voterId: PlayerId; targetId: PlayerId | null }
@@ -98,6 +101,10 @@ export function reduce(state: GameState, action: Action): GameState {
       return beginNight(state);
     case "nightChoice":
       return nightChoice(state, action.actorId, action.targetId);
+    case "witchAction":
+      return witchAction(state, action.actorId, action.save, action.poisonTargetId);
+    case "swapAction":
+      return swapAction(state, action.actorId, action.aId, action.bId);
     case "endNight":
       return endNight(state);
     case "startVote":
@@ -117,10 +124,15 @@ function startGame(state: GameState, config: GameConfig): GameState {
   assert(state.phase === "lobby", "Game already started.");
   const rng = makeRng(state.seed);
   const players = dealRoles(state.players, config, rng);
+  const witchPotions: GameState["witchPotions"] = {};
+  for (const p of players) {
+    if (p.roleId === "witch") witchPotions[p.id] = { heal: true, poison: true };
+  }
   return {
     ...state,
     config,
     players,
+    witchPotions,
     phase: "roleReveal",
     round: 0,
     log: [{ type: "gameStart", round: 0 }],
@@ -147,7 +159,7 @@ function beginNight(state: GameState): GameState {
       order: ability.order,
       group: !!ability.group,
       actorIds,
-      choices: {},
+      subs: {},
       done: false,
     });
   }
@@ -191,17 +203,94 @@ function nightChoice(state: GameState, actorId: PlayerId, targetId: PlayerId): G
     ];
   }
 
-  const choices = { ...step.choices, [actorId]: targetId };
-  const done = step.actorIds.every((id) => id in choices);
-  const steps = state.night.steps.map((s) =>
-    s === step ? { ...s, choices, done } : s
-  );
-  return { ...state, inspects, night: { steps } };
+  return {
+    ...state,
+    inspects,
+    night: { steps: withSub(state.night.steps, step, actorId, { t: "target", target: targetId }) },
+  };
 }
 
-/** Resolve one plurality winner among a step's choices, seeded tiebreak. */
+/** Record a submission and recompute the step's done flag. */
+function withSub(
+  steps: NightStep[],
+  step: NightStep,
+  actorId: PlayerId,
+  sub: NightSubmission
+): NightStep[] {
+  const subs = { ...step.subs, [actorId]: sub };
+  const done = step.actorIds.every((id) => id in subs);
+  return steps.map((s) => (s === step ? { ...s, subs, done } : s));
+}
+
+/** The player the wolves are set to kill this night (plurality of a done step). */
+export function wolfVictim(state: GameState): PlayerId | null {
+  if (!state.night) return null;
+  const killStep = state.night.steps.find((s) => s.kind === "kill" && s.done);
+  if (!killStep) return null;
+  return pluralityTarget(killStep, makeRng(state.seed + state.round));
+}
+
+function witchAction(
+  state: GameState,
+  actorId: PlayerId,
+  save: boolean,
+  poisonTargetId: PlayerId | null
+): GameState {
+  assert(state.phase === "night" && state.night, "Not night.");
+  const actor = playerById(state, actorId);
+  assert(actor?.alive && actor.roleId === "witch", "You are not the Witch.");
+  const step = state.night.steps.find((s) => s.kind === "witch" && s.actorIds.includes(actorId));
+  assert(step, "You have no night action.");
+  // The Witch may only act once the wolves have locked in their victim.
+  const killStep = state.night.steps.find((s) => s.kind === "kill");
+  assert(!killStep || killStep.done, "Wait for the wolves to choose first.");
+
+  const potions = state.witchPotions[actorId] ?? { heal: false, poison: false };
+  if (save) assert(potions.heal && wolfVictim(state), "You can't heal right now.");
+  if (poisonTargetId !== null) {
+    assert(potions.poison, "Your poison is already spent.");
+    assert(poisonTargetId !== actorId, "You can't poison yourself.");
+    assert(playerById(state, poisonTargetId)?.alive, "Can't poison a dead player.");
+  }
+  return {
+    ...state,
+    night: {
+      steps: withSub(state.night.steps, step, actorId, {
+        t: "witch",
+        save,
+        poison: poisonTargetId,
+      }),
+    },
+  };
+}
+
+function swapAction(state: GameState, actorId: PlayerId, aId: PlayerId, bId: PlayerId): GameState {
+  assert(state.phase === "night" && state.night, "Not night.");
+  const actor = playerById(state, actorId);
+  assert(actor?.alive && actor.roleId === "troublemaker", "You are not the Troublemaker.");
+  const step = state.night.steps.find((s) => s.kind === "swap" && s.actorIds.includes(actorId));
+  assert(step, "You have no night action.");
+  assert(aId !== bId, "Pick two different players.");
+  for (const id of [aId, bId]) {
+    assert(id !== actorId, "Swap two other players, not yourself.");
+    assert(playerById(state, id)?.alive, "Can only swap living players.");
+  }
+  return {
+    ...state,
+    night: {
+      steps: withSub(state.night.steps, step, actorId, { t: "swap", a: aId, b: bId }),
+    },
+  };
+}
+
+/** All target ids submitted for a (target-kind) step. */
+function stepTargets(step: NightStep): PlayerId[] {
+  return Object.values(step.subs).flatMap((s) => (s.t === "target" ? [s.target] : []));
+}
+
+/** Resolve one plurality winner among a step's target submissions, seeded tiebreak. */
 function pluralityTarget(step: NightStep, rng: () => number): PlayerId | null {
-  const votes = Object.values(step.choices);
+  const votes = stepTargets(step);
   if (votes.length === 0) return null;
   const tally = new Map<PlayerId, number>();
   for (const v of votes) tally.set(v, (tally.get(v) ?? 0) + 1);
@@ -273,41 +362,79 @@ function continueAfter(state: GameState, next: "day" | "night"): GameState {
 function endNight(state: GameState): GameState {
   assert(state.phase === "night" && state.night, "Not night.");
   const rng = makeRng(state.seed + state.round);
+  const steps = state.night.steps;
 
+  // Protections (doctor) + the wolves' victim.
   const protectedIds = new Set<PlayerId>();
-  for (const step of state.night.steps) {
-    if (step.kind === "protect") {
-      for (const t of Object.values(step.choices)) protectedIds.add(t);
+  for (const step of steps) {
+    if (step.kind === "protect") for (const t of stepTargets(step)) protectedIds.add(t);
+  }
+  let victimId: PlayerId | null = null;
+  for (const step of steps) if (step.kind === "kill") victimId = pluralityTarget(step, rng);
+
+  // Witch: heal the victim and/or poison a player, spending potions.
+  const witchPotions = { ...state.witchPotions };
+  const poisonIds: PlayerId[] = [];
+  for (const step of steps) {
+    if (step.kind !== "witch") continue;
+    for (const [actorId, sub] of Object.entries(step.subs)) {
+      if (sub.t !== "witch") continue;
+      const potions = witchPotions[actorId] ?? { heal: false, poison: false };
+      if (sub.save && potions.heal && victimId) {
+        protectedIds.add(victimId);
+        witchPotions[actorId] = { ...potions, heal: false };
+      }
+      if (sub.poison !== null && potions.poison) {
+        poisonIds.push(sub.poison);
+        witchPotions[actorId] = { ...(witchPotions[actorId] ?? potions), poison: false };
+      }
     }
   }
 
-  let victimId: PlayerId | null = null;
-  for (const step of state.night.steps) {
-    if (step.kind === "kill") victimId = pluralityTarget(step, rng);
-  }
+  // Assemble deaths, then log the night in a way that respects the recap setting.
+  const deaths = new Set<PlayerId>();
+  const wolfSaved = victimId !== null && protectedIds.has(victimId);
+  if (victimId && !wolfSaved) deaths.add(victimId);
+  for (const id of poisonIds) if (playerById(state, id)?.alive) deaths.add(id);
 
   const log = state.log.slice();
-  let players = state.players;
-  let deadShooters: PlayerId[] = [];
-  if (victimId && protectedIds.has(victimId)) {
-    log.push({ type: "saved", round: state.round, playerId: victimId });
-  } else if (victimId) {
-    const r = markDead(players, [victimId]);
-    players = r.players;
-    deadShooters = r.deadShooters;
-    log.push({ type: "death", round: state.round, playerId: victimId, cause: "wolves" });
-  } else {
-    log.push({ type: "noDeath", round: state.round, cause: "wolves" });
-  }
+  if (!victimId) log.push({ type: "noDeath", round: state.round, cause: "wolves" });
+  else if (wolfSaved) log.push({ type: "saved", round: state.round, playerId: victimId });
+  else log.push({ type: "death", round: state.round, playerId: victimId, cause: "wolves" });
+  for (const id of deaths) if (id !== victimId) log.push({ type: "poisoned", round: state.round, playerId: id });
+
+  const killed = markDead(state.players, [...deaths]);
+  // Troublemaker: swap two living players' roles (takes effect going forward).
+  const players = applySwaps(killed.players, steps);
 
   const next: GameState = {
     ...state,
     players,
+    witchPotions,
     night: null,
     log,
-    pendingShots: [...state.pendingShots, ...deadShooters],
+    pendingShots: [...state.pendingShots, ...killed.deadShooters],
   };
   return enterReckoning(next, "day");
+}
+
+/** Apply every Troublemaker swap for which both targets are still alive. */
+function applySwaps(players: Player[], steps: NightStep[]): Player[] {
+  let next = players;
+  for (const step of steps) {
+    if (step.kind !== "swap") continue;
+    for (const sub of Object.values(step.subs)) {
+      if (sub.t !== "swap") continue;
+      const a = next.find((p) => p.id === sub.a);
+      const b = next.find((p) => p.id === sub.b);
+      if (!a?.alive || !b?.alive) continue;
+      const roleA = a.roleId;
+      next = next.map((p) =>
+        p.id === sub.a ? { ...p, roleId: b.roleId } : p.id === sub.b ? { ...p, roleId: roleA } : p
+      );
+    }
+  }
+  return next;
 }
 
 function shoot(state: GameState, hunterId: PlayerId, targetId: PlayerId): GameState {
@@ -424,6 +551,7 @@ export function createGame(code: string, seed: number): GameState {
     night: null,
     inspects: [],
     votes: {},
+    witchPotions: {},
     pendingShots: [],
     afterReckoning: null,
     log: [],

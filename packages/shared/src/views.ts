@@ -20,7 +20,17 @@ export function publicLog(state: GameState): LogEntry[] {
   );
 }
 import { getRole } from "./roles.js";
-import { living, validNightTargets, validShootTargets, playerById } from "./engine.js";
+import { living, validNightTargets, validShootTargets, wolfVictim, playerById } from "./engine.js";
+import type { NightActionKind, NightStep } from "./types.js";
+
+/** Tally of pack picks by targetId (for the werewolves' shared view). */
+function stepTargetTally(step: NightStep): Record<PlayerId, number> {
+  const tally: Record<PlayerId, number> = {};
+  for (const sub of Object.values(step.subs)) {
+    if (sub.t === "target") tally[sub.target] = (tally[sub.target] ?? 0) + 1;
+  }
+  return tally;
+}
 
 /** A player as visible to someone else — role hidden unless it should be shown. */
 export interface PublicPlayer {
@@ -34,13 +44,20 @@ export interface PublicPlayer {
 }
 
 export interface NightPrompt {
-  kind: "kill" | "protect" | "inspect";
+  kind: NightActionKind;
   roleId: string;
-  /** Ids this player may target. */
+  /** Ids this player may target (for kill/protect/inspect, or the swap pool). */
   targetIds: PlayerId[];
   canTargetSelf: boolean;
   /** For pack (werewolf) steps: live tally of pack picks by targetId. */
   groupChoices?: Record<PlayerId, number>;
+  /** For the Witch only: what she may do this night. */
+  witch?: {
+    /** The wolves' victim this night (null if the wolves haven't chosen yet). */
+    victimId: PlayerId | null;
+    healAvailable: boolean;
+    poisonAvailable: boolean;
+  };
 }
 
 /** The redacted, per-player snapshot sent to a single device. */
@@ -154,25 +171,37 @@ export function projectView(state: GameState, viewerId: PlayerId): PlayerView {
   if (state.phase === "night" && state.night) {
     for (const step of state.night.steps) {
       for (const actorId of step.actorIds) {
-        if (!(actorId in step.choices)) nightWaitingOn++;
+        if (!(actorId in step.subs)) nightWaitingOn++;
       }
     }
+    const killStep = state.night.steps.find((s) => s.kind === "kill");
+    const killReady = !killStep || killStep.done;
     const myStep = state.night.steps.find((s) => s.actorIds.includes(viewerId));
-    if (myStep && you.alive && !(viewerId in myStep.choices)) {
+    // The Witch must wait for the wolves before her prompt appears.
+    const witchReady = myStep?.kind !== "witch" || killReady;
+    if (myStep && you.alive && !(viewerId in myStep.subs) && witchReady) {
       const ability = getRole(you.roleId!).night!;
       const groupChoices = myStep.group
-        ? Object.values(myStep.choices).reduce<Record<PlayerId, number>>((acc, t) => {
-            acc[t] = (acc[t] ?? 0) + 1;
-            return acc;
-          }, {})
+        ? stepTargetTally(myStep)
         : undefined;
       nightPrompt = {
         kind: myStep.kind,
         // Show the disguise (Drunk sees itself acting as the Seer).
         roleId: getRole(myStep.roleId).disguiseAs ?? myStep.roleId,
-        targetIds: validNightTargets(state, viewerId).map((p) => p.id),
+        targetIds:
+          myStep.kind === "witch" || myStep.kind === "swap"
+            ? living(state).filter((p) => p.id !== viewerId).map((p) => p.id)
+            : validNightTargets(state, viewerId).map((p) => p.id),
         canTargetSelf: !!ability.canTargetSelf,
         groupChoices,
+        witch:
+          myStep.kind === "witch"
+            ? {
+                victimId: wolfVictim(state),
+                healAvailable: !!state.witchPotions[viewerId]?.heal,
+                poisonAvailable: !!state.witchPotions[viewerId]?.poison,
+              }
+            : undefined,
       };
     }
   }

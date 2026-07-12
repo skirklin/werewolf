@@ -11,7 +11,8 @@ export const ROLES: Record<string, RoleDef> = {
     name: "Villager",
     team: "village",
     emoji: "🧑‍🌾",
-    blurb: "A regular townsperson. No special powers — just your wits and your vote.",
+    blurb:
+      "The heart of the town. No night powers — but your voice, your vote, and your read on people are what bring the wolves down. Trusted, and dangerous to the pack.",
   },
   werewolf: {
     id: "werewolf",
@@ -71,6 +72,24 @@ export const ROLES: Record<string, RoleDef> = {
     blurb: "You hate your life. You win — alone — if the town votes to lynch you.",
     winsIfLynched: true,
   },
+  witch: {
+    id: "witch",
+    name: "Witch",
+    team: "village",
+    emoji: "🧪",
+    blurb:
+      "You hold two potions for the whole game: one heals the wolves' victim, one poisons a player of your choice. Each may be used only once. Each night you learn who the wolves struck.",
+    night: { kind: "witch", order: 15 },
+  },
+  troublemaker: {
+    id: "troublemaker",
+    name: "Troublemaker",
+    team: "village",
+    emoji: "🎭",
+    blurb:
+      "Each night, secretly swap the roles of two other players. Neither is told — they simply wake up as someone new.",
+    night: { kind: "swap", order: 40 },
+  },
 };
 
 export const VILLAGER_ROLE_ID = "villager";
@@ -87,11 +106,11 @@ export function assignableSpecialRoles(): RoleDef[] {
 }
 
 /**
- * Roles eligible for a pool: any non-villager, non-werewolf role. Wolves are
- * excluded because their count comes from the team ratio, not the pool.
+ * Roles eligible for a pool: everything except werewolves (their count comes
+ * from the team ratio). The plain Villager IS included, so a host can leave it
+ * in (extra slots become villagers) or take it out (a villager-free game where
+ * extra slots draw more specials).
  */
 export function poolEligibleRoles(): RoleDef[] {
-  return Object.values(ROLES).filter(
-    (r) => r.id !== VILLAGER_ROLE_ID && r.team !== "werewolf"
-  );
+  return Object.values(ROLES).filter((r) => r.team !== "werewolf");
 }

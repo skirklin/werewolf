@@ -10,7 +10,16 @@ export type Team = "village" | "werewolf" | "solo";
  * kind is data-only; a genuinely new mechanic is the one place you touch
  * engine code (see resolveNight).
  */
-export type NightActionKind = "kill" | "protect" | "inspect";
+export type NightActionKind = "kill" | "protect" | "inspect" | "witch" | "swap";
+
+/**
+ * What a single actor submitted for their night step. Most roles pick one
+ * target; the Witch and Troublemaker submit richer shapes.
+ */
+export type NightSubmission =
+  | { t: "target"; target: PlayerId } // kill / protect / inspect
+  | { t: "witch"; save: boolean; poison: PlayerId | null }
+  | { t: "swap"; a: PlayerId; b: PlayerId };
 
 export interface NightAbility {
   kind: NightActionKind;
@@ -100,9 +109,9 @@ export interface NightStep {
   group: boolean;
   /** Living players who take this step. */
   actorIds: PlayerId[];
-  /** actorId -> chosen target. Group steps resolve by plurality. */
-  choices: Record<PlayerId, PlayerId>;
-  /** Set once all actors have chosen. */
+  /** actorId -> their submission. Group steps (wolves) resolve by plurality. */
+  subs: Record<PlayerId, NightSubmission>;
+  /** Set once all actors have submitted. */
   done: boolean;
 }
 
@@ -126,6 +135,7 @@ export type LogEntry =
   | { type: "noDeath"; round: number; cause: "wolves" | "lynch" }
   | { type: "lynch"; round: number; playerId: PlayerId }
   | { type: "hunterShot"; round: number; playerId: PlayerId }
+  | { type: "poisoned"; round: number; playerId: PlayerId }
   | { type: "voteTie"; round: number }
   | { type: "gameOver"; round: number; winner: Team };
 
@@ -140,6 +150,8 @@ export interface GameState {
   inspects: InspectResult[];
   /** voterId -> targetId, or null for an explicit skip. */
   votes: Record<PlayerId, PlayerId | null>;
+  /** Per-Witch remaining potions (heal/poison), each usable once all game. */
+  witchPotions: Record<PlayerId, { heal: boolean; poison: boolean }>;
   /** Hunters who have died and owe a dying shot, resolved front-first. */
   pendingShots: PlayerId[];
   /** Where to continue once all pending shots resolve. */

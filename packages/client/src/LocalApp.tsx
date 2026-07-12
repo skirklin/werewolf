@@ -13,7 +13,7 @@ import {
 import { useLocalGame } from "./local.js";
 import { RoleConfigEditor } from "./config.js";
 import { RoleCard, LogFeed } from "./ui.js";
-import { TargetGrid, GameOver, PlayerList } from "./phases.js";
+import { TargetGrid, WitchPanel, SwapPanel, GameOver, PlayerList } from "./phases.js";
 
 export function LocalApp({ onExit }: { onExit: () => void }) {
   const game = useLocalGame();
@@ -175,6 +175,10 @@ function LocalPlay({
 
   switch (turn.kind) {
     case "night":
+      if (view.nightPrompt?.kind === "witch")
+        return <WitchPanel view={view} onSubmit={game.submitWitch} />;
+      if (view.nightPrompt?.kind === "swap")
+        return <SwapPanel view={view} onSubmit={game.submitSwap} />;
       return <NightTurn view={view} resolveInspect={resolveInspect} onSubmit={game.submitNight} />;
     case "nightPass":
       return (

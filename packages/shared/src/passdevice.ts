@@ -34,11 +34,16 @@ export function passDeviceTurn(
   }
 
   if (state.phase === "night" && state.night) {
+    const killStep = state.night.steps.find((s) => s.kind === "kill");
+    const killReady = !killStep || killStep.done; // no wolves ⇒ nothing to wait for
     for (const p of state.players) {
       if (!p.alive) continue;
       if (acks.has(nightAckKey(state.round, p.id))) continue;
       const step = state.night.steps.find((s) => s.actorIds.includes(p.id));
-      if (step && !(p.id in step.choices))
+      // The Witch acts only after the wolves — skip her seat until then and
+      // circle back (she becomes the last actor of the night).
+      if (step?.kind === "witch" && !killReady) continue;
+      if (step && !(p.id in step.subs))
         return { kind: "night", seatId: p.id, roleId: step.roleId };
       return { kind: "nightPass", seatId: p.id };
     }

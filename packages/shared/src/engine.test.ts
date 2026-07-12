@@ -64,7 +64,7 @@ describe("role selection", () => {
       id: `p${i}`, name: `P${i}`, roleId: null, alive: true, connected: true, isHost: false,
     }));
     const config: GameConfig = {
-      selection: { mode: "pool", pool: ["seer", "doctor"], werewolfRatio: 0.26 },
+      selection: { mode: "pool", pool: ["villager", "seer", "doctor"], werewolfRatio: 0.26 },
       revealRoleOnDeath: true, nightSummary: "discreet",
     };
     const dealt = dealRoles(players, config, makeRng(42));
@@ -75,16 +75,30 @@ describe("role selection", () => {
     expect(counts.villager).toBe(3);
   });
 
-  it("pool mode: a pool larger than the table only draws what fits", () => {
-    const players: Player[] = Array.from({ length: 4 }, (_, i) => ({
+  it("pool mode without villagers fills every slot with (repeated) specials", () => {
+    const players: Player[] = Array.from({ length: 7 }, (_, i) => ({
       id: `p${i}`, name: `P${i}`, roleId: null, alive: true, connected: true, isHost: false,
     }));
     const config: GameConfig = {
       selection: { mode: "pool", pool: ["seer", "doctor"], werewolfRatio: 0.26 },
       revealRoleOnDeath: true, nightSummary: "discreet",
     };
+    const counts = countRoles(dealRoles(players, config, makeRng(7)));
+    expect(counts.werewolf).toBe(2);
+    expect(counts.villager ?? 0).toBe(0); // villager removed from the pool
+    expect((counts.seer ?? 0) + (counts.doctor ?? 0)).toBe(5); // rest are specials
+  });
+
+  it("pool mode: a pool larger than the table only draws what fits", () => {
+    const players: Player[] = Array.from({ length: 4 }, (_, i) => ({
+      id: `p${i}`, name: `P${i}`, roleId: null, alive: true, connected: true, isHost: false,
+    }));
+    const config: GameConfig = {
+      selection: { mode: "pool", pool: ["villager", "seer", "doctor"], werewolfRatio: 0.26 },
+      revealRoleOnDeath: true, nightSummary: "discreet",
+    };
     const counts = countRoles(dealRoles(players, config, makeRng(1)));
-    // 4 players, 1 wolf, 3 non-wolf slots but only 2 specials available.
+    // 4 players, 1 wolf, 3 non-wolf slots, 2 distinct specials + 1 villager.
     expect(counts.werewolf).toBe(1);
     expect((counts.seer ?? 0) + (counts.doctor ?? 0)).toBe(2);
     expect(counts.villager).toBe(1);

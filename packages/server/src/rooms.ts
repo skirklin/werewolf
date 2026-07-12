@@ -134,6 +134,12 @@ class Room {
       case "nightChoice":
         this.apply({ type: "nightChoice", actorId: playerId, targetId: msg.targetId });
         break;
+      case "witchAction":
+        this.apply({ type: "witchAction", actorId: playerId, save: msg.save, poisonTargetId: msg.poisonTargetId });
+        break;
+      case "swapAction":
+        this.apply({ type: "swapAction", actorId: playerId, aId: msg.aId, bId: msg.bId });
+        break;
       case "endNight":
         hostOnly();
         this.apply({ type: "endNight" });

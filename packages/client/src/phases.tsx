@@ -10,12 +10,15 @@ export function TargetGrid({
   selected,
   onPick,
   groupChoices,
+  multi,
 }: {
   view: PlayerView;
   ids: string[];
   selected: string | null;
   onPick: (id: string) => void;
   groupChoices?: Record<string, number>;
+  /** Ids to mark selected when more than one can be chosen (e.g. the swap). */
+  multi?: string[];
 }) {
   const byId = (id: string) => view.players.find((p) => p.id === id)!;
   return (
@@ -23,11 +26,12 @@ export function TargetGrid({
       {ids.map((id) => {
         const p = byId(id);
         const votes = groupChoices?.[id] ?? 0;
+        const isSel = selected === id || (multi?.includes(id) ?? false);
         // Always a neutral avatar — a target picker must never reveal roles.
         return (
           <button
             key={id}
-            className={`target ${selected === id ? "selected" : ""}`}
+            className={`target ${isSel ? "selected" : ""}`}
             onClick={() => onPick(id)}
           >
             <span className="avatar">🙂</span>
@@ -48,6 +52,15 @@ const NIGHT_PROMPT: Record<string, string> = {
 
 /** The acting player's night UI. Assumes view.nightPrompt is present. */
 export function NightAction({ view, send }: { view: PlayerView; send: Send }) {
+  const prompt = view.nightPrompt!;
+  if (prompt.kind === "witch")
+    return <WitchPanel view={view} onSubmit={(save, poison) => send({ type: "witchAction", save, poisonTargetId: poison })} />;
+  if (prompt.kind === "swap")
+    return <SwapPanel view={view} onSubmit={(aId, bId) => send({ type: "swapAction", aId, bId })} />;
+  return <TargetNightAction view={view} send={send} />;
+}
+
+function TargetNightAction({ view, send }: { view: PlayerView; send: Send }) {
   const prompt = view.nightPrompt!;
   const [picked, setPicked] = useState<string | null>(null);
   const role = ROLES[prompt.roleId];
@@ -71,6 +84,79 @@ export function NightAction({ view, send }: { view: PlayerView; send: Send }) {
         onClick={() => picked && send({ type: "nightChoice", targetId: picked })}
       >
         Confirm
+      </button>
+    </div>
+  );
+}
+
+/** The Witch's night action: heal the wolves' victim and/or poison someone. */
+export function WitchPanel({
+  view,
+  onSubmit,
+}: {
+  view: PlayerView;
+  onSubmit: (save: boolean, poisonTargetId: string | null) => void;
+}) {
+  const w = view.nightPrompt!.witch!;
+  const victim = w.victimId ? view.players.find((p) => p.id === w.victimId) : null;
+  const [save, setSave] = useState(false);
+  const [poison, setPoison] = useState<string | null>(null);
+  return (
+    <div className="stack">
+      <div className="phase-banner">
+        <div className="big">🧪</div>
+        <h2>The Witch wakes</h2>
+        <p className="muted">
+          {victim ? <>The wolves are about to kill <b>{victim.name}</b>.</> : "The wolves struck no one."}
+        </p>
+      </div>
+
+      {w.healAvailable && victim && (
+        <button className={`chip ${save ? "" : ""}`} style={{ borderColor: save ? "var(--good)" : undefined }} onClick={() => setSave((s) => !s)}>
+          <span className="avatar">❤️‍🩹</span>
+          <div className="grow" style={{ textAlign: "left" }}>
+            <div className="name">Heal potion</div>
+            <div className="muted small">{save ? `Saving ${victim.name}` : `Save ${victim.name} (one-time)`}</div>
+          </div>
+          <span className="pill">{save ? "✓" : "tap"}</span>
+        </button>
+      )}
+
+      {w.poisonAvailable && (
+        <>
+          <div className="muted small">Poison potion (one-time) — optional</div>
+          <TargetGrid view={view} ids={view.nightPrompt!.targetIds} selected={poison} onPick={(id) => setPoison((p) => (p === id ? null : id))} />
+        </>
+      )}
+
+      <button className="primary full lg" onClick={() => onSubmit(save, poison)}>
+        {save || poison ? "Use potion(s)" : "Do nothing tonight"}
+      </button>
+    </div>
+  );
+}
+
+/** The Troublemaker's night action: swap two players' roles. */
+export function SwapPanel({
+  view,
+  onSubmit,
+}: {
+  view: PlayerView;
+  onSubmit: (aId: string, bId: string) => void;
+}) {
+  const [picked, setPicked] = useState<string[]>([]);
+  const toggle = (id: string) =>
+    setPicked((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : cur.length < 2 ? [...cur, id] : [cur[1], id]));
+  return (
+    <div className="stack">
+      <div className="phase-banner">
+        <div className="big">🎭</div>
+        <h2>Troublemaker</h2>
+        <p className="muted">Choose two players to secretly swap. Pick {2 - picked.length} more.</p>
+      </div>
+      <TargetGrid view={view} ids={view.nightPrompt!.targetIds} selected={null} onPick={toggle} multi={picked} />
+      <button className="primary full lg" disabled={picked.length !== 2} onClick={() => onSubmit(picked[0], picked[1])}>
+        Swap them
       </button>
     </div>
   );
