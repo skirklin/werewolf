@@ -48,6 +48,7 @@ const NIGHT_PROMPT: Record<string, string> = {
   kill: "Choose tonight's victim",
   protect: "Choose someone to protect",
   inspect: "Choose someone to inspect",
+  silence: "Choose whose vote to silence tomorrow",
 };
 
 /** The acting player's night UI. Assumes view.nightPrompt is present. */
@@ -57,6 +58,10 @@ export function NightAction({ view, send }: { view: PlayerView; send: Send }) {
     return <WitchPanel view={view} onSubmit={(save, poison) => send({ type: "witchAction", save, poisonTargetId: poison })} />;
   if (prompt.kind === "swap")
     return <SwapPanel view={view} onSubmit={(aId, bId) => send({ type: "swapAction", aId, bId })} />;
+  if (prompt.kind === "detect")
+    return <DetectPanel view={view} onSubmit={(aId, bId) => send({ type: "detectAction", aId, bId })} />;
+  if (prompt.kind === "raise")
+    return <RaisePanel view={view} onSubmit={(targetId) => send({ type: "raiseAction", targetId })} />;
   return <TargetNightAction view={view} send={send} />;
 }
 
@@ -162,6 +167,74 @@ export function SwapPanel({
   );
 }
 
+/** The Detective's night action: investigate two players for a same-team read. */
+export function DetectPanel({
+  view,
+  onSubmit,
+}: {
+  view: PlayerView;
+  onSubmit: (aId: string, bId: string) => void;
+}) {
+  const [picked, setPicked] = useState<string[]>([]);
+  const toggle = (id: string) =>
+    setPicked((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : cur.length < 2 ? [...cur, id] : [cur[1], id]));
+  return (
+    <div className="stack">
+      <div className="phase-banner">
+        <div className="big">🕵️</div>
+        <h2>Detective</h2>
+        <p className="muted">Investigate two players — are they on the same team? Pick {2 - picked.length} more.</p>
+      </div>
+      <TargetGrid view={view} ids={view.nightPrompt!.targetIds} selected={null} onPick={toggle} multi={picked} />
+      <button className="primary full lg" disabled={picked.length !== 2} onClick={() => onSubmit(picked[0], picked[1])}>
+        Investigate
+      </button>
+    </div>
+  );
+}
+
+export function DetectionHistory({ view }: { view: PlayerView }) {
+  if (view.myDetections.length === 0) return null;
+  const name = (id: string) => view.players.find((p) => p.id === id)?.name ?? "someone";
+  return (
+    <div className="card tight stack">
+      <b>🕵️ Your investigations</b>
+      {view.myDetections.map((d, i) => (
+        <div key={i} className="spread small">
+          <span>Night {d.round}: {name(d.aId)} &amp; {name(d.bId)}</span>
+          <b>{d.sameTeam ? "🤝 Same team" : "🎭 Different teams"}</b>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** The Medium's night action: raise a dead player, or hold the power. */
+export function RaisePanel({
+  view,
+  onSubmit,
+}: {
+  view: PlayerView;
+  onSubmit: (targetId: string | null) => void;
+}) {
+  const [picked, setPicked] = useState<string | null>(null);
+  const dead = view.nightPrompt!.targetIds;
+  return (
+    <div className="stack">
+      <div className="phase-banner">
+        <div className="big">👻</div>
+        <h2>Medium</h2>
+        <p className="muted">Raise one dead player back to life — once per game.</p>
+      </div>
+      <TargetGrid view={view} ids={dead} selected={picked} onPick={(id) => setPicked((p) => (p === id ? null : id))} />
+      <button className="primary full lg" disabled={!picked} onClick={() => picked && onSubmit(picked)}>
+        Raise the dead
+      </button>
+      <button className="ghost full" onClick={() => onSubmit(null)}>Hold my power tonight</button>
+    </div>
+  );
+}
+
 /** Result shown to the seer right after inspecting (pass-device convenience). */
 export function InspectResultCard({ view }: { view: PlayerView }) {
   const last = view.myInspects.at(-1);
@@ -197,6 +270,7 @@ export function DayBoard({
         <p className="muted">Discuss. Who seems suspicious?</p>
       </div>
       <LogFeed log={view.log} players={view.players} />
+      <SilencedNote view={view} />
       <PlayerList players={view.players} youId={view.you.id} />
       {isHost && (
         <button className="primary full lg" onClick={() => send({ type: "startVote" })}>
@@ -259,6 +333,13 @@ export function ShootAction({ view, send }: { view: PlayerView; send: Send }) {
       />
     </div>
   );
+}
+
+/** Public banner: who can't vote today (set by the Silencer). */
+export function SilencedNote({ view }: { view: PlayerView }) {
+  if (view.silencedIds.length === 0) return null;
+  const names = view.silencedIds.map((id) => view.players.find((p) => p.id === id)?.name ?? "someone");
+  return <div className="card tight small">🤫 Silenced today (no vote): <b>{names.join(", ")}</b></div>;
 }
 
 export function PlayerList({ players, youId }: { players: PublicPlayer[]; youId: string }) {

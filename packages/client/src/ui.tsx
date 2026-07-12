@@ -114,6 +114,8 @@ function describe(e: LogEntry, name: (id: string) => string): string | null {
       return `🏹 ${name(e.playerId)} was struck down by a dying Hunter's shot.`;
     case "poisoned":
       return `☠️ ${name(e.playerId)} was found dead in the night.`;
+    case "raised":
+      return `👻 ${name(e.playerId)} was raised from the dead by the Medium!`;
     case "voteTie":
       return `🗳️ Day ${e.round}: the vote tied — no one was eliminated.`;
     default:

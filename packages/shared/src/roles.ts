@@ -90,6 +90,33 @@ export const ROLES: Record<string, RoleDef> = {
       "Each night, secretly swap the roles of two other players. Neither is told — they simply wake up as someone new.",
     night: { kind: "swap", order: 40 },
   },
+  silencer: {
+    id: "silencer",
+    name: "Silencer",
+    team: "village",
+    emoji: "🤫",
+    blurb:
+      "Each night, choose a player to silence. They cannot cast a vote on the following day. Use it to shut down a manipulator — or a suspected wolf.",
+    night: { kind: "silence", order: 35, canTargetSelf: false },
+  },
+  detective: {
+    id: "detective",
+    name: "Detective",
+    team: "village",
+    emoji: "🕵️",
+    blurb:
+      "Each night, investigate two players and learn whether they are on the same team — without learning which team.",
+    night: { kind: "detect", order: 25, canTargetSelf: false },
+  },
+  medium: {
+    id: "medium",
+    name: "Medium",
+    team: "village",
+    emoji: "👻",
+    blurb:
+      "Once in the game, on a night of your choosing, you may raise a single dead player back to life.",
+    night: { kind: "raise", order: 5 },
+  },
 };
 
 export const VILLAGER_ROLE_ID = "villager";

@@ -74,6 +74,8 @@ export type Action =
   | { type: "nightChoice"; actorId: PlayerId; targetId: PlayerId }
   | { type: "witchAction"; actorId: PlayerId; save: boolean; poisonTargetId: PlayerId | null }
   | { type: "swapAction"; actorId: PlayerId; aId: PlayerId; bId: PlayerId }
+  | { type: "detectAction"; actorId: PlayerId; aId: PlayerId; bId: PlayerId }
+  | { type: "raiseAction"; actorId: PlayerId; targetId: PlayerId | null }
   | { type: "endNight" }
   | { type: "startVote" }
   | { type: "castVote"; voterId: PlayerId; targetId: PlayerId | null }
@@ -105,6 +107,10 @@ export function reduce(state: GameState, action: Action): GameState {
       return witchAction(state, action.actorId, action.save, action.poisonTargetId);
     case "swapAction":
       return swapAction(state, action.actorId, action.aId, action.bId);
+    case "detectAction":
+      return detectAction(state, action.actorId, action.aId, action.bId);
+    case "raiseAction":
+      return raiseAction(state, action.actorId, action.targetId);
     case "endNight":
       return endNight(state);
     case "startVote":
@@ -125,14 +131,17 @@ function startGame(state: GameState, config: GameConfig): GameState {
   const rng = makeRng(state.seed);
   const players = dealRoles(state.players, config, rng);
   const witchPotions: GameState["witchPotions"] = {};
+  const mediumUsed: GameState["mediumUsed"] = {};
   for (const p of players) {
     if (p.roleId === "witch") witchPotions[p.id] = { heal: true, poison: true };
+    if (p.roleId === "medium") mediumUsed[p.id] = false;
   }
   return {
     ...state,
     config,
     players,
     witchPotions,
+    mediumUsed,
     phase: "roleReveal",
     round: 0,
     log: [{ type: "gameStart", round: 0 }],
@@ -142,10 +151,14 @@ function startGame(state: GameState, config: GameConfig): GameState {
 /** Build the ordered night steps from the living players' roles. */
 function beginNight(state: GameState): GameState {
   const round = state.round + 1;
+  const deadExist = state.players.some((p) => !p.alive);
   const byRole = new Map<string, PlayerId[]>();
   for (const p of living(state)) {
     if (!p.roleId) continue;
-    if (!getRole(p.roleId).night) continue;
+    const ability = getRole(p.roleId).night;
+    if (!ability) continue;
+    // The Medium only wakes while their raise is unspent and someone is dead.
+    if (ability.kind === "raise" && (state.mediumUsed[p.id] || !deadExist)) continue;
     const list = byRole.get(p.roleId) ?? [];
     list.push(p.id);
     byRole.set(p.roleId, list);
@@ -171,6 +184,7 @@ function beginNight(state: GameState): GameState {
     round,
     night,
     votes: {},
+    silenced: [], // last night's silence expires
     log: [...state.log, { type: "night", round }],
   };
 }
@@ -283,6 +297,44 @@ function swapAction(state: GameState, actorId: PlayerId, aId: PlayerId, bId: Pla
     night: {
       steps: withSub(state.night.steps, step, actorId, { t: "swap", a: aId, b: bId }),
     },
+  };
+}
+
+function detectAction(state: GameState, actorId: PlayerId, aId: PlayerId, bId: PlayerId): GameState {
+  assert(state.phase === "night" && state.night, "Not night.");
+  const actor = playerById(state, actorId);
+  assert(actor?.alive && actor.roleId === "detective", "You are not the Detective.");
+  const step = state.night.steps.find((s) => s.kind === "detect" && s.actorIds.includes(actorId));
+  assert(step, "You have no night action.");
+  assert(!step.done, "You have already acted.");
+  assert(aId !== bId, "Pick two different players.");
+  for (const id of [aId, bId]) {
+    assert(id !== actorId, "Investigate two other players, not yourself.");
+    assert(playerById(state, id)?.alive, "Can only investigate living players.");
+  }
+  const sameTeam = teamOf(state, aId) === teamOf(state, bId);
+  return {
+    ...state,
+    detections: [...state.detections, { round: state.round, detectiveId: actorId, aId, bId, sameTeam }],
+    night: { steps: withSub(state.night.steps, step, actorId, { t: "detect", a: aId, b: bId }) },
+  };
+}
+
+function raiseAction(state: GameState, actorId: PlayerId, targetId: PlayerId | null): GameState {
+  assert(state.phase === "night" && state.night, "Not night.");
+  const actor = playerById(state, actorId);
+  assert(actor?.alive && actor.roleId === "medium", "You are not the Medium.");
+  assert(!state.mediumUsed[actorId], "You have already raised someone.");
+  const step = state.night.steps.find((s) => s.kind === "raise" && s.actorIds.includes(actorId));
+  assert(step, "You have no night action.");
+  assert(!step.done, "You have already acted.");
+  if (targetId !== null) {
+    const target = playerById(state, targetId);
+    assert(target && !target.alive, "You can only raise a dead player.");
+  }
+  return {
+    ...state,
+    night: { steps: withSub(state.night.steps, step, actorId, { t: "raise", target: targetId }) },
   };
 }
 
@@ -411,12 +463,22 @@ function endNight(state: GameState): GameState {
 
   const killed = markDead(state.players, [...deaths]);
   // Troublemaker: swap two living players' roles (takes effect going forward).
-  const swapped = applySwaps(killed.players, witchPotions, steps);
+  const swapped = applySwaps(killed.players, witchPotions, { ...state.mediumUsed }, steps);
+  // Medium: raise a dead player back to life (one-time, spends the power).
+  const raised = applyRaises(swapped.players, swapped.mediumUsed, steps, log, state.round);
+
+  // Silencer: whoever is silenced can't vote in the coming day.
+  const silenced: PlayerId[] = [];
+  for (const step of steps) {
+    if (step.kind === "silence") for (const t of stepTargets(step)) silenced.push(t);
+  }
 
   const next: GameState = {
     ...state,
-    players: swapped.players,
+    players: raised.players,
     witchPotions: swapped.witchPotions,
+    mediumUsed: raised.mediumUsed,
+    silenced,
     night: null,
     log,
     pendingShots: [...state.pendingShots, ...killed.deadShooters],
@@ -424,16 +486,27 @@ function endNight(state: GameState): GameState {
   return enterReckoning(next, "day");
 }
 
+/** Swap a per-player role-state entry between two ids (potions/medium follow role). */
+function swapEntry<T>(map: Record<string, T>, a: PlayerId, b: PlayerId) {
+  const va = map[a];
+  const vb = map[b];
+  delete map[a];
+  delete map[b];
+  if (vb !== undefined) map[a] = vb;
+  if (va !== undefined) map[b] = va;
+}
+
 /**
- * Apply every Troublemaker swap for which both targets are still alive. Potions
- * travel with the role, so a player swapped into the Witch inherits her
- * remaining potions (and the ex-Witch loses them).
+ * Apply every Troublemaker swap for which both targets are still alive. Role
+ * state (Witch potions, Medium's spent flag) travels with the role, so a player
+ * swapped into a role inherits its state and the ex-holder loses it.
  */
 function applySwaps(
   players: Player[],
   witchPotions: GameState["witchPotions"],
+  mediumUsed: GameState["mediumUsed"],
   steps: NightStep[]
-): { players: Player[]; witchPotions: GameState["witchPotions"] } {
+): { players: Player[]; witchPotions: GameState["witchPotions"]; mediumUsed: GameState["mediumUsed"] } {
   let nextPlayers = players;
   const nextPotions = { ...witchPotions };
   for (const step of steps) {
@@ -447,15 +520,34 @@ function applySwaps(
       nextPlayers = nextPlayers.map((p) =>
         p.id === sub.a ? { ...p, roleId: b.roleId } : p.id === sub.b ? { ...p, roleId: roleA } : p
       );
-      const potA = nextPotions[sub.a];
-      const potB = nextPotions[sub.b];
-      delete nextPotions[sub.a];
-      delete nextPotions[sub.b];
-      if (potB) nextPotions[sub.a] = potB;
-      if (potA) nextPotions[sub.b] = potA;
+      swapEntry(nextPotions, sub.a, sub.b);
+      swapEntry(mediumUsed, sub.a, sub.b);
     }
   }
-  return { players: nextPlayers, witchPotions: nextPotions };
+  return { players: nextPlayers, witchPotions: nextPotions, mediumUsed };
+}
+
+/** Apply Medium raises, mutating the shared log, spending each Medium's power. */
+function applyRaises(
+  players: Player[],
+  mediumUsed: GameState["mediumUsed"],
+  steps: NightStep[],
+  log: GameState["log"],
+  round: number
+): { players: Player[]; mediumUsed: GameState["mediumUsed"] } {
+  let nextPlayers = players;
+  for (const step of steps) {
+    if (step.kind !== "raise") continue;
+    for (const [actorId, sub] of Object.entries(step.subs)) {
+      if (sub.t !== "raise" || sub.target === null || mediumUsed[actorId]) continue;
+      const target = nextPlayers.find((p) => p.id === sub.target);
+      if (!target || target.alive) continue;
+      nextPlayers = nextPlayers.map((p) => (p.id === sub.target ? { ...p, alive: true } : p));
+      mediumUsed[actorId] = true;
+      log.push({ type: "raised", round, playerId: sub.target });
+    }
+  }
+  return { players: nextPlayers, mediumUsed };
 }
 
 function shoot(state: GameState, hunterId: PlayerId, targetId: PlayerId): GameState {
@@ -490,6 +582,7 @@ function castVote(state: GameState, voterId: PlayerId, targetId: PlayerId | null
   assert(state.phase === "dayVote", "Not voting.");
   const voter = playerById(state, voterId);
   assert(voter?.alive, "Dead players can't vote.");
+  assert(!state.silenced.includes(voterId), "You've been silenced — no vote today.");
   if (targetId !== null) {
     assert(targetId !== voterId, "You can't vote for yourself.");
     const target = playerById(state, targetId);
@@ -498,9 +591,14 @@ function castVote(state: GameState, voterId: PlayerId, targetId: PlayerId | null
   return { ...state, votes: { ...state.votes, [voterId]: targetId } };
 }
 
-/** True once every living player has cast (or skipped) a vote. */
+/** Living players who are allowed to vote (silenced players sit the day out). */
+export function eligibleVoters(state: GameState): Player[] {
+  return living(state).filter((p) => !state.silenced.includes(p.id));
+}
+
+/** True once every eligible voter has cast (or skipped) a vote. */
 export function allVotesIn(state: GameState): boolean {
-  return living(state).every((p) => p.id in state.votes);
+  return eligibleVoters(state).every((p) => p.id in state.votes);
 }
 
 function resolveVote(state: GameState): GameState {
@@ -571,6 +669,9 @@ export function createGame(code: string, seed: number): GameState {
     round: 0,
     night: null,
     inspects: [],
+    detections: [],
+    silenced: [],
+    mediumUsed: {},
     votes: {},
     witchPotions: {},
     pendingShots: [],

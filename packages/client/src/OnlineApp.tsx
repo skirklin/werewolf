@@ -9,7 +9,7 @@ import {
 import { useOnlineGame } from "./net.js";
 import { RoleConfigEditor } from "./config.js";
 import { RoleCard, InspectHistory, LogFeed } from "./ui.js";
-import { NightAction, DayBoard, VoteAction, ShootAction, GameOver, PlayerList } from "./phases.js";
+import { NightAction, DayBoard, VoteAction, ShootAction, DetectionHistory, GameOver, PlayerList } from "./phases.js";
 
 export function OnlineApp({ onExit }: { onExit: () => void }) {
   const game = useOnlineGame();
@@ -173,6 +173,7 @@ function renderPhase(view: PlayerView, send: (m: ClientMessage) => void, onExit:
         <div className="stack">
           <div className="phase-banner"><div className="big">🌙</div><h2>Night falls</h2></div>
           <InspectHistory view={view} />
+          <DetectionHistory view={view} />
           <p className="center muted">Waiting for the night to end…</p>
         </div>
       );
@@ -191,6 +192,13 @@ function renderPhase(view: PlayerView, send: (m: ClientMessage) => void, onExit:
 
     case "dayVote":
       if (dead) return <Spectator view={view} label="🗳️ The town is voting…" />;
+      if (view.silencedIds.includes(view.you.id))
+        return (
+          <div className="stack">
+            <div className="phase-banner"><div className="big">🤫</div><h2>You've been silenced</h2><p className="muted">You can't vote today. Sit tight.</p></div>
+            <LogFeed log={view.log} players={view.players} />
+          </div>
+        );
       return <VoteAction view={view} send={send} />;
 
     case "gameOver":

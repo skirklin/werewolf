@@ -140,6 +140,12 @@ class Room {
       case "swapAction":
         this.apply({ type: "swapAction", actorId: playerId, aId: msg.aId, bId: msg.bId });
         break;
+      case "detectAction":
+        this.apply({ type: "detectAction", actorId: playerId, aId: msg.aId, bId: msg.bId });
+        break;
+      case "raiseAction":
+        this.apply({ type: "raiseAction", actorId: playerId, targetId: msg.targetId });
+        break;
       case "endNight":
         hostOnly();
         this.apply({ type: "endNight" });

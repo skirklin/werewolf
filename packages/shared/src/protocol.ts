@@ -23,6 +23,8 @@ export type ClientMessage =
   | { type: "nightChoice"; targetId: PlayerId }
   | { type: "witchAction"; save: boolean; poisonTargetId: PlayerId | null }
   | { type: "swapAction"; aId: PlayerId; bId: PlayerId }
+  | { type: "detectAction"; aId: PlayerId; bId: PlayerId }
+  | { type: "raiseAction"; targetId: PlayerId | null }
   | { type: "endNight" }
   | { type: "startVote" }
   | { type: "castVote"; targetId: PlayerId | null }

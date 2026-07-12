@@ -56,7 +56,9 @@ export function passDeviceTurn(
   }
 
   if (state.phase === "dayVote") {
-    const next = state.players.find((p) => p.alive && !(p.id in state.votes));
+    const next = state.players.find(
+      (p) => p.alive && !state.silenced.includes(p.id) && !(p.id in state.votes)
+    );
     return next ? { kind: "vote", seatId: next.id } : { kind: "public" };
   }
 

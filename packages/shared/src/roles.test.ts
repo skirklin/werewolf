@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { GameState, Player, GameConfig } from "./types.js";
-import { reduce, createGame, checkWinner, living, fabricatedReveal } from "./engine.js";
+import { reduce, createGame, checkWinner, living, allVotesIn, fabricatedReveal } from "./engine.js";
 import { projectView } from "./views.js";
 
 const exact = (): GameConfig => ({
@@ -13,10 +13,14 @@ function gameWith(roles: string[]): GameState {
   const players: Player[] = roles.map((roleId, i) => ({
     id: `p${i}`, name: `P${i}`, roleId, alive: true, connected: true, isHost: i === 0,
   }));
-  // Mirror startGame's potion init, since this helper bypasses startGame.
+  // Mirror startGame's per-role state init, since this helper bypasses startGame.
   const witchPotions: GameState["witchPotions"] = {};
-  for (const p of players) if (p.roleId === "witch") witchPotions[p.id] = { heal: true, poison: true };
-  return { ...createGame("TEST", 12345), phase: "roleReveal", players, witchPotions, config: exact() };
+  const mediumUsed: GameState["mediumUsed"] = {};
+  for (const p of players) {
+    if (p.roleId === "witch") witchPotions[p.id] = { heal: true, poison: true };
+    if (p.roleId === "medium") mediumUsed[p.id] = false;
+  }
+  return { ...createGame("TEST", 12345), phase: "roleReveal", players, witchPotions, mediumUsed, config: exact() };
 }
 
 const alive = (s: GameState, id: string) => living(s).some((p) => p.id === id);
@@ -322,6 +326,123 @@ describe("Troublemaker", () => {
     expect(s.players.find((p) => p.id === "p4")!.roleId).toBe("witch");
     expect(s.witchPotions["p4"]).toEqual({ heal: true, poison: true });
     expect(s.witchPotions["p2"]).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Silencer
+// ---------------------------------------------------------------------------
+describe("Silencer", () => {
+  it("stops the silenced player from voting, without blocking the vote", () => {
+    let s = gameWith(["werewolf", "silencer", "villager", "villager", "villager"]);
+    s = reduce(s, { type: "startNight" });
+    s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p2" }); // wolf kills p2
+    s = reduce(s, { type: "nightChoice", actorId: "p1", targetId: "p3" }); // silence p3
+    s = reduce(s, { type: "endNight" });
+    expect(s.silenced).toContain("p3");
+    expect(projectView(s, "p0").silencedIds).toContain("p3"); // public
+
+    s = reduce(s, { type: "startVote" });
+    expect(() => reduce(s, { type: "castVote", voterId: "p3", targetId: "p1" })).toThrow(/silenced/i);
+    // The remaining eligible voters (p0, p1, p4) can still resolve the day.
+    s = reduce(s, { type: "castVote", voterId: "p0", targetId: "p4" });
+    s = reduce(s, { type: "castVote", voterId: "p1", targetId: "p4" });
+    s = reduce(s, { type: "castVote", voterId: "p4", targetId: "p1" });
+    expect(allVotesIn(s)).toBe(true); // p3 not required
+    s = reduce(s, { type: "resolveVote" });
+    expect(alive(s, "p4")).toBe(false); // lynched 2-1
+  });
+
+  it("silence lasts a single day, then expires", () => {
+    let s = gameWith(["werewolf", "silencer", "villager", "villager", "villager"]);
+    s = reduce(s, { type: "startNight" });
+    s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p2" });
+    s = reduce(s, { type: "nightChoice", actorId: "p1", targetId: "p3" });
+    s = reduce(s, { type: "endNight" });
+    s = reduce(s, { type: "startVote" });
+    for (const p of living(s)) if (!s.silenced.includes(p.id) && p.id !== "p3") s = reduce(s, { type: "castVote", voterId: p.id, targetId: null });
+    s = reduce(s, { type: "resolveVote" }); // -> next night
+    expect(s.phase).toBe("night");
+    expect(s.silenced).toEqual([]); // cleared for the new night
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Detective
+// ---------------------------------------------------------------------------
+describe("Detective", () => {
+  it("learns whether two players share a team, but not which", () => {
+    const detect = (a: string, b: string) => {
+      let s = gameWith(["werewolf", "detective", "villager", "villager"]);
+      s = reduce(s, { type: "startNight" });
+      s = reduce(s, { type: "detectAction", actorId: "p1", aId: a, bId: b });
+      return projectView(s, "p1").myDetections.at(-1)!;
+    };
+    expect(detect("p2", "p3").sameTeam).toBe(true); // two villagers
+    expect(detect("p0", "p2").sameTeam).toBe(false); // wolf + villager
+  });
+
+  it("only the detective sees their readings", () => {
+    let s = gameWith(["werewolf", "detective", "villager", "villager"]);
+    s = reduce(s, { type: "startNight" });
+    s = reduce(s, { type: "detectAction", actorId: "p1", aId: "p0", bId: "p2" });
+    expect(projectView(s, "p2").myDetections).toHaveLength(0);
+  });
+
+  it("rejects illegal investigations", () => {
+    let s = gameWith(["werewolf", "detective", "villager", "villager"]);
+    s = reduce(s, { type: "startNight" });
+    expect(() => reduce(s, { type: "detectAction", actorId: "p1", aId: "p1", bId: "p2" })).toThrow(); // self
+    expect(() => reduce(s, { type: "detectAction", actorId: "p1", aId: "p2", bId: "p2" })).toThrow(); // same
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Medium
+// ---------------------------------------------------------------------------
+describe("Medium", () => {
+  it("has nothing to do until someone has died", () => {
+    let s = gameWith(["werewolf", "medium", "villager", "villager"]);
+    s = reduce(s, { type: "startNight" });
+    expect(projectView(s, "p1").nightPrompt).toBeNull(); // no dead to raise yet
+  });
+
+  it("raises a dead player once, spending the power", () => {
+    let s = gameWith(["werewolf", "medium", "villager", "villager", "villager"]);
+    s = reduce(s, { type: "startNight" });
+    s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p2" }); // p2 dies
+    s = reduce(s, { type: "endNight" });
+    // Skip the day.
+    s = reduce(s, { type: "startVote" });
+    for (const p of living(s)) s = reduce(s, { type: "castVote", voterId: p.id, targetId: null });
+    s = reduce(s, { type: "resolveVote" }); // -> night 2
+    expect(s.phase).toBe("night");
+    // Now the Medium can raise the dead p2.
+    expect(projectView(s, "p1").nightPrompt!.kind).toBe("raise");
+    s = reduce(s, { type: "raiseAction", actorId: "p1", targetId: "p2" });
+    s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p3" });
+    s = reduce(s, { type: "endNight" });
+    expect(alive(s, "p2")).toBe(true); // back from the dead
+    expect(s.mediumUsed["p1"]).toBe(true);
+    expect(s.log.some((e) => e.type === "raised" && e.playerId === "p2")).toBe(true);
+    // Power spent: no raise step on the next night.
+    s = reduce(s, { type: "startVote" });
+    for (const p of living(s)) s = reduce(s, { type: "castVote", voterId: p.id, targetId: null });
+    s = reduce(s, { type: "resolveVote" });
+    expect(projectView(s, "p1").nightPrompt?.kind).not.toBe("raise");
+  });
+
+  it("holding the power does not spend it, and dead players only", () => {
+    let s = gameWith(["werewolf", "medium", "villager", "villager", "villager"]);
+    s = reduce(s, { type: "startNight" });
+    s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p2" });
+    s = reduce(s, { type: "endNight" });
+    s = reduce(s, { type: "startVote" });
+    for (const p of living(s)) s = reduce(s, { type: "castVote", voterId: p.id, targetId: null });
+    s = reduce(s, { type: "resolveVote" }); // night 2
+    expect(() => reduce(s, { type: "raiseAction", actorId: "p1", targetId: "p3" })).toThrow(); // p3 alive
+    s = reduce(s, { type: "raiseAction", actorId: "p1", targetId: null }); // hold
+    expect(s.mediumUsed["p1"]).toBe(false);
   });
 });
 

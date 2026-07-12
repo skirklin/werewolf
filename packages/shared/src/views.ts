@@ -6,6 +6,7 @@ import type {
   GameConfig,
   LogEntry,
   InspectResult,
+  DetectionResult,
 } from "./types.js";
 
 /**
@@ -20,7 +21,7 @@ export function publicLog(state: GameState): LogEntry[] {
   );
 }
 import { getRole } from "./roles.js";
-import { living, validNightTargets, validShootTargets, wolfVictim, playerById } from "./engine.js";
+import { living, eligibleVoters, validNightTargets, validShootTargets, wolfVictim, playerById } from "./engine.js";
 import type { NightActionKind, NightStep } from "./types.js";
 
 /** Tally of pack picks by targetId (for the werewolves' shared view). */
@@ -83,6 +84,10 @@ export interface PlayerView {
   shootPrompt: { targetIds: PlayerId[] } | null;
   /** Your seer inspections across all rounds (only yours). */
   myInspects: InspectResult[];
+  /** Your detective readings across all rounds (only yours). */
+  myDetections: DetectionResult[];
+  /** Players silenced for the current day (public — they can't vote). */
+  silencedIds: PlayerId[];
   /** Your current vote this round (undefined if not cast). */
   myVote?: PlayerId | null;
   /** Live vote tally during the day vote (public). */
@@ -189,9 +194,11 @@ export function projectView(state: GameState, viewerId: PlayerId): PlayerView {
         // Show the disguise (Drunk sees itself acting as the Seer).
         roleId: getRole(myStep.roleId).disguiseAs ?? myStep.roleId,
         targetIds:
-          myStep.kind === "witch" || myStep.kind === "swap"
+          myStep.kind === "witch" || myStep.kind === "swap" || myStep.kind === "detect"
             ? living(state).filter((p) => p.id !== viewerId).map((p) => p.id)
-            : validNightTargets(state, viewerId).map((p) => p.id),
+            : myStep.kind === "raise"
+              ? state.players.filter((p) => !p.alive).map((p) => p.id) // dead players to raise
+              : validNightTargets(state, viewerId).map((p) => p.id),
         canTargetSelf: !!ability.canTargetSelf,
         groupChoices,
         witch:
@@ -213,6 +220,7 @@ export function projectView(state: GameState, viewerId: PlayerId): PlayerView {
       : null;
 
   const myInspects = state.inspects.filter((r) => r.seerId === viewerId);
+  const myDetections = state.detections.filter((r) => r.detectiveId === viewerId);
 
   const voteTally: Record<PlayerId, number> = {};
   for (const t of Object.values(state.votes)) {
@@ -220,7 +228,7 @@ export function projectView(state: GameState, viewerId: PlayerId): PlayerView {
   }
   const votesRemaining =
     state.phase === "dayVote"
-      ? living(state).filter((p) => !(p.id in state.votes)).length
+      ? eligibleVoters(state).filter((p) => !(p.id in state.votes)).length
       : 0;
 
   return {
@@ -240,6 +248,8 @@ export function projectView(state: GameState, viewerId: PlayerId): PlayerView {
     nightWaitingOn,
     shootPrompt,
     myInspects,
+    myDetections,
+    silencedIds: state.silenced,
     myVote: viewerId in state.votes ? state.votes[viewerId] : undefined,
     voteTally,
     votesRemaining,

@@ -10,16 +10,26 @@ export type Team = "village" | "werewolf" | "solo";
  * kind is data-only; a genuinely new mechanic is the one place you touch
  * engine code (see resolveNight).
  */
-export type NightActionKind = "kill" | "protect" | "inspect" | "witch" | "swap";
+export type NightActionKind =
+  | "kill"
+  | "protect"
+  | "inspect"
+  | "witch"
+  | "swap"
+  | "silence"
+  | "detect"
+  | "raise";
 
 /**
  * What a single actor submitted for their night step. Most roles pick one
- * target; the Witch and Troublemaker submit richer shapes.
+ * target; the Witch, Troublemaker and Detective submit richer shapes.
  */
 export type NightSubmission =
-  | { t: "target"; target: PlayerId } // kill / protect / inspect
+  | { t: "target"; target: PlayerId } // kill / protect / inspect / silence
   | { t: "witch"; save: boolean; poison: PlayerId | null }
-  | { t: "swap"; a: PlayerId; b: PlayerId };
+  | { t: "swap"; a: PlayerId; b: PlayerId }
+  | { t: "detect"; a: PlayerId; b: PlayerId }
+  | { t: "raise"; target: PlayerId | null }; // Medium: a dead player, or skip
 
 export interface NightAbility {
   kind: NightActionKind;
@@ -123,6 +133,15 @@ export interface InspectResult {
   reveal: string;
 }
 
+/** A Detective reading: whether two players share a team. */
+export interface DetectionResult {
+  round: number;
+  detectiveId: PlayerId;
+  aId: PlayerId;
+  bId: PlayerId;
+  sameTeam: boolean;
+}
+
 export interface NightState {
   steps: NightStep[];
 }
@@ -136,6 +155,7 @@ export type LogEntry =
   | { type: "lynch"; round: number; playerId: PlayerId }
   | { type: "hunterShot"; round: number; playerId: PlayerId }
   | { type: "poisoned"; round: number; playerId: PlayerId }
+  | { type: "raised"; round: number; playerId: PlayerId }
   | { type: "voteTie"; round: number }
   | { type: "gameOver"; round: number; winner: Team };
 
@@ -148,6 +168,12 @@ export interface GameState {
   night: NightState | null;
   /** Every seer inspection made this game (each seer sees only their own). */
   inspects: InspectResult[];
+  /** Every detective reading (each detective sees only their own). */
+  detections: DetectionResult[];
+  /** Players who may not vote in the upcoming day (set by the Silencer). */
+  silenced: PlayerId[];
+  /** Per-Medium: whether their one-time raise has been spent. */
+  mediumUsed: Record<PlayerId, boolean>;
   /** voterId -> targetId, or null for an explicit skip. */
   votes: Record<PlayerId, PlayerId | null>;
   /** Per-Witch remaining potions (heal/poison), each usable once all game. */

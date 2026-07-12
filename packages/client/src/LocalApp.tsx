@@ -7,13 +7,14 @@ import {
   publicPlayers,
   publicLog,
   type GameConfig,
+  type GameState,
   type PlayerView,
   type Turn,
 } from "@werewolf/shared";
 import { useLocalGame } from "./local.js";
 import { RoleConfigEditor } from "./config.js";
 import { RoleCard, LogFeed } from "./ui.js";
-import { TargetGrid, WitchPanel, SwapPanel, GameOver, PlayerList } from "./phases.js";
+import { TargetGrid, WitchPanel, SwapPanel, RaisePanel, SilencedNote, GameOver, PlayerList } from "./phases.js";
 
 export function LocalApp({ onExit }: { onExit: () => void }) {
   const game = useLocalGame();
@@ -145,6 +146,7 @@ function LocalPlay({
     return (
       <Public title={`☀️ Day ${state.round}`} onExit={onExit}>
         <LogFeed log={publicLog(state)} players={publicPlayers(state)} />
+        <SilencedNote view={view} />
         <PlayerList players={publicPlayers(state)} youId="-" />
         <p className="muted center small">Discuss out loud. When ready, put it to a vote.</p>
         <button className="primary full lg" onClick={game.callVote}>Call a vote</button>
@@ -179,6 +181,10 @@ function LocalPlay({
         return <WitchPanel view={view} onSubmit={game.submitWitch} />;
       if (view.nightPrompt?.kind === "swap")
         return <SwapPanel view={view} onSubmit={game.submitSwap} />;
+      if (view.nightPrompt?.kind === "detect")
+        return <DetectTurn state={state} view={view} onSubmit={game.submitDetect} />;
+      if (view.nightPrompt?.kind === "raise")
+        return <RaisePanel view={view} onSubmit={game.submitRaise} />;
       return <NightTurn view={view} resolveInspect={resolveInspect} onSubmit={game.submitNight} />;
     case "nightPass":
       return (
@@ -196,6 +202,49 @@ function LocalPlay({
     default:
       return null;
   }
+}
+
+/** Detective in pass-device: pick two, see the same-team result, then pass on. */
+function DetectTurn({
+  state,
+  view,
+  onSubmit,
+}: {
+  state: GameState;
+  view: PlayerView;
+  onSubmit: (aId: string, bId: string) => void;
+}) {
+  const [picked, setPicked] = useState<string[]>([]);
+  const [result, setResult] = useState<[string, string] | null>(null);
+  const toggle = (id: string) =>
+    setPicked((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : cur.length < 2 ? [...cur, id] : [cur[1], id]));
+
+  if (result) {
+    const [a, b] = result;
+    const name = (id: string) => state.players.find((p) => p.id === id)!.name;
+    const team = (id: string) => getRole(state.players.find((p) => p.id === id)!.roleId!).team;
+    const same = team(a) === team(b);
+    return (
+      <div className="app">
+        <div className="rolecard">
+          <div className="emoji">{same ? "🤝" : "🎭"}</div>
+          <div className="rname">{name(a)} & {name(b)}</div>
+          <div className="blurb">{same ? "are on the same team." : "are on different teams."}</div>
+        </div>
+        <div className="spacer" />
+        <button className="primary full lg" onClick={() => onSubmit(a, b)}>Got it — hide & pass on</button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="app">
+      <div className="phase-banner"><div className="big">🕵️</div><h2>Detective</h2><p className="muted">Investigate two players. Pick {2 - picked.length} more.</p></div>
+      <TargetGrid view={view} ids={view.nightPrompt!.targetIds} selected={null} onPick={toggle} multi={picked} />
+      <div className="spacer" />
+      <button className="primary full lg" disabled={picked.length !== 2} onClick={() => setResult([picked[0], picked[1]])}>Investigate</button>
+    </div>
+  );
 }
 
 function ShootTurn({ view, onSubmit }: { view: PlayerView; onSubmit: (id: string) => void }) {
@@ -238,7 +287,10 @@ function NightTurn({
   }
 
   const promptText =
-    prompt.kind === "kill" ? "Choose tonight's victim" : prompt.kind === "protect" ? "Choose someone to protect" : "Choose someone to inspect";
+    prompt.kind === "kill" ? "Choose tonight's victim"
+    : prompt.kind === "protect" ? "Choose someone to protect"
+    : prompt.kind === "silence" ? "Choose whose vote to silence tomorrow"
+    : "Choose someone to inspect";
 
   return (
     <div className="app">
