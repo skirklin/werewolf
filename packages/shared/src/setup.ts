@@ -54,7 +54,8 @@ export function validateConfig(config: GameConfig, playerCount: number): ConfigP
         problems.push({ message: "Villagers are automatic; don't set them explicitly." });
       else getRole(roleId); // throws on unknown role id
       specialTotal += Math.max(0, count);
-      if (getRole(roleId).team === "werewolf") wolves += Math.max(0, count);
+      // Count only REAL wolves (a Henchman is wolf-team but not a wolf).
+      if (roleCountsAsWolf(getRole(roleId))) wolves += Math.max(0, count);
     }
     if (wolves < 1) problems.push({ message: "Need at least 1 werewolf." });
     if (specialTotal > playerCount)
