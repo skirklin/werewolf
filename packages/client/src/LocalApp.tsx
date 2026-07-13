@@ -69,7 +69,7 @@ function Setup({
         <button className="ghost small" onClick={onExit}>← Back</button>
         <span className="pill">Pass the device</span>
       </div>
-      <div className="phase-banner"><div className="big">🤝</div><h2>Who's brave enough? 🐺</h2></div>
+      <div className="phase-banner"><div className="big">🤝</div><h2>Who's playing?</h2></div>
 
       <div className="stack">
         {names.map((n, i) => (
@@ -91,7 +91,7 @@ function Setup({
         <RoleConfigEditor config={config} playerCount={filled.length} onChange={setConfig} />
 
         <button className="primary full lg" disabled={problems.length > 0} onClick={start}>
-          Deal 'em out! 🎴
+          Deal the roles
         </button>
       </div>
     </div>
@@ -135,7 +135,7 @@ function LocalPlay({
       return { name: t.name, isWolf: shownRoleId === "werewolf", label: `is the ${getRole(shownRoleId).name}` };
     }
     const isWolf = getRole(t.roleId!).team === "werewolf";
-    return { name: t.name, isWolf, label: isWolf ? "is a Werewolf! 🐺" : "is squeaky clean ✅" };
+    return { name: t.name, isWolf, label: isWolf ? "is a Werewolf." : "is not a werewolf." };
   };
 
   if (state.phase === "gameOver") {
@@ -151,9 +151,9 @@ function LocalPlay({
     return (
       <Public title={`🌙 Night ${state.round}`} onExit={onExit}>
         <LogFeed log={publicLog(state)} players={publicPlayers(state)} />
-        <p className="muted center">Eyes closed, everyone! Pass the phone around as it asks.</p>
+        <p className="muted center">Everyone, close your eyes. Pass the phone around as prompted.</p>
         <button className="primary full lg" onClick={() => setNightIntroRound(state.round)}>
-          Into the night 🌙
+          Begin the night
         </button>
       </Public>
     );
@@ -166,8 +166,8 @@ function LocalPlay({
         <LogFeed log={publicLog(state)} players={publicPlayers(state)} />
         <SilencedNote view={view} />
         <PlayerList players={publicPlayers(state)} youId="-" />
-        <p className="muted center small">Argue it out loud. When you're ready, put it to a vote.</p>
-        <button className="primary full lg" onClick={game.callVote}>Put it to a vote 🗳️</button>
+        <p className="muted center small">Talk it out. When you're ready, put it to a vote.</p>
+        <button className="primary full lg" onClick={game.callVote}>Call a vote</button>
       </Public>
     );
   }
@@ -208,7 +208,7 @@ function LocalPlay({
       return (
         <div className="app">
           <div className="spacer" />
-          <div className="phase-banner"><div className="big">😴</div><h2>Sweet dreams 😴</h2><p className="muted">The night passes quietly for you. Lucky.</p></div>
+          <div className="phase-banner"><div className="big">😴</div><h2>Nothing to do</h2><p className="muted">The night passes quietly for you.</p></div>
           <div className="spacer" />
           <button className="primary full lg" onClick={game.passNight}>Tap to pass the phone</button>
         </div>
@@ -247,7 +247,7 @@ function DetectTurn({
         <div className="rolecard">
           <div className="emoji">{same ? "🤝" : "🎭"}</div>
           <div className="rname">{name(a)} & {name(b)}</div>
-          <div className="blurb">{same ? "are thick as thieves (same team)." : "are on opposite sides."}</div>
+          <div className="blurb">{same ? "are on the same team." : "are on different teams."}</div>
         </div>
         <div className="spacer" />
         <button className="primary full lg" onClick={() => onSubmit(a, b)}>Seen it — hide & pass on</button>
@@ -334,10 +334,10 @@ function VoteTurn({ view, onSubmit }: { view: PlayerView; onSubmit: (id: string 
   const others = view.players.filter((p) => p.alive && p.id !== view.you.id);
   return (
     <div className="app">
-      <div className="phase-banner"><div className="big">🗳️</div><h2>{view.you.name}, cast your vote</h2><p className="muted">Who's getting the boot?</p></div>
+      <div className="phase-banner"><div className="big">🗳️</div><h2>{view.you.name}, cast your vote</h2><p className="muted">Who should the town eliminate?</p></div>
       <TargetGrid view={view} ids={others.map((p) => p.id)} selected={null} onPick={(id) => onSubmit(id)} />
       <div className="spacer" />
-      <button className="ghost full" onClick={() => onSubmit(null)}>Abstain 🤐</button>
+      <button className="ghost full" onClick={() => onSubmit(null)}>Abstain</button>
     </div>
   );
 }

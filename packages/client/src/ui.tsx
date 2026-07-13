@@ -46,7 +46,7 @@ export function RoleCard({ view }: { view: PlayerView }) {
       <div className="blurb">{role.blurb}</div>
       {view.packmates.length > 0 && (
         <div className="small" style={{ marginTop: 14 }}>
-          🐺 Your partners in crime:{" "}
+          🐺 Your pack:{" "}
           <b>
             {view.players
               .filter((p) => view.packmates.includes(p.id))
@@ -63,7 +63,7 @@ export function InspectHistory({ view }: { view: PlayerView }) {
   if (view.myInspects.length === 0) return null;
   return (
     <div className="card tight stack">
-      <b>🔮 What you've seen</b>
+      <b>🔮 Your visions</b>
       {view.myInspects.map((r, i) => {
         const target = view.players.find((p) => p.id === r.targetId);
         const label =
@@ -103,21 +103,21 @@ function describe(e: LogEntry, name: (id: string) => string): string | null {
     case "death":
       return `🌙 Night ${e.round}: the wolves had ${name(e.playerId)} for a midnight snack.`;
     case "saved":
-      return `🌅 Night ${e.round}: the wolves pounced, but ${name(e.playerId)} lived to tell the tale!`;
+      return `🌅 Night ${e.round}: the wolves struck, but ${name(e.playerId)} survived the night.`;
     case "noDeath":
       return e.cause === "wolves"
-        ? `🌅 Night ${e.round}: everyone woke up in one piece. Suspicious.`
-        : `🗳️ Day ${e.round}: the town lost its nerve — nobody eliminated.`;
+        ? `🌅 Night ${e.round}: everyone woke up in one piece.`
+        : `🗳️ Day ${e.round}: the town couldn't decide — nobody eliminated.`;
     case "lynch":
       return `🗳️ Day ${e.round}: the town pointed fingers, and ${name(e.playerId)} got the boot.`;
     case "hunterShot":
-      return `🏹 ${name(e.playerId)} caught a parting arrow from a dying Hunter. Rude.`;
+      return `🏹 ${name(e.playerId)} took a parting shot from a dying Hunter.`;
     case "poisoned":
-      return `☠️ ${name(e.playerId)} was found extremely dead in the night. (Poison? Who's to say.)`;
+      return `☠️ ${name(e.playerId)} was found dead in the night, untouched by the wolves.`;
     case "raised":
-      return `👻 A séance worked?! ${name(e.playerId)} is back among the living.`;
+      return `👻 the Medium's séance worked — ${name(e.playerId)} is back among the living.`;
     case "voteTie":
-      return `🗳️ Day ${e.round}: the vote tied — the town shrugged and moved on.`;
+      return `🗳️ Day ${e.round}: the vote tied — nobody eliminated.`;
     default:
       return null;
   }

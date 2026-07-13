@@ -49,11 +49,11 @@ function Landing({ game, onExit }: { game: ReturnType<typeof useOnlineGame>; onE
           <input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Sam" maxLength={20} />
         </label>
         <button className="primary full lg" disabled={!name.trim()} onClick={() => game.create(name)}>
-          Start a game 🎲
+          Create a room
         </button>
         <div className="divider" />
         <label className="field">
-          <span className="muted small">Got a code? Hop in 👇</span>
+          <span className="muted small">Join with a code</span>
           <input
             className="code"
             value={joinCode}
@@ -67,7 +67,7 @@ function Landing({ game, onExit }: { game: ReturnType<typeof useOnlineGame>; onE
           disabled={!name.trim() || joinCode.length < 4}
           onClick={() => game.join(joinCode, name)}
         >
-          Join the fun
+          Join room
         </button>
       </div>
       <div className="spacer" />
@@ -113,7 +113,7 @@ function RoomInvite({ code }: { code: string }) {
 
   return (
     <div className="card stack center">
-      <div className="muted small">Friends hop in by scanning — or typing the code</div>
+      <div className="muted small">Others join by scanning, or with the code</div>
       <div className="big" style={{ letterSpacing: 8 }}>{code}</div>
       {qr && (
         <img
@@ -176,11 +176,11 @@ function Lobby({
               disabled={problems.length > 0}
               onClick={() => send({ type: "startGame", config })}
             >
-              Start the game 🐺
+              Start game
             </button>
           </>
         ) : (
-          <p className="center muted">Hang tight — the host is setting the table…</p>
+          <p className="center muted">Waiting for the host to start…</p>
         )}
       </div>
     </div>
@@ -214,10 +214,10 @@ function renderPhase(view: PlayerView, send: (m: ClientMessage) => void, onExit:
           <RoleCard view={view} />
           {view.you.isHost ? (
             <button className="primary full lg" onClick={() => send({ type: "startNight" })}>
-              Everyone in? Let the night begin 🌙
+              Everyone's ready — begin the night
             </button>
           ) : (
-            <p className="center muted">Memorize your role… then act natural. Waiting for the host.</p>
+            <p className="center muted">Memorize your role. Waiting for the host…</p>
           )}
         </div>
       );
@@ -230,7 +230,7 @@ function renderPhase(view: PlayerView, send: (m: ClientMessage) => void, onExit:
           <div className="phase-banner"><div className="big">🌙</div><h2>Night falls</h2></div>
           <InspectHistory view={view} />
           <DetectionHistory view={view} />
-          <p className="center muted">Shhh… the night is happening. Sit tight.</p>
+          <p className="center muted">Waiting for the night to end…</p>
         </div>
       );
 
@@ -238,7 +238,7 @@ function renderPhase(view: PlayerView, send: (m: ClientMessage) => void, onExit:
       if (view.shootPrompt) return <ShootAction view={view} send={send} />;
       return (
         <div className="stack">
-          <div className="phase-banner"><div className="big">🏹</div><h2>A shot rings out! 🏹</h2></div>
+          <div className="phase-banner"><div className="big">🏹</div><h2>A shot rings out</h2></div>
           <p className="center muted">A fallen Hunter is taking someone down with them…</p>
         </div>
       );
@@ -251,7 +251,7 @@ function renderPhase(view: PlayerView, send: (m: ClientMessage) => void, onExit:
       if (view.silencedIds.includes(view.you.id))
         return (
           <div className="stack">
-            <div className="phase-banner"><div className="big">🤫</div><h2>Zipped it 🤫</h2><p className="muted">No vote for you today — sit tight and look innocent.</p></div>
+            <div className="phase-banner"><div className="big">🤫</div><h2>You&apos;ve been silenced</h2><p className="muted">No vote for you today — sit tight and look innocent.</p></div>
             <LogFeed log={view.log} players={view.players} />
           </div>
         );

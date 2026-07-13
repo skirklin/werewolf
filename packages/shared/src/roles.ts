@@ -54,7 +54,7 @@ export const ROLES: Record<string, RoleDef> = {
     name: "Aura Seer",
     team: "village",
     emoji: "👁️",
-    blurb: "Each night, read one player's aura: wolf, or not wolf. No fine print — just the vibe.",
+    blurb: "Each night, sense one player's aura — werewolf or not. No details, just the verdict.",
     night: { kind: "inspect", order: 21, canTargetSelf: false, reveal: "isWerewolf" },
   },
   doctor: {
@@ -81,7 +81,7 @@ export const ROLES: Record<string, RoleDef> = {
     // In-game the player is shown the Seer's card (disguiseAs) and never learns
     // the truth; this honest blurb is what the setup/reveal screens display.
     blurb:
-      "You are ABSOLUTELY the Seer. (You are not.) Your nightly 'visions' are pure hiccup-fueled nonsense. Just a villager — but a confident one.",
+      "You're convinced you're the Seer. You're not. Your nightly visions are meaningless — you're an ordinary villager who has no idea.",
     disguiseAs: "seer",
     night: { kind: "inspect", order: 22, canTargetSelf: false, reveal: "fabricated" },
   },
@@ -90,7 +90,7 @@ export const ROLES: Record<string, RoleDef> = {
     name: "Tanner",
     team: "solo",
     emoji: "🃏",
-    blurb: "You are SO over this town. Your one dream: get voted out. Pull it off and you win — gloriously, pettily, alone.",
+    blurb: "You can't stand this town. Your one goal: get voted out. Pull it off and you win — pettily, and all alone.",
     winsIfLynched: true,
   },
   witch: {
@@ -108,7 +108,7 @@ export const ROLES: Record<string, RoleDef> = {
     team: "village",
     emoji: "🎭",
     blurb:
-      "A little chaos never hurt anyone (much). Each night, secretly swap two players' roles — they wake up as someone new and have no idea. Tee-hee.",
+      "A quiet agent of chaos. Each night, secretly swap two players' roles — they wake up as someone new and never know.",
     night: { kind: "swap", order: 40 },
   },
   silencer: {
@@ -126,7 +126,7 @@ export const ROLES: Record<string, RoleDef> = {
     team: "village",
     emoji: "🕵️",
     blurb:
-      "Each night, hold two suspects side by side and learn if they're on the same team — but not which one. Classic whodunit energy.",
+      "Each night, compare two players and learn whether they're on the same team — but not which one.",
     night: { kind: "detect", order: 25, canTargetSelf: false },
   },
   medium: {
