@@ -47,6 +47,7 @@ export const ROLES: Record<string, RoleDef> = {
     team: "village",
     emoji: "🔮",
     blurb: "Each night, peek at one player's true role. Then spend all day trying not to look smug about it.",
+    drunkMimicable: true,
     night: { kind: "inspect", order: 20, canTargetSelf: false, reveal: "exactRole" },
   },
   auraSeer: {
@@ -55,6 +56,7 @@ export const ROLES: Record<string, RoleDef> = {
     team: "village",
     emoji: "👁️",
     blurb: "Each night, sense one player's aura — werewolf or not. No details, just the verdict.",
+    drunkMimicable: true,
     night: { kind: "inspect", order: 21, canTargetSelf: false, reveal: "isWerewolf" },
   },
   doctor: {
@@ -63,6 +65,7 @@ export const ROLES: Record<string, RoleDef> = {
     team: "village",
     emoji: "💉",
     blurb: "Each night, patch someone up (yourself counts). If the wolves come knocking, your patient just shrugs it off.",
+    drunkMimicable: true,
     night: { kind: "protect", order: 30, canTargetSelf: true },
   },
   hunter: {
@@ -78,12 +81,11 @@ export const ROLES: Record<string, RoleDef> = {
     name: "Village Drunk",
     team: "village",
     emoji: "🍺",
-    // In-game the player is shown the Seer's card (disguiseAs) and never learns
-    // the truth; this honest blurb is what the setup/reveal screens display.
+    // At deal time the Drunk is secretly assigned a random mimicable role
+    // (state.drunkDisguise); in-game they're shown THAT role's card and action,
+    // which quietly does nothing. This honest blurb is only for setup/reveal.
     blurb:
-      "You're convinced you're the Seer. You're not. Your nightly visions are meaningless — you're an ordinary villager who has no idea.",
-    disguiseAs: "seer",
-    night: { kind: "inspect", order: 22, canTargetSelf: false, reveal: "fabricated" },
+      "You're convinced you have a special role — you don't. Whatever power you think you have is useless, and you'll never know. Just an ordinary villager.",
   },
   tanner: {
     id: "tanner",
@@ -109,6 +111,7 @@ export const ROLES: Record<string, RoleDef> = {
     emoji: "🎭",
     blurb:
       "A quiet agent of chaos. Each night, secretly swap two players' roles — they wake up as someone new and never know.",
+    drunkMimicable: true,
     night: { kind: "swap", order: 40 },
   },
   silencer: {
@@ -118,6 +121,7 @@ export const ROLES: Record<string, RoleDef> = {
     emoji: "🤫",
     blurb:
       "Each night, shush one player — no vote for them tomorrow. Perfect for muzzling a smooth talker or a wolf who won't shut up.",
+    drunkMimicable: true,
     night: { kind: "silence", order: 35, canTargetSelf: false },
   },
   detective: {
@@ -127,6 +131,7 @@ export const ROLES: Record<string, RoleDef> = {
     emoji: "🕵️",
     blurb:
       "Each night, compare two players and learn whether they're on the same team — but not which one.",
+    drunkMimicable: true,
     night: { kind: "detect", order: 25, canTargetSelf: false },
   },
   medium: {
@@ -136,16 +141,25 @@ export const ROLES: Record<string, RoleDef> = {
     emoji: "👻",
     blurb:
       "You've got exactly one séance in you. Once per game, on a night you choose, yank a dead player back to the land of the living.",
+    drunkMimicable: true,
     night: { kind: "raise", order: 5 },
   },
 };
 
 export const VILLAGER_ROLE_ID = "villager";
+export const DRUNK_ROLE_ID = "drunk";
 
 export function getRole(id: string): RoleDef {
   const role = ROLES[id];
   if (!role) throw new Error(`Unknown role: ${id}`);
   return role;
+}
+
+/** Roles the Drunk may be secretly assigned to impersonate. */
+export function mimicableRoleIds(): string[] {
+  return Object.values(ROLES)
+    .filter((r) => r.drunkMimicable)
+    .map((r) => r.id);
 }
 
 /** All roles that can be configured into a game (everything except plain villager). */

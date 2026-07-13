@@ -8,9 +8,9 @@ import type {
   Team,
   GameConfig,
 } from "./types.js";
-import { getRole } from "./roles.js";
+import { getRole, mimicableRoleIds } from "./roles.js";
 import { dealRoles } from "./setup.js";
-import { makeRng, shuffle } from "./rng.js";
+import { makeRng, shuffle, pick } from "./rng.js";
 
 // ---------------------------------------------------------------------------
 // Queries (pure helpers, safe to use from client for view logic)
@@ -28,6 +28,18 @@ export function teamOf(state: GameState, id: PlayerId): Team | null {
   const p = playerById(state, id);
   if (!p || !p.roleId) return null;
   return getRole(p.roleId).team;
+}
+
+/** True if this player is the Drunk (secretly impersonating another role). */
+export function isDrunk(state: GameState, id: PlayerId): boolean {
+  return playerById(state, id)?.roleId === "drunk";
+}
+
+/** The role a player ACTS AS: their Drunk disguise if any, else their real role. */
+export function effectiveRoleId(state: GameState, id: PlayerId): string | null {
+  const disguise = state.drunkDisguise[id];
+  if (disguise) return disguise;
+  return playerById(state, id)?.roleId ?? null;
 }
 
 /** Whether a role counts as a real werewolf for win math + the aura read. */
@@ -58,11 +70,11 @@ export function allNightStepsDone(state: GameState): boolean {
   return state.night.steps.every((s) => s.done);
 }
 
-/** Valid targets for a given actor's night ability. */
+/** Valid targets for a given actor's (effective, possibly disguised) night ability. */
 export function validNightTargets(state: GameState, actorId: PlayerId): Player[] {
-  const actor = playerById(state, actorId);
-  if (!actor?.roleId) return [];
-  const ability = getRole(actor.roleId).night;
+  const roleId = effectiveRoleId(state, actorId);
+  if (!playerById(state, actorId)?.alive || !roleId) return [];
+  const ability = getRole(roleId).night;
   if (!ability) return [];
   return living(state).filter((t) => {
     if (t.id === actorId && !ability.canTargetSelf) return false;
@@ -146,10 +158,18 @@ function startGame(state: GameState, config: GameConfig): GameState {
   const witchPotions: GameState["witchPotions"] = {};
   const mediumUsed: GameState["mediumUsed"] = {};
   const convertUsed: GameState["convertUsed"] = {};
+  const drunkDisguise: GameState["drunkDisguise"] = {};
+  const mimicable = mimicableRoleIds();
   for (const p of players) {
     if (p.roleId === "witch") witchPotions[p.id] = { heal: true, poison: true };
     if (p.roleId === "medium") mediumUsed[p.id] = false;
     if (p.roleId === "infector") convertUsed[p.id] = false;
+    // Each Drunk secretly becomes a random mimicable role for the whole game.
+    if (p.roleId === "drunk" && mimicable.length) {
+      const disguise = pick(mimicable, rng);
+      drunkDisguise[p.id] = disguise;
+      if (disguise === "medium") mediumUsed[p.id] = false; // so the fake step can appear
+    }
   }
   return {
     ...state,
@@ -158,6 +178,7 @@ function startGame(state: GameState, config: GameConfig): GameState {
     witchPotions,
     mediumUsed,
     convertUsed,
+    drunkDisguise,
     phase: "roleReveal",
     round: 0,
     log: [{ type: "gameStart", round: 0 }],
@@ -168,10 +189,13 @@ function startGame(state: GameState, config: GameConfig): GameState {
 function beginNight(state: GameState): GameState {
   const round = state.round + 1;
   const deadExist = state.players.some((p) => !p.alive);
+  // Group by EFFECTIVE role, so a Drunk wakes with (and alongside) the role it
+  // impersonates. The Drunk's action resolves to nothing (see the isDrunk skips).
   const byRole = new Map<string, PlayerId[]>();
   for (const p of living(state)) {
-    if (!p.roleId) continue;
-    const ability = getRole(p.roleId).night;
+    const roleId = effectiveRoleId(state, p.id);
+    if (!roleId) continue;
+    const ability = getRole(roleId).night;
     if (!ability) continue;
     // The Medium only wakes while their raise is unspent and someone is dead.
     if (ability.kind === "raise" && (state.mediumUsed[p.id] || !deadExist)) continue;
@@ -182,9 +206,9 @@ function beginNight(state: GameState): GameState {
         !living(state).some((t) => t.roleId && getRole(t.roleId).team !== "werewolf"))
     )
       continue;
-    const list = byRole.get(p.roleId) ?? [];
+    const list = byRole.get(roleId) ?? [];
     list.push(p.id);
-    byRole.set(p.roleId, list);
+    byRole.set(roleId, list);
   }
   const steps: NightStep[] = [];
   for (const [roleId, actorIds] of byRole) {
@@ -226,15 +250,14 @@ function nightChoice(state: GameState, actorId: PlayerId, targetId: PlayerId): G
   let inspects = state.inspects;
   if (step.kind === "inspect") {
     const target = playerById(state, targetId)!;
-    const ability = getRole(actor.roleId).night!;
-    const reveal =
-      ability.reveal === "exactRole"
+    const ability = getRole(effectiveRoleId(state, actorId)!).night!;
+    const reveal = isDrunk(state, actorId)
+      ? fabricatedInspect(state.seed, state.round, targetId, ability.reveal ?? "exactRole")
+      : ability.reveal === "exactRole"
         ? target.roleId!
-        : ability.reveal === "fabricated"
-          ? fabricatedReveal(state.seed, state.round, targetId)
-          : isWolfForWin(target.roleId!)
-            ? "werewolf"
-            : "not-werewolf";
+        : isWolfForWin(target.roleId!)
+          ? "werewolf"
+          : "not-werewolf";
     inspects = [
       ...inspects,
       { round: state.round, seerId: actorId, targetId, reveal },
@@ -306,7 +329,7 @@ function witchAction(
 function swapAction(state: GameState, actorId: PlayerId, aId: PlayerId, bId: PlayerId): GameState {
   assert(state.phase === "night" && state.night, "Not night.");
   const actor = playerById(state, actorId);
-  assert(actor?.alive && actor.roleId === "troublemaker", "You are not the Troublemaker.");
+  assert(actor?.alive && effectiveRoleId(state, actorId) === "troublemaker", "You are not the Troublemaker.");
   const step = state.night.steps.find((s) => s.kind === "swap" && s.actorIds.includes(actorId));
   assert(step, "You have no night action.");
   assert(!step.done, "You have already acted.");
@@ -326,7 +349,7 @@ function swapAction(state: GameState, actorId: PlayerId, aId: PlayerId, bId: Pla
 function detectAction(state: GameState, actorId: PlayerId, aId: PlayerId, bId: PlayerId): GameState {
   assert(state.phase === "night" && state.night, "Not night.");
   const actor = playerById(state, actorId);
-  assert(actor?.alive && actor.roleId === "detective", "You are not the Detective.");
+  assert(actor?.alive && effectiveRoleId(state, actorId) === "detective", "You are not the Detective.");
   const step = state.night.steps.find((s) => s.kind === "detect" && s.actorIds.includes(actorId));
   assert(step, "You have no night action.");
   assert(!step.done, "You have already acted.");
@@ -335,7 +358,9 @@ function detectAction(state: GameState, actorId: PlayerId, aId: PlayerId, bId: P
     assert(id !== actorId, "Investigate two other players, not yourself.");
     assert(playerById(state, id)?.alive, "Can only investigate living players.");
   }
-  const sameTeam = teamOf(state, aId) === teamOf(state, bId);
+  const sameTeam = isDrunk(state, actorId)
+    ? fabricatedSameTeam(state.seed, state.round, aId, bId)
+    : teamOf(state, aId) === teamOf(state, bId);
   return {
     ...state,
     detections: [...state.detections, { round: state.round, detectiveId: actorId, aId, bId, sameTeam }],
@@ -346,7 +371,7 @@ function detectAction(state: GameState, actorId: PlayerId, aId: PlayerId, bId: P
 function raiseAction(state: GameState, actorId: PlayerId, targetId: PlayerId | null): GameState {
   assert(state.phase === "night" && state.night, "Not night.");
   const actor = playerById(state, actorId);
-  assert(actor?.alive && actor.roleId === "medium", "You are not the Medium.");
+  assert(actor?.alive && effectiveRoleId(state, actorId) === "medium", "You are not the Medium.");
   assert(!state.mediumUsed[actorId], "You have already raised someone.");
   const step = state.night.steps.find((s) => s.kind === "raise" && s.actorIds.includes(actorId));
   assert(step, "You have no night action.");
@@ -377,19 +402,36 @@ function pluralityTarget(step: NightStep, rng: () => number): PlayerId | null {
   return top[0][0];
 }
 
-/**
- * A stable, fake inspect result for the deluded Drunk. Because the Drunk is
- * disguised as the exact-role Seer, the fake must also look like an exact role
- * (villager-heavy, with the occasional werewolf) — never a binary answer, or
- * the disguise would give itself away on night one. Independent of the target's
- * true role, so it leaks nothing.
- */
-const FAKE_REVEALS = ["villager", "villager", "villager", "villager", "werewolf", "seer", "doctor"];
-export function fabricatedReveal(seed: number, round: number, targetId: PlayerId): string {
+// Fake results for the Drunk. Deterministic (so pass-device previews match the
+// engine record) and independent of the truth (so they leak nothing). A fake
+// exact-role read is villager-heavy so it looks like a real Seer's result.
+const FAKE_ROLES = ["villager", "villager", "villager", "villager", "werewolf", "seer", "doctor"];
+function drunkHash(seed: number, round: number, s: string): number {
   let h = 0;
-  for (const ch of targetId) h = (h * 31 + ch.charCodeAt(0)) | 0;
-  const idx = Math.floor(makeRng(seed + round * 131 + h)() * FAKE_REVEALS.length);
-  return FAKE_REVEALS[idx];
+  for (const ch of s) h = (h * 31 + ch.charCodeAt(0)) | 0;
+  return seed + round * 131 + h;
+}
+
+/** A stable fake inspect result matching the mimicked inspector's format. */
+export function fabricatedInspect(
+  seed: number,
+  round: number,
+  targetId: PlayerId,
+  format: "exactRole" | "isWerewolf"
+): string {
+  const rng = makeRng(drunkHash(seed, round, targetId));
+  if (format === "isWerewolf") return rng() < 0.5 ? "werewolf" : "not-werewolf";
+  return FAKE_ROLES[Math.floor(rng() * FAKE_ROLES.length)];
+}
+
+/** A stable fake "same team?" verdict for a Drunk mimicking the Detective. */
+export function fabricatedSameTeam(seed: number, round: number, aId: PlayerId, bId: PlayerId): boolean {
+  return makeRng(drunkHash(seed, round, `${aId}|${bId}`))() < 0.5;
+}
+
+/** Back-compat: an exact-role fabrication. */
+export function fabricatedReveal(seed: number, round: number, targetId: PlayerId): string {
+  return fabricatedInspect(seed, round, targetId, "exactRole");
 }
 
 /** Mark players dead (only those currently alive); collect any who owe a dying shot. */
@@ -442,10 +484,14 @@ function endNight(state: GameState): GameState {
   const rng = makeRng(state.seed + state.round);
   const steps = state.night.steps;
 
-  // Protections (doctor) + the wolves' victim.
+  // Protections (doctor) + the wolves' victim. A Drunk mimicking the Doctor
+  // protects no one (its action does nothing).
   const protectedIds = new Set<PlayerId>();
   for (const step of steps) {
-    if (step.kind === "protect") for (const t of stepTargets(step)) protectedIds.add(t);
+    if (step.kind !== "protect") continue;
+    for (const [actorId, sub] of Object.entries(step.subs)) {
+      if (sub.t === "target" && !isDrunk(state, actorId)) protectedIds.add(sub.target);
+    }
   }
   let victimId: PlayerId | null = null;
   for (const step of steps) if (step.kind === "kill") victimId = pluralityTarget(step, rng);
@@ -485,10 +531,11 @@ function endNight(state: GameState): GameState {
   for (const id of deaths) if (id !== victimId) log.push({ type: "poisoned", round: state.round, playerId: id });
 
   const killed = markDead(state.players, [...deaths]);
-  const roleState = {
+  const roleState: RoleState = {
     witchPotions,
     mediumUsed: { ...state.mediumUsed },
     convertUsed: { ...state.convertUsed },
+    drunkDisguise: { ...state.drunkDisguise },
   };
   // Spend one-time powers (Medium raise, Infector convert) BEFORE swaps, so the
   // spent flag is written under the current id and then travels with the role...
@@ -497,10 +544,14 @@ function endNight(state: GameState): GameState {
   // ...then the Troublemaker swap carries all that role state to the new holder.
   players = applySwaps(players, roleState, steps);
 
-  // Silencer: whoever is silenced can't vote in the coming day.
+  // Silencer: whoever is silenced can't vote in the coming day. A Drunk mimicking
+  // the Silencer shushes no one.
   const silenced: PlayerId[] = [];
   for (const step of steps) {
-    if (step.kind === "silence") for (const t of stepTargets(step)) silenced.push(t);
+    if (step.kind !== "silence") continue;
+    for (const [actorId, sub] of Object.entries(step.subs)) {
+      if (sub.t === "target" && !isDrunk(state, actorId)) silenced.push(sub.target);
+    }
   }
 
   const next: GameState = {
@@ -509,6 +560,7 @@ function endNight(state: GameState): GameState {
     witchPotions: roleState.witchPotions,
     mediumUsed: roleState.mediumUsed,
     convertUsed: roleState.convertUsed,
+    drunkDisguise: roleState.drunkDisguise,
     silenced,
     night: null,
     log,
@@ -532,6 +584,7 @@ interface RoleState {
   witchPotions: GameState["witchPotions"];
   mediumUsed: GameState["mediumUsed"];
   convertUsed: GameState["convertUsed"];
+  drunkDisguise: GameState["drunkDisguise"];
 }
 
 /**
@@ -543,8 +596,10 @@ function applySwaps(players: Player[], roleState: RoleState, steps: NightStep[])
   let next = players;
   for (const step of steps) {
     if (step.kind !== "swap") continue;
-    for (const sub of Object.values(step.subs)) {
+    for (const [actorId, sub] of Object.entries(step.subs)) {
       if (sub.t !== "swap") continue;
+      // A Drunk mimicking the Troublemaker swaps no one.
+      if (next.find((p) => p.id === actorId)?.roleId === "drunk") continue;
       const a = next.find((p) => p.id === sub.a);
       const b = next.find((p) => p.id === sub.b);
       if (!a?.alive || !b?.alive) continue;
@@ -555,6 +610,7 @@ function applySwaps(players: Player[], roleState: RoleState, steps: NightStep[])
       swapEntry(roleState.witchPotions, sub.a, sub.b);
       swapEntry(roleState.mediumUsed, sub.a, sub.b);
       swapEntry(roleState.convertUsed, sub.a, sub.b);
+      swapEntry(roleState.drunkDisguise, sub.a, sub.b);
     }
   }
   return next;
@@ -573,6 +629,12 @@ function applyRaises(
     if (step.kind !== "raise") continue;
     for (const [actorId, sub] of Object.entries(step.subs)) {
       if (sub.t !== "raise" || sub.target === null || mediumUsed[actorId]) continue;
+      // A Drunk mimicking the Medium spends its "power" but raises no one — so the
+      // fake séance looks one-time, just like the real thing.
+      if (next.find((p) => p.id === actorId)?.roleId === "drunk") {
+        mediumUsed[actorId] = true;
+        continue;
+      }
       const target = next.find((p) => p.id === sub.target);
       if (!target || target.alive) continue;
       next = next.map((p) => (p.id === sub.target ? { ...p, alive: true } : p));
@@ -726,6 +788,7 @@ export function createGame(code: string, seed: number): GameState {
     silenced: [],
     mediumUsed: {},
     convertUsed: {},
+    drunkDisguise: {},
     votes: {},
     witchPotions: {},
     pendingShots: [],

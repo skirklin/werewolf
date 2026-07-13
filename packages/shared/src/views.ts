@@ -21,7 +21,7 @@ export function publicLog(state: GameState): LogEntry[] {
   );
 }
 import { getRole } from "./roles.js";
-import { living, eligibleVoters, validNightTargets, validShootTargets, wolfVictim, playerById } from "./engine.js";
+import { living, eligibleVoters, validNightTargets, validShootTargets, wolfVictim, effectiveRoleId, playerById } from "./engine.js";
 import type { NightActionKind, NightStep } from "./types.js";
 
 /** Tally of pack picks by targetId (for the werewolves' shared view). */
@@ -141,11 +141,9 @@ export function projectView(state: GameState, viewerId: PlayerId): PlayerView {
   const you = playerById(state, viewerId);
   if (!you) throw new Error(`No such player: ${viewerId}`);
 
-  // The Drunk is shown a disguised role and never learns the truth (until the end).
+  // The Drunk is shown its disguised role and never learns the truth (until the end).
   const displayRoleId =
-    state.phase !== "gameOver" && you.roleId
-      ? getRole(you.roleId).disguiseAs ?? you.roleId
-      : you.roleId;
+    state.phase !== "gameOver" ? effectiveRoleId(state, viewerId) : you.roleId;
 
   const players: PublicPlayer[] = state.players.map((p) => ({
     id: p.id,
@@ -185,14 +183,15 @@ export function projectView(state: GameState, viewerId: PlayerId): PlayerView {
     // The Witch must wait for the wolves before her prompt appears.
     const witchReady = myStep?.kind !== "witch" || killReady;
     if (myStep && you.alive && !(viewerId in myStep.subs) && witchReady) {
-      const ability = getRole(you.roleId!).night!;
+      const ability = getRole(effectiveRoleId(state, viewerId)!).night!;
       const groupChoices = myStep.group
         ? stepTargetTally(myStep)
         : undefined;
       nightPrompt = {
         kind: myStep.kind,
-        // Show the disguise (Drunk sees itself acting as the Seer).
-        roleId: getRole(myStep.roleId).disguiseAs ?? myStep.roleId,
+        // myStep.roleId is already the effective (disguised) role, so a Drunk
+        // sees itself acting as the role it impersonates.
+        roleId: myStep.roleId,
         targetIds:
           myStep.kind === "witch" || myStep.kind === "swap" || myStep.kind === "detect"
             ? living(state).filter((p) => p.id !== viewerId).map((p) => p.id)

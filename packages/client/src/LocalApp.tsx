@@ -3,7 +3,9 @@ import {
   recommendedConfig,
   validateConfig,
   getRole,
-  fabricatedReveal,
+  fabricatedInspect,
+  fabricatedSameTeam,
+  isWolfForWin,
   publicPlayers,
   publicLog,
   type GameConfig,
@@ -120,22 +122,26 @@ function LocalPlay({
   const [seenRole, setSeenRole] = useState<Set<string>>(new Set());
   if (!state || !view) return null;
 
-  // The inspector's own vision — computed from the acting role's reveal type.
-  // Seer = exact, Aura Seer = werewolf-or-not, Drunk = a fabricated (fake) result
-  // matching what the engine will record.
+  // The inspector's own vision, matching exactly what the engine will record.
+  // Seer = exact role, Aura Seer = werewolf-or-not, and a Drunk mimicking either
+  // gets a deterministic fake in the same format.
   const resolveInspect = (targetId: string) => {
     const t = state.players.find((p) => p.id === targetId)!;
     const seatId = "seatId" in turn ? turn.seatId : "";
-    const reveal = getRole(state.players.find((p) => p.id === seatId)!.roleId!).night?.reveal;
-    // The Drunk (fabricated) is disguised as the exact-role Seer, so its fake
-    // result must also read as an exact role — matching the engine's record.
-    const shownRoleId =
-      reveal === "fabricated" ? fabricatedReveal(state.seed, state.round, targetId) : t.roleId!;
-    if (reveal === "exactRole" || reveal === "fabricated") {
-      return { name: t.name, isWolf: shownRoleId === "werewolf", label: `is the ${getRole(shownRoleId).name}` };
-    }
-    const isWolf = getRole(t.roleId!).team === "werewolf";
-    return { name: t.name, isWolf, label: isWolf ? "is a Werewolf." : "is not a werewolf." };
+    const seat = state.players.find((p) => p.id === seatId)!;
+    const drunk = seat.roleId === "drunk";
+    const effRole = state.drunkDisguise[seatId] ?? seat.roleId!;
+    const format = getRole(effRole).night?.reveal ?? "exactRole";
+    const reveal = drunk
+      ? fabricatedInspect(state.seed, state.round, targetId, format)
+      : format === "exactRole"
+        ? t.roleId!
+        : isWolfForWin(t.roleId!)
+          ? "werewolf"
+          : "not-werewolf";
+    if (reveal === "werewolf") return { name: t.name, isWolf: true, label: "is a Werewolf." };
+    if (reveal === "not-werewolf") return { name: t.name, isWolf: false, label: "is not a werewolf." };
+    return { name: t.name, isWolf: false, label: `is the ${getRole(reveal).name}` };
   };
 
   if (state.phase === "gameOver") {
@@ -241,7 +247,10 @@ function DetectTurn({
     const [a, b] = result;
     const name = (id: string) => state.players.find((p) => p.id === id)!.name;
     const team = (id: string) => getRole(state.players.find((p) => p.id === id)!.roleId!).team;
-    const same = team(a) === team(b);
+    // A Drunk mimicking the Detective gets a deterministic fake verdict.
+    const same = state.players.find((p) => p.id === view.you.id)?.roleId === "drunk"
+      ? fabricatedSameTeam(state.seed, state.round, a, b)
+      : team(a) === team(b);
     return (
       <div className="app">
         <div className="rolecard">

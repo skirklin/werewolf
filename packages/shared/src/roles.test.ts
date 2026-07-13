@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { GameState, Player, GameConfig } from "./types.js";
-import { reduce, createGame, checkWinner, living, allVotesIn, fabricatedReveal } from "./engine.js";
+import { reduce, createGame, checkWinner, living, allVotesIn, fabricatedReveal, fabricatedInspect, fabricatedSameTeam } from "./engine.js";
 import { projectView } from "./views.js";
 import { dealRoles, validateConfig } from "./setup.js";
 import { makeRng } from "./rng.js";
@@ -182,38 +182,96 @@ describe("Tanner", () => {
 // ---------------------------------------------------------------------------
 // Drunk
 // ---------------------------------------------------------------------------
-describe("Village Drunk", () => {
-  it("believes it is the Seer and never sees its true role mid-game", () => {
-    const s = gameWith(["werewolf", "drunk", "villager"]);
+describe("Village Drunk (mimics any role)", () => {
+  // p1 is the drunk; give it an explicit disguise (startGame randomizes it).
+  const drunkAs = (disguise: string, extra: string[] = ["villager", "villager"]) => {
+    const s = gameWith(["werewolf", "drunk", ...extra]);
+    return { ...s, drunkDisguise: { p1: disguise } };
+  };
+
+  it("shows its disguised role, and hides its true role until game over", () => {
+    const s = drunkAs("doctor");
     const v = projectView(s, "p1");
-    expect(v.you.roleId).toBe("seer"); // disguised
-    expect(v.players.find((p) => p.id === "p1")!.roleId).toBe("seer"); // consistent in the list
+    expect(v.you.roleId).toBe("doctor"); // impersonates the doctor
+    expect(v.players.find((p) => p.id === "p1")!.roleId).toBe("doctor"); // consistent
+    expect(projectView({ ...s, phase: "gameOver" }, "p1").you.roleId).toBe("drunk"); // truth at the end
   });
 
-  it("shows a Seer night prompt but returns a fabricated result", () => {
-    let s = gameWith(["werewolf", "drunk", "villager", "villager"]);
+  it("mimicking the Seer gives a fake exact-role result", () => {
+    let s = drunkAs("seer");
     s = reduce(s, { type: "startNight" });
     expect(projectView(s, "p1").nightPrompt!.roleId).toBe("seer");
     s = reduce(s, { type: "nightChoice", actorId: "p1", targetId: "p0" }); // "inspect" the wolf
-    const result = projectView(s, "p1").myInspects.at(-1)!;
-    // A fabricated *exact role* (matching the Seer disguise), not the wolf's truth.
-    expect(result.reveal).toBe(fabricatedReveal(s.seed, s.round, "p0"));
-    expect(["villager", "werewolf", "seer", "doctor"]).toContain(result.reveal);
+    const r = projectView(s, "p1").myInspects.at(-1)!;
+    expect(r.reveal).toBe(fabricatedInspect(s.seed, s.round, "p0", "exactRole"));
+    expect(["villager", "werewolf", "seer", "doctor"]).toContain(r.reveal);
   });
 
-  it("is on the village team for win checks", () => {
-    expect(checkWinner(gameWith(["werewolf", "drunk"]))).toBe("werewolf"); // drunk counts as town (parity)
-    const noWolves = (() => {
-      const g = gameWith(["werewolf", "drunk", "villager"]);
-      return { ...g, players: g.players.map((p) => (p.id === "p0" ? { ...p, alive: false } : p)) };
-    })();
+  it("mimicking the Aura Seer gives a fake werewolf-or-not result", () => {
+    let s = drunkAs("auraSeer");
+    s = reduce(s, { type: "startNight" });
+    s = reduce(s, { type: "nightChoice", actorId: "p1", targetId: "p0" });
+    const r = projectView(s, "p1").myInspects.at(-1)!;
+    expect(r.reveal).toBe(fabricatedInspect(s.seed, s.round, "p0", "isWerewolf"));
+    expect(["werewolf", "not-werewolf"]).toContain(r.reveal);
+  });
+
+  it("mimicking the Doctor protects no one", () => {
+    let s = drunkAs("doctor");
+    s = reduce(s, { type: "startNight" });
+    s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p2" }); // wolf targets p2
+    s = reduce(s, { type: "nightChoice", actorId: "p1", targetId: "p2" }); // drunk "protects" p2
+    s = reduce(s, { type: "endNight" });
+    expect(alive(s, "p2")).toBe(false); // the fake protection did nothing
+  });
+
+  it("mimicking the Silencer silences no one", () => {
+    let s = drunkAs("silencer");
+    s = reduce(s, { type: "startNight" });
+    s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p2" });
+    s = reduce(s, { type: "nightChoice", actorId: "p1", targetId: "p3" }); // drunk "silences" p3
+    s = reduce(s, { type: "endNight" });
+    expect(s.silenced).toEqual([]);
+  });
+
+  it("mimicking the Troublemaker swaps no one", () => {
+    let s = drunkAs("troublemaker");
+    s = reduce(s, { type: "startNight" });
+    s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p2" });
+    s = reduce(s, { type: "swapAction", actorId: "p1", aId: "p2", bId: "p3" }); // drunk "swaps"
+    s = reduce(s, { type: "endNight" });
+    expect(s.players.find((p) => p.id === "p3")!.roleId).toBe("villager"); // unchanged
+  });
+
+  it("mimicking the Detective gives a fake same-team verdict", () => {
+    let s = drunkAs("detective");
+    s = reduce(s, { type: "startNight" });
+    s = reduce(s, { type: "detectAction", actorId: "p1", aId: "p0", bId: "p2" });
+    const d = projectView(s, "p1").myDetections.at(-1)!;
+    expect(d.sameTeam).toBe(fabricatedSameTeam(s.seed, s.round, "p0", "p2"));
+  });
+
+  it("mimicking the Medium raises no one, but the fake power is one-time", () => {
+    let s = drunkAs("medium", ["villager", "villager", "villager"]);
+    s = reduce(s, { type: "startNight" });
+    expect(projectView(s, "p1").nightPrompt).toBeNull(); // no dead to 'raise' yet
+    s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p2" }); // p2 dies
+    s = reduce(s, { type: "endNight" });
+    s = reduce(s, { type: "startVote" });
+    for (const p of living(s)) s = reduce(s, { type: "castVote", voterId: p.id, targetId: null });
+    s = reduce(s, { type: "resolveVote" }); // night 2
+    s = reduce(s, { type: "raiseAction", actorId: "p1", targetId: "p2" }); // drunk "raises" p2
+    s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p3" });
+    s = reduce(s, { type: "endNight" });
+    expect(alive(s, "p2")).toBe(false); // stayed dead
+    expect(s.mediumUsed["p1"]).toBe(true); // ...but the fake power is spent
+  });
+
+  it("is on the village team and reveals as the Drunk at game over", () => {
+    expect(checkWinner(gameWith(["werewolf", "drunk"]))).toBe("werewolf"); // drunk counts as town
+    const g = gameWith(["werewolf", "drunk", "villager"]);
+    const noWolves = { ...g, players: g.players.map((p) => (p.id === "p0" ? { ...p, alive: false } : p)) };
     expect(checkWinner(noWolves)).toBe("village");
-  });
-
-  it("learns the truth once the game is over", () => {
-    let s = gameWith(["werewolf", "drunk", "villager"]);
-    s = { ...s, phase: "gameOver", winner: "village" };
-    expect(projectView(s, "p1").you.roleId).toBe("drunk");
   });
 });
 

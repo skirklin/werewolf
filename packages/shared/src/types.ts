@@ -44,9 +44,8 @@ export interface NightAbility {
    * For `inspect` roles: how much the vision reveals.
    *  - "exactRole": the target's precise role (classic Seer).
    *  - "isWerewolf": only werewolf-or-not (Aura Seer).
-   *  - "fabricated": a fake, meaningless result (the deluded Drunk).
    */
-  reveal?: "exactRole" | "isWerewolf" | "fabricated";
+  reveal?: "exactRole" | "isWerewolf";
 }
 
 export interface RoleDef {
@@ -62,8 +61,8 @@ export interface RoleDef {
   onDeathShoot?: boolean;
   /** A solo role that wins immediately if the town votes to eliminate them (Tanner). */
   winsIfLynched?: boolean;
-  /** Shown to this player as a different role — they never learn the truth (Drunk). */
-  disguiseAs?: string;
+  /** This role can be secretly impersonated by the Drunk (its power does nothing). */
+  drunkMimicable?: boolean;
   /**
    * Whether this role counts as a werewolf for win math (parity / village win)
    * and the Aura Seer's read. Defaults to `team === "werewolf"`. A Henchman is
@@ -184,6 +183,8 @@ export interface GameState {
   mediumUsed: Record<PlayerId, boolean>;
   /** Per-Infector: whether their one-time conversion has been spent. */
   convertUsed: Record<PlayerId, boolean>;
+  /** Per-Drunk: the role they've been dealt to secretly impersonate. */
+  drunkDisguise: Record<PlayerId, string>;
   /** voterId -> targetId, or null for an explicit skip. */
   votes: Record<PlayerId, PlayerId | null>;
   /** Per-Witch remaining potions (heal/poison), each usable once all game. */
