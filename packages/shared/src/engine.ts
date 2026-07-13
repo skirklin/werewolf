@@ -539,10 +539,10 @@ function endNight(state: GameState): GameState {
   };
   // Spend one-time powers (Medium raise, Infector convert) BEFORE swaps, so the
   // spent flag is written under the current id and then travels with the role...
-  let players = applyRaises(killed.players, roleState.mediumUsed, steps, log, state.round);
-  players = applyConverts(players, roleState.convertUsed, steps);
+  let players = applyRaises(killed.players, roleState.mediumUsed, steps, log, state.round, state);
+  players = applyConverts(players, roleState.convertUsed, roleState.drunkDisguise, steps);
   // ...then the Troublemaker swap carries all that role state to the new holder.
-  players = applySwaps(players, roleState, steps);
+  players = applySwaps(players, roleState, steps, state);
 
   // Silencer: whoever is silenced can't vote in the coming day. A Drunk mimicking
   // the Silencer shushes no one.
@@ -592,14 +592,15 @@ interface RoleState {
  * per-player role state (potions, spent flags) travels with the role, so a
  * player swapped into a role inherits its state and the ex-holder loses it.
  */
-function applySwaps(players: Player[], roleState: RoleState, steps: NightStep[]): Player[] {
+function applySwaps(players: Player[], roleState: RoleState, steps: NightStep[], state: GameState): Player[] {
   let next = players;
   for (const step of steps) {
     if (step.kind !== "swap") continue;
     for (const [actorId, sub] of Object.entries(step.subs)) {
       if (sub.t !== "swap") continue;
-      // A Drunk mimicking the Troublemaker swaps no one.
-      if (next.find((p) => p.id === actorId)?.roleId === "drunk") continue;
+      // A Drunk mimicking the Troublemaker swaps no one. Check the pre-swap state
+      // so an earlier swap in this same step can't flip our reading of the actor.
+      if (isDrunk(state, actorId)) continue;
       const a = next.find((p) => p.id === sub.a);
       const b = next.find((p) => p.id === sub.b);
       if (!a?.alive || !b?.alive) continue;
@@ -622,7 +623,8 @@ function applyRaises(
   mediumUsed: GameState["mediumUsed"],
   steps: NightStep[],
   log: GameState["log"],
-  round: number
+  round: number,
+  state: GameState
 ): Player[] {
   let next = players;
   for (const step of steps) {
@@ -631,7 +633,7 @@ function applyRaises(
       if (sub.t !== "raise" || sub.target === null || mediumUsed[actorId]) continue;
       // A Drunk mimicking the Medium spends its "power" but raises no one — so the
       // fake séance looks one-time, just like the real thing.
-      if (next.find((p) => p.id === actorId)?.roleId === "drunk") {
+      if (isDrunk(state, actorId)) {
         mediumUsed[actorId] = true;
         continue;
       }
@@ -649,6 +651,7 @@ function applyRaises(
 function applyConverts(
   players: Player[],
   convertUsed: GameState["convertUsed"],
+  drunkDisguise: GameState["drunkDisguise"],
   steps: NightStep[]
 ): Player[] {
   let next = players;
@@ -659,6 +662,9 @@ function applyConverts(
       const target = next.find((p) => p.id === sub.target);
       if (!target?.alive || (target.roleId && getRole(target.roleId).team === "werewolf")) continue;
       next = next.map((p) => (p.id === sub.target ? { ...p, roleId: "werewolf" } : p));
+      // A converted Drunk becomes a real wolf — drop the fake disguise so it no
+      // longer wakes as its old village role (and stops faking effects).
+      delete drunkDisguise[sub.target];
       convertUsed[actorId] = true;
     }
   }

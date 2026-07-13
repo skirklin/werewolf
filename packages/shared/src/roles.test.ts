@@ -3,6 +3,7 @@ import type { GameState, Player, GameConfig } from "./types.js";
 import { reduce, createGame, checkWinner, living, allVotesIn, fabricatedReveal, fabricatedInspect, fabricatedSameTeam } from "./engine.js";
 import { projectView } from "./views.js";
 import { dealRoles, validateConfig } from "./setup.js";
+import { mimicableRoleIds } from "./roles.js";
 import { makeRng } from "./rng.js";
 
 function countRoles(players: Player[]): Record<string, number> {
@@ -184,7 +185,7 @@ describe("Tanner", () => {
 // ---------------------------------------------------------------------------
 describe("Village Drunk (mimics any role)", () => {
   // p1 is the drunk; give it an explicit disguise (startGame randomizes it).
-  const drunkAs = (disguise: string, extra: string[] = ["villager", "villager"]) => {
+  const drunkAs = (disguise: string, extra: string[] = ["villager", "villager"]): GameState => {
     const s = gameWith(["werewolf", "drunk", ...extra]);
     return { ...s, drunkDisguise: { p1: disguise } };
   };
@@ -265,6 +266,71 @@ describe("Village Drunk (mimics any role)", () => {
     s = reduce(s, { type: "endNight" });
     expect(alive(s, "p2")).toBe(false); // stayed dead
     expect(s.mediumUsed["p1"]).toBe(true); // ...but the fake power is spent
+  });
+
+  it("hides the pack and real roles from the Drunk (no leak)", () => {
+    const s = drunkAs("seer");
+    const v = projectView(s, "p1");
+    expect(v.packmates).toEqual([]);
+    expect(v.players.find((p) => p.id === "p0")!.roleId).toBeNull(); // wolf hidden
+  });
+
+  it("a real role and its Drunk twin share one step — only the real one takes effect", () => {
+    // p0 wolf, p1 real doctor, p2 drunk-as-doctor, p3 villager
+    let s = gameWith(["werewolf", "doctor", "drunk", "villager"]);
+    s = { ...s, drunkDisguise: { p2: "doctor" } };
+    s = reduce(s, { type: "startNight" });
+    s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p3" }); // wolf targets p3
+    s = reduce(s, { type: "nightChoice", actorId: "p1", targetId: "p3" }); // REAL doctor saves p3
+    s = reduce(s, { type: "nightChoice", actorId: "p2", targetId: "p3" }); // drunk "saves" p3 too
+    s = reduce(s, { type: "endNight" });
+    expect(alive(s, "p3")).toBe(true); // the real doctor's save counted
+  });
+
+  it("a Drunk-Troublemaker's swap is skipped even if the real Troublemaker moves its seat first", () => {
+    // p0 wolf, p1 real troublemaker, p2 drunk-as-troublemaker, p3 villager, p4 seer, p5 villager
+    let s = gameWith(["werewolf", "troublemaker", "drunk", "villager", "seer", "villager"]);
+    s = { ...s, drunkDisguise: { p2: "troublemaker" } };
+    s = reduce(s, { type: "startNight" });
+    s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p3" });
+    s = reduce(s, { type: "swapAction", actorId: "p1", aId: "p2", bId: "p3" }); // real: swap the drunk's seat
+    s = reduce(s, { type: "swapAction", actorId: "p2", aId: "p4", bId: "p5" }); // drunk: should do nothing
+    s = reduce(s, { type: "endNight" });
+    expect(s.players.find((p) => p.id === "p4")!.roleId).toBe("seer"); // drunk's swap fizzled
+  });
+
+  it("a converted Drunk becomes a real wolf (disguise dropped, no more fakery)", () => {
+    // p0 wolf, p1 infector, p2 drunk-as-seer, p3..p7 villagers
+    let s = gameWith(["werewolf", "infector", "drunk", "villager", "villager", "villager", "villager", "villager"]);
+    s = { ...s, drunkDisguise: { p2: "seer" } };
+    s = reduce(s, { type: "startNight" });
+    s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p3" }); // wolf kills p3
+    s = reduce(s, { type: "nightChoice", actorId: "p2", targetId: "p4" }); // drunk-as-seer "inspects" (fake)
+    s = reduce(s, { type: "nightChoice", actorId: "p1", targetId: "p2" }); // infector converts the drunk
+    s = reduce(s, { type: "endNight" });
+    expect(s.players.find((p) => p.id === "p2")!.roleId).toBe("werewolf");
+    expect(s.drunkDisguise["p2"]).toBeUndefined();
+    // Next night the ex-Drunk wakes as a real wolf (kill step + sees the pack).
+    s = reduce(s, { type: "startVote" });
+    for (const p of living(s)) s = reduce(s, { type: "castVote", voterId: p.id, targetId: null });
+    s = reduce(s, { type: "resolveVote" });
+    const v = projectView(s, "p2");
+    expect(v.nightPrompt!.kind).toBe("kill");
+    expect(v.packmates).toContain("p0");
+  });
+
+  it("startGame secretly assigns each Drunk a random mimicable role", () => {
+    const players: Player[] = Array.from({ length: 6 }, (_, i) => ({
+      id: `p${i}`, name: `P${i}`, roleId: null, alive: true, connected: true, isHost: false,
+    }));
+    const cfg: GameConfig = {
+      selection: { mode: "exact", roleCounts: { werewolf: 1, drunk: 1 } },
+      revealRoleOnDeath: false,
+      nightSummary: "discreet",
+    };
+    const s = reduce({ ...createGame("X", 99), phase: "lobby", players }, { type: "startGame", config: cfg });
+    const drunk = s.players.find((p) => p.roleId === "drunk")!;
+    expect(mimicableRoleIds()).toContain(s.drunkDisguise[drunk.id]);
   });
 
   it("is on the village team and reveals as the Drunk at game over", () => {
