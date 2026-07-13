@@ -69,7 +69,7 @@ function Setup({
         <button className="ghost small" onClick={onExit}>← Back</button>
         <span className="pill">Pass the device</span>
       </div>
-      <div className="phase-banner"><div className="big">🤝</div><h2>Who's playing?</h2></div>
+      <div className="phase-banner"><div className="big">🤝</div><h2>Who's brave enough? 🐺</h2></div>
 
       <div className="stack">
         {names.map((n, i) => (
@@ -85,13 +85,13 @@ function Setup({
             )}
           </div>
         ))}
-        <button className="ghost full" onClick={() => setNames((ns) => [...ns, ""])}>+ Add player</button>
+        <button className="ghost full" onClick={() => setNames((ns) => [...ns, ""])}>+ Add a player</button>
 
         <div className="divider" />
         <RoleConfigEditor config={config} playerCount={filled.length} onChange={setConfig} />
 
         <button className="primary full lg" disabled={problems.length > 0} onClick={start}>
-          Deal roles & start
+          Deal 'em out! 🎴
         </button>
       </div>
     </div>
@@ -135,7 +135,7 @@ function LocalPlay({
       return { name: t.name, isWolf: shownRoleId === "werewolf", label: `is the ${getRole(shownRoleId).name}` };
     }
     const isWolf = getRole(t.roleId!).team === "werewolf";
-    return { name: t.name, isWolf, label: isWolf ? "is a Werewolf!" : "is not a werewolf." };
+    return { name: t.name, isWolf, label: isWolf ? "is a Werewolf! 🐺" : "is squeaky clean ✅" };
   };
 
   if (state.phase === "gameOver") {
@@ -151,9 +151,9 @@ function LocalPlay({
     return (
       <Public title={`🌙 Night ${state.round}`} onExit={onExit}>
         <LogFeed log={publicLog(state)} players={publicPlayers(state)} />
-        <p className="muted center">Everyone, close your eyes. Pass the device around as prompted.</p>
+        <p className="muted center">Eyes closed, everyone! Pass the phone around as it asks.</p>
         <button className="primary full lg" onClick={() => setNightIntroRound(state.round)}>
-          Begin night
+          Into the night 🌙
         </button>
       </Public>
     );
@@ -166,8 +166,8 @@ function LocalPlay({
         <LogFeed log={publicLog(state)} players={publicPlayers(state)} />
         <SilencedNote view={view} />
         <PlayerList players={publicPlayers(state)} youId="-" />
-        <p className="muted center small">Discuss out loud. When ready, put it to a vote.</p>
-        <button className="primary full lg" onClick={game.callVote}>Call a vote</button>
+        <p className="muted center small">Argue it out loud. When you're ready, put it to a vote.</p>
+        <button className="primary full lg" onClick={game.callVote}>Put it to a vote 🗳️</button>
       </Public>
     );
   }
@@ -185,9 +185,9 @@ function LocalPlay({
       <div className="app">
         <RoleCard view={view} />
         <div className="spacer" />
-        <p className="muted center small">Memorize it — you'll act on it now, then pass the device on.</p>
+        <p className="muted center small">Memorize it! You'll act on it now, then pass the phone along.</p>
         <button className="primary full lg" onClick={() => setSeenRole((s) => new Set(s).add(seatId))}>
-          Continue →
+          Got it →
         </button>
       </div>
     );
@@ -208,9 +208,9 @@ function LocalPlay({
       return (
         <div className="app">
           <div className="spacer" />
-          <div className="phase-banner"><div className="big">😴</div><h2>Nothing to do</h2><p className="muted">The night passes quietly for you.</p></div>
+          <div className="phase-banner"><div className="big">😴</div><h2>Sweet dreams 😴</h2><p className="muted">The night passes quietly for you. Lucky.</p></div>
           <div className="spacer" />
-          <button className="primary full lg" onClick={game.passNight}>Tap to pass on</button>
+          <button className="primary full lg" onClick={game.passNight}>Tap to pass the phone</button>
         </div>
       );
     case "shoot":
@@ -247,10 +247,10 @@ function DetectTurn({
         <div className="rolecard">
           <div className="emoji">{same ? "🤝" : "🎭"}</div>
           <div className="rname">{name(a)} & {name(b)}</div>
-          <div className="blurb">{same ? "are on the same team." : "are on different teams."}</div>
+          <div className="blurb">{same ? "are thick as thieves (same team)." : "are on opposite sides."}</div>
         </div>
         <div className="spacer" />
-        <button className="primary full lg" onClick={() => onSubmit(a, b)}>Got it — hide & pass on</button>
+        <button className="primary full lg" onClick={() => onSubmit(a, b)}>Seen it — hide & pass on</button>
       </div>
     );
   }
@@ -299,7 +299,7 @@ function NightTurn({
           <div className="blurb">{r.label}</div>
         </div>
         <div className="spacer" />
-        <button className="primary full lg" onClick={() => onSubmit(picked)}>Got it — hide & pass on</button>
+        <button className="primary full lg" onClick={() => onSubmit(picked)}>Seen it — hide & pass on</button>
       </div>
     );
   }
@@ -334,10 +334,10 @@ function VoteTurn({ view, onSubmit }: { view: PlayerView; onSubmit: (id: string 
   const others = view.players.filter((p) => p.alive && p.id !== view.you.id);
   return (
     <div className="app">
-      <div className="phase-banner"><div className="big">🗳️</div><h2>{view.you.name}, cast your vote</h2><p className="muted">Who should the town eliminate?</p></div>
+      <div className="phase-banner"><div className="big">🗳️</div><h2>{view.you.name}, cast your vote</h2><p className="muted">Who's getting the boot?</p></div>
       <TargetGrid view={view} ids={others.map((p) => p.id)} selected={null} onPick={(id) => onSubmit(id)} />
       <div className="spacer" />
-      <button className="ghost full" onClick={() => onSubmit(null)}>Abstain</button>
+      <button className="ghost full" onClick={() => onSubmit(null)}>Abstain 🤐</button>
     </div>
   );
 }
@@ -347,8 +347,8 @@ function Handoff({ name, onOpen }: { name: string; onOpen: () => void }) {
     <div className="handoff" onClick={onOpen}>
       <div className="big" style={{ fontSize: "3rem" }}>📱➡️</div>
       <div className="to">Pass to {name}</div>
-      <div className="sub">Only {name} should look. Tap when you're holding the device.</div>
-      <button className="primary lg" onClick={onOpen}>I'm {name} — reveal</button>
+      <div className="sub">Eyes on the phone, {name} — and only you. Tap when you're holding it.</div>
+      <button className="primary lg" onClick={onOpen}>I'm {name} — show me 👀</button>
     </div>
   );
 }

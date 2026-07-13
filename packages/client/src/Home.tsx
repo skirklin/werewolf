@@ -5,7 +5,7 @@ export function Home({ onPick }: { onPick: (mode: "online" | "local") => void })
       <div className="phase-banner">
         <div className="big" style={{ fontSize: "5rem" }}>🐺</div>
         <h1>Werewolf</h1>
-        <p className="muted">A game of villagers, wolves, and lies.</p>
+        <p className="muted">Villagers, wolves, and a truly alarming amount of lying.</p>
       </div>
       <div className="spacer" />
       <div className="stack">
@@ -23,7 +23,7 @@ export function Home({ onPick }: { onPick: (mode: "online" | "local") => void })
         </button>
       </div>
       <div className="spacer" />
-      <p className="center small muted">Home-built. No app store. No accounts.</p>
+      <p className="center small muted">Homemade with love and mild betrayal. No app store, no accounts.</p>
     </div>
   );
 }

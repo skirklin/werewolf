@@ -12,14 +12,15 @@ export const ROLES: Record<string, RoleDef> = {
     team: "village",
     emoji: "🧑‍🌾",
     blurb:
-      "The heart of the town. No night powers — but your voice, your vote, and your read on people are what bring the wolves down. Trusted, and dangerous to the pack.",
+      "No powers, no potions — just a pitchfork and a hunch. Your vote is the town's sharpest weapon, and the wolves lose sleep over you.",
   },
   werewolf: {
     id: "werewolf",
     name: "Werewolf",
     team: "werewolf",
     emoji: "🐺",
-    blurb: "Each night, you and your pack secretly devour one villager. Win when wolves equal the town.",
+    blurb:
+      "By night, you and the pack pick a neighbor to snack on. By day, gasp louder than anyone. You win the moment wolves match the humans.",
     night: { kind: "kill", order: 10, group: true, canTargetSelf: false },
   },
   henchman: {
@@ -29,7 +30,7 @@ export const ROLES: Record<string, RoleDef> = {
     emoji: "🦹",
     countsAsWolf: false, // wins with the wolves, but isn't one
     blurb:
-      "You know who the werewolves are and you win with them — but you have no bite of your own. If the wolves are wiped out, you fall with them.",
+      "You're the pack's number-one fan — you know the wolves and cheer them on — but you've got no teeth of your own. If they go down, you go down with them.",
   },
   infector: {
     id: "infector",
@@ -37,7 +38,7 @@ export const ROLES: Record<string, RoleDef> = {
     team: "werewolf",
     emoji: "🧛",
     blurb:
-      "A werewolf who wins with the pack. Once in the game, instead of resting, spread the curse: turn a living non-wolf into a werewolf, who secretly joins the pack.",
+      "A wolf with a nasty bite. Once per game, skip the hunt and infect a neighbor instead — they wake up furry and secretly join the pack.",
     night: { kind: "convert", order: 12, canTargetSelf: false },
   },
   seer: {
@@ -45,7 +46,7 @@ export const ROLES: Record<string, RoleDef> = {
     name: "Seer",
     team: "village",
     emoji: "🔮",
-    blurb: "Each night, inspect one player to learn their exact role.",
+    blurb: "Each night, peek at one player's true role. Then spend all day trying not to look smug about it.",
     night: { kind: "inspect", order: 20, canTargetSelf: false, reveal: "exactRole" },
   },
   auraSeer: {
@@ -53,7 +54,7 @@ export const ROLES: Record<string, RoleDef> = {
     name: "Aura Seer",
     team: "village",
     emoji: "👁️",
-    blurb: "Each night, read one player's aura to learn only whether they are a werewolf.",
+    blurb: "Each night, read one player's aura: wolf, or not wolf. No fine print — just the vibe.",
     night: { kind: "inspect", order: 21, canTargetSelf: false, reveal: "isWerewolf" },
   },
   doctor: {
@@ -61,7 +62,7 @@ export const ROLES: Record<string, RoleDef> = {
     name: "Doctor",
     team: "village",
     emoji: "💉",
-    blurb: "Each night, protect one player from the wolves. You may protect yourself.",
+    blurb: "Each night, patch someone up (yourself counts). If the wolves come knocking, your patient just shrugs it off.",
     night: { kind: "protect", order: 30, canTargetSelf: true },
   },
   hunter: {
@@ -69,7 +70,7 @@ export const ROLES: Record<string, RoleDef> = {
     name: "Hunter",
     team: "village",
     emoji: "🏹",
-    blurb: "If you die — by wolves or by the vote — you fire one last shot, taking another player with you.",
+    blurb: "Nobody takes you quietly. The instant you die — fangs or pitchforks — you fire one last shot and drag someone down with you.",
     onDeathShoot: true,
   },
   drunk: {
@@ -80,7 +81,7 @@ export const ROLES: Record<string, RoleDef> = {
     // In-game the player is shown the Seer's card (disguiseAs) and never learns
     // the truth; this honest blurb is what the setup/reveal screens display.
     blurb:
-      "You're certain you're the Seer — but you're three sheets to the wind. Your nightly 'visions' are pure nonsense. A villager at heart.",
+      "You are ABSOLUTELY the Seer. (You are not.) Your nightly 'visions' are pure hiccup-fueled nonsense. Just a villager — but a confident one.",
     disguiseAs: "seer",
     night: { kind: "inspect", order: 22, canTargetSelf: false, reveal: "fabricated" },
   },
@@ -89,7 +90,7 @@ export const ROLES: Record<string, RoleDef> = {
     name: "Tanner",
     team: "solo",
     emoji: "🃏",
-    blurb: "You hate your life. You win — alone — if the town votes to eliminate you.",
+    blurb: "You are SO over this town. Your one dream: get voted out. Pull it off and you win — gloriously, pettily, alone.",
     winsIfLynched: true,
   },
   witch: {
@@ -98,7 +99,7 @@ export const ROLES: Record<string, RoleDef> = {
     team: "village",
     emoji: "🧪",
     blurb:
-      "You hold two potions for the whole game: one heals the wolves' victim, one poisons a player of your choice. Each may be used only once. Each night you learn who the wolves struck.",
+      "Two potions, one game: one revives the wolves' victim, one poisons anyone you fancy. One use each, no refills. Every night you learn who the wolves bit.",
     night: { kind: "witch", order: 15 },
   },
   troublemaker: {
@@ -107,7 +108,7 @@ export const ROLES: Record<string, RoleDef> = {
     team: "village",
     emoji: "🎭",
     blurb:
-      "Each night, secretly swap the roles of two other players. Neither is told — they simply wake up as someone new.",
+      "A little chaos never hurt anyone (much). Each night, secretly swap two players' roles — they wake up as someone new and have no idea. Tee-hee.",
     night: { kind: "swap", order: 40 },
   },
   silencer: {
@@ -116,7 +117,7 @@ export const ROLES: Record<string, RoleDef> = {
     team: "village",
     emoji: "🤫",
     blurb:
-      "Each night, choose a player to silence. They cannot cast a vote on the following day. Use it to shut down a manipulator — or a suspected wolf.",
+      "Each night, shush one player — no vote for them tomorrow. Perfect for muzzling a smooth talker or a wolf who won't shut up.",
     night: { kind: "silence", order: 35, canTargetSelf: false },
   },
   detective: {
@@ -125,7 +126,7 @@ export const ROLES: Record<string, RoleDef> = {
     team: "village",
     emoji: "🕵️",
     blurb:
-      "Each night, investigate two players and learn whether they are on the same team — without learning which team.",
+      "Each night, hold two suspects side by side and learn if they're on the same team — but not which one. Classic whodunit energy.",
     night: { kind: "detect", order: 25, canTargetSelf: false },
   },
   medium: {
@@ -134,7 +135,7 @@ export const ROLES: Record<string, RoleDef> = {
     team: "village",
     emoji: "👻",
     blurb:
-      "Once in the game, on a night of your choosing, you may raise a single dead player back to life.",
+      "You've got exactly one séance in you. Once per game, on a night you choose, yank a dead player back to the land of the living.",
     night: { kind: "raise", order: 5 },
   },
 };

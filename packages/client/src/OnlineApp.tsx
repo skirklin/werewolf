@@ -22,7 +22,7 @@ export function OnlineApp({ onExit }: { onExit: () => void }) {
   };
 
   if (!code) return <Landing game={game} onExit={exit} />;
-  if (!view) return <Centered title="Connecting…" onExit={exit} error={error} />;
+  if (!view) return <Centered title="Rounding up the pack…" onExit={exit} error={error} />;
   if (view.phase === "lobby") return <Lobby view={view} send={game.send} error={error} onExit={exit} />;
 
   return (
@@ -49,11 +49,11 @@ function Landing({ game, onExit }: { game: ReturnType<typeof useOnlineGame>; onE
           <input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Sam" maxLength={20} />
         </label>
         <button className="primary full lg" disabled={!name.trim()} onClick={() => game.create(name)}>
-          Create a room
+          Start a game 🎲
         </button>
         <div className="divider" />
         <label className="field">
-          <span className="muted small">Join with a code</span>
+          <span className="muted small">Got a code? Hop in 👇</span>
           <input
             className="code"
             value={joinCode}
@@ -67,7 +67,7 @@ function Landing({ game, onExit }: { game: ReturnType<typeof useOnlineGame>; onE
           disabled={!name.trim() || joinCode.length < 4}
           onClick={() => game.join(joinCode, name)}
         >
-          Join room
+          Join the fun
         </button>
       </div>
       <div className="spacer" />
@@ -113,7 +113,7 @@ function RoomInvite({ code }: { code: string }) {
 
   return (
     <div className="card stack center">
-      <div className="muted small">Others join by scanning, or with the code</div>
+      <div className="muted small">Friends hop in by scanning — or typing the code</div>
       <div className="big" style={{ letterSpacing: 8 }}>{code}</div>
       {qr && (
         <img
@@ -125,7 +125,7 @@ function RoomInvite({ code }: { code: string }) {
         />
       )}
       <button className="primary full lg" onClick={share}>
-        {copied ? "✓ Link copied" : canShare ? "📲 Share invite link" : "🔗 Copy invite link"}
+        {copied ? "Copied! ✓" : canShare ? "📲 Share the invite" : "🔗 Copy the invite"}
       </button>
     </div>
   );
@@ -176,11 +176,11 @@ function Lobby({
               disabled={problems.length > 0}
               onClick={() => send({ type: "startGame", config })}
             >
-              Start game
+              Start the game 🐺
             </button>
           </>
         ) : (
-          <p className="center muted">Waiting for the host to start…</p>
+          <p className="center muted">Hang tight — the host is setting the table…</p>
         )}
       </div>
     </div>
@@ -214,23 +214,23 @@ function renderPhase(view: PlayerView, send: (m: ClientMessage) => void, onExit:
           <RoleCard view={view} />
           {view.you.isHost ? (
             <button className="primary full lg" onClick={() => send({ type: "startNight" })}>
-              Everyone's ready — begin night
+              Everyone in? Let the night begin 🌙
             </button>
           ) : (
-            <p className="center muted">Memorize your role. Waiting for the host…</p>
+            <p className="center muted">Memorize your role… then act natural. Waiting for the host.</p>
           )}
         </div>
       );
 
     case "night":
-      if (dead) return <Spectator view={view} label="🌙 Night falls…" />;
+      if (dead) return <Spectator view={view} label="🌙 The night creeps by…" />;
       if (view.nightPrompt) return <NightAction view={view} send={send} />;
       return (
         <div className="stack">
           <div className="phase-banner"><div className="big">🌙</div><h2>Night falls</h2></div>
           <InspectHistory view={view} />
           <DetectionHistory view={view} />
-          <p className="center muted">Waiting for the night to end…</p>
+          <p className="center muted">Shhh… the night is happening. Sit tight.</p>
         </div>
       );
 
@@ -238,8 +238,8 @@ function renderPhase(view: PlayerView, send: (m: ClientMessage) => void, onExit:
       if (view.shootPrompt) return <ShootAction view={view} send={send} />;
       return (
         <div className="stack">
-          <div className="phase-banner"><div className="big">🏹</div><h2>A shot rings out</h2></div>
-          <p className="center muted">A fallen Hunter is taking someone with them…</p>
+          <div className="phase-banner"><div className="big">🏹</div><h2>A shot rings out! 🏹</h2></div>
+          <p className="center muted">A fallen Hunter is taking someone down with them…</p>
         </div>
       );
 
@@ -247,11 +247,11 @@ function renderPhase(view: PlayerView, send: (m: ClientMessage) => void, onExit:
       return <DayBoard view={view} send={send} isHost={view.you.isHost} />;
 
     case "dayVote":
-      if (dead) return <Spectator view={view} label="🗳️ The town is voting…" />;
+      if (dead) return <Spectator view={view} label="🗳️ The town is deliberating…" />;
       if (view.silencedIds.includes(view.you.id))
         return (
           <div className="stack">
-            <div className="phase-banner"><div className="big">🤫</div><h2>You've been silenced</h2><p className="muted">You can't vote today. Sit tight.</p></div>
+            <div className="phase-banner"><div className="big">🤫</div><h2>Zipped it 🤫</h2><p className="muted">No vote for you today — sit tight and look innocent.</p></div>
             <LogFeed log={view.log} players={view.players} />
           </div>
         );
@@ -273,11 +273,11 @@ function HostRecovery({ view, send }: { view: PlayerView; send: (m: ClientMessag
   if (!view.you.isHost) return null;
   const action =
     view.phase === "night"
-      ? { label: "Force end night (someone's away)", msg: { type: "endNight" } as ClientMessage }
+      ? { label: "Nudge the night along (someone's AFK)", msg: { type: "endNight" } as ClientMessage }
       : view.phase === "dayVote"
-        ? { label: "Force the vote (someone's away)", msg: { type: "resolveVote" } as ClientMessage }
+        ? { label: "Force the vote (someone's AFK)", msg: { type: "resolveVote" } as ClientMessage }
         : view.phase === "hunterShot"
-          ? { label: "Skip the shot (Hunter's away)", msg: { type: "skipShot" } as ClientMessage }
+          ? { label: "Skip the shot (Hunter's AFK)", msg: { type: "skipShot" } as ClientMessage }
           : null;
   if (!action) return null;
   return (
@@ -292,7 +292,7 @@ function HostRecovery({ view, send }: { view: PlayerView; send: (m: ClientMessag
 function Spectator({ view, label }: { view: PlayerView; label: string }) {
   return (
     <div className="stack">
-      <div className="phase-banner"><div className="big">💀</div><h2>You're out</h2><p className="muted">{label}</p></div>
+      <div className="phase-banner"><div className="big">💀</div><h2>You're out 💀</h2><p className="muted">{label}</p></div>
       <LogFeed log={view.log} players={view.players} />
       <PlayerList players={view.players} youId={view.you.id} />
     </div>

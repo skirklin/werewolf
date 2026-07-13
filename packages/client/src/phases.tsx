@@ -45,11 +45,11 @@ export function TargetGrid({
 }
 
 const NIGHT_PROMPT: Record<string, string> = {
-  kill: "Choose tonight's victim",
-  protect: "Choose someone to protect",
-  inspect: "Choose someone to inspect",
-  silence: "Choose whose vote to silence tomorrow",
-  convert: "Choose someone to turn into a werewolf",
+  kill: "Pick tonight's snack 🍽️",
+  protect: "Who gets a guardian angel tonight?",
+  inspect: "Whose true colors do you peek at?",
+  silence: "Who loses their voice tomorrow?",
+  convert: "Who catches the werewolf bug?",
 };
 
 /** The acting player's night UI. Assumes view.nightPrompt is present. */
@@ -89,7 +89,7 @@ function TargetNightAction({ view, send }: { view: PlayerView; send: Send }) {
         disabled={!picked}
         onClick={() => picked && send({ type: "nightChoice", targetId: picked })}
       >
-        Confirm
+        Lock it in 🔒
       </button>
     </div>
   );
@@ -111,9 +111,9 @@ export function WitchPanel({
     <div className="stack">
       <div className="phase-banner">
         <div className="big">🧪</div>
-        <h2>The Witch wakes</h2>
+        <h2>The Witch stirs her pot</h2>
         <p className="muted">
-          {victim ? <>The wolves are about to devour <b>{victim.name}</b>.</> : "The wolves struck no one."}
+          {victim ? <>The wolves have their teeth out for <b>{victim.name}</b>.</> : "The wolves went hungry tonight."}
         </p>
       </div>
 
@@ -121,8 +121,8 @@ export function WitchPanel({
         <button className={`chip ${save ? "" : ""}`} style={{ borderColor: save ? "var(--good)" : undefined }} onClick={() => setSave((s) => !s)}>
           <span className="avatar">❤️‍🩹</span>
           <div className="grow" style={{ textAlign: "left" }}>
-            <div className="name">Heal potion</div>
-            <div className="muted small">{save ? `Saving ${victim.name}` : `Save ${victim.name} (one-time)`}</div>
+            <div className="name">Healing potion 💚</div>
+            <div className="muted small">{save ? `Snatching ${victim.name} from the jaws!` : `Save ${victim.name} (one-time only)`}</div>
           </div>
           <span className="pill">{save ? "✓" : "tap"}</span>
         </button>
@@ -130,13 +130,13 @@ export function WitchPanel({
 
       {w.poisonAvailable && (
         <>
-          <div className="muted small">Poison potion (one-time) — optional</div>
+          <div className="muted small">Poison potion ☠️ (one-time, optional)</div>
           <TargetGrid view={view} ids={view.nightPrompt!.targetIds} selected={poison} onPick={(id) => setPoison((p) => (p === id ? null : id))} />
         </>
       )}
 
       <button className="primary full lg" onClick={() => onSubmit(save, poison)}>
-        {save || poison ? "Use potion(s)" : "Do nothing tonight"}
+        {save || poison ? "Stir it up 🧪" : "Keep my potions corked"}
       </button>
     </div>
   );
@@ -158,11 +158,11 @@ export function SwapPanel({
       <div className="phase-banner">
         <div className="big">🎭</div>
         <h2>Troublemaker</h2>
-        <p className="muted">Choose two players to secretly swap. Pick {2 - picked.length} more.</p>
+        <p className="muted">Pick two unsuspecting souls to swap. {2 - picked.length} to go.</p>
       </div>
       <TargetGrid view={view} ids={view.nightPrompt!.targetIds} selected={null} onPick={toggle} multi={picked} />
       <button className="primary full lg" disabled={picked.length !== 2} onClick={() => onSubmit(picked[0], picked[1])}>
-        Swap them
+        Do the ol' switcheroo 🔀
       </button>
     </div>
   );
@@ -184,11 +184,11 @@ export function DetectPanel({
       <div className="phase-banner">
         <div className="big">🕵️</div>
         <h2>Detective</h2>
-        <p className="muted">Investigate two players — are they on the same team? Pick {2 - picked.length} more.</p>
+        <p className="muted">Line up two suspects — same team or not? {2 - picked.length} to go.</p>
       </div>
       <TargetGrid view={view} ids={view.nightPrompt!.targetIds} selected={null} onPick={toggle} multi={picked} />
       <button className="primary full lg" disabled={picked.length !== 2} onClick={() => onSubmit(picked[0], picked[1])}>
-        Investigate
+        Crack the case 🔍
       </button>
     </div>
   );
@@ -199,7 +199,7 @@ export function DetectionHistory({ view }: { view: PlayerView }) {
   const name = (id: string) => view.players.find((p) => p.id === id)?.name ?? "someone";
   return (
     <div className="card tight stack">
-      <b>🕵️ Your investigations</b>
+      <b>🕵️ Case file</b>
       {view.myDetections.map((d, i) => (
         <div key={i} className="spread small">
           <span>Night {d.round}: {name(d.aId)} &amp; {name(d.bId)}</span>
@@ -225,13 +225,13 @@ export function RaisePanel({
       <div className="phase-banner">
         <div className="big">👻</div>
         <h2>Medium</h2>
-        <p className="muted">Raise one dead player back to life — once per game.</p>
+        <p className="muted">Time for a séance? Bring one dearly departed back — once per game.</p>
       </div>
       <TargetGrid view={view} ids={dead} selected={picked} onPick={(id) => setPicked((p) => (p === id ? null : id))} />
       <button className="primary full lg" disabled={!picked} onClick={() => picked && onSubmit(picked)}>
-        Raise the dead
+        Hold the séance 👻
       </button>
-      <button className="ghost full" onClick={() => onSubmit(null)}>Hold my power tonight</button>
+      <button className="ghost full" onClick={() => onSubmit(null)}>Not tonight — save it</button>
     </div>
   );
 }
@@ -247,7 +247,7 @@ export function InspectResultCard({ view }: { view: PlayerView }) {
       <div className="emoji">{isWolf ? "🐺" : "✅"}</div>
       <div className="rname">{target?.name}</div>
       <div className="blurb">
-        {isWolf ? "is a Werewolf!" : last.reveal === "not-werewolf" ? "is not a werewolf." : `is the ${ROLES[last.reveal]?.name ?? last.reveal}.`}
+        {isWolf ? "is a Werewolf! 🐺" : last.reveal === "not-werewolf" ? "is squeaky clean ✅" : `is the ${ROLES[last.reveal]?.name ?? last.reveal}.`}
       </div>
     </div>
   );
@@ -268,17 +268,17 @@ export function DayBoard({
       <div className="phase-banner">
         <div className="big">☀️</div>
         <h2>Day {view.round}</h2>
-        <p className="muted">Discuss. Who seems suspicious?</p>
+        <p className="muted">Rise and shine! Who's looking a little... wolfish?</p>
       </div>
       <LogFeed log={view.log} players={view.players} />
       <SilencedNote view={view} />
       <PlayerList players={view.players} youId={view.you.id} />
       {isHost && (
         <button className="primary full lg" onClick={() => send({ type: "startVote" })}>
-          Call a vote
+          Put it to a vote 🗳️
         </button>
       )}
-      {!isHost && <p className="muted center small">Waiting for the host to call a vote…</p>}
+      {!isHost && <p className="muted center small">Waiting for the host to round everyone up…</p>}
     </div>
   );
 }
@@ -292,7 +292,7 @@ export function VoteAction({ view, send }: { view: PlayerView; send: Send }) {
       <div className="phase-banner">
         <div className="big">🗳️</div>
         <h2>Vote</h2>
-        <p className="muted">{already ? "Vote locked in." : "Who should the town eliminate?"}</p>
+        <p className="muted">{already ? "Vote locked in. No take-backs!" : "Point the finger. Who's getting the boot?"}</p>
       </div>
       {already ? (
         <div className="card center">
@@ -323,8 +323,8 @@ export function ShootAction({ view, send }: { view: PlayerView; send: Send }) {
     <div className="stack">
       <div className="phase-banner">
         <div className="big">🏹</div>
-        <h2>Your dying shot</h2>
-        <p className="muted">You've fallen — take one player down with you.</p>
+        <h2>One last shot 🏹</h2>
+        <p className="muted">You're going down — but not alone. Who's coming with you?</p>
       </div>
       <TargetGrid
         view={view}
@@ -340,7 +340,7 @@ export function ShootAction({ view, send }: { view: PlayerView; send: Send }) {
 export function SilencedNote({ view }: { view: PlayerView }) {
   if (view.silencedIds.length === 0) return null;
   const names = view.silencedIds.map((id) => view.players.find((p) => p.id === id)?.name ?? "someone");
-  return <div className="card tight small">🤫 Silenced today (no vote): <b>{names.join(", ")}</b></div>;
+  return <div className="card tight small">🤫 Lost their voice today (no vote): <b>{names.join(", ")}</b></div>;
 }
 
 export function PlayerList({ players, youId }: { players: PublicPlayer[]; youId: string }) {
@@ -373,7 +373,7 @@ export function GameOver({ view, onExit }: { view: PlayerView; onExit: () => voi
         <h1>{headline}</h1>
       </div>
       <div className="card stack">
-        <b>Everyone's role</b>
+        <b>The big reveal 🎭</b>
         {view.players.map((p) => (
           <div key={p.id} className="spread">
             <span>{roleEmoji(p.roleId)} {p.name}</span>
@@ -382,7 +382,7 @@ export function GameOver({ view, onExit }: { view: PlayerView; onExit: () => voi
         ))}
       </div>
       <button className="primary full lg" onClick={onExit}>
-        Back to start
+        Play again? 🔁
       </button>
     </div>
   );

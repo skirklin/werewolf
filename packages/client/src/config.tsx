@@ -82,7 +82,7 @@ export function RoleConfigEditor({
       <SharedToggles config={config} onChange={onChange} />
 
       <div className="card tight">
-        <div className="spread"><b>This game ({playerCount} players)</b></div>
+        <div className="spread"><b>Tonight's cast ({playerCount} players)</b></div>
         <div className="spread small"><span>🐺 Werewolves</span><b>{comp.werewolves}</b></div>
         <div className="spread small"><span>✨ Village specials</span><b>{comp.villageSpecials}</b></div>
         <div className="spread small"><span>🧑‍🌾 Villagers</span><b>{comp.villagers}</b></div>
@@ -117,7 +117,7 @@ function PoolEditor({
   return (
     <div className="stack">
       <div>
-        <div className="muted small" style={{ marginBottom: 6 }}>Werewolf density (scales with player count)</div>
+        <div className="muted small" style={{ marginBottom: 6 }}>How many wolves? (scales with your group)</div>
         <div className="btn-row">
           {RATIO_PRESETS.map((p) => (
             <button
@@ -207,7 +207,7 @@ function SharedToggles({
     <>
       <label className="chip" style={{ cursor: "pointer" }}>
         <span className="avatar">💀</span>
-        <div className="grow"><div className="name">Reveal role on death</div></div>
+        <div className="grow"><div className="name">Reveal roles on death</div><div className="muted small">Off = keep everyone guessing (spookier)</div></div>
         <input
           type="checkbox"
           style={{ width: 24, minHeight: 24 }}

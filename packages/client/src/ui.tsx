@@ -46,7 +46,7 @@ export function RoleCard({ view }: { view: PlayerView }) {
       <div className="blurb">{role.blurb}</div>
       {view.packmates.length > 0 && (
         <div className="small" style={{ marginTop: 14 }}>
-          🐺 Your pack:{" "}
+          🐺 Your partners in crime:{" "}
           <b>
             {view.players
               .filter((p) => view.packmates.includes(p.id))
@@ -63,7 +63,7 @@ export function InspectHistory({ view }: { view: PlayerView }) {
   if (view.myInspects.length === 0) return null;
   return (
     <div className="card tight stack">
-      <b>🔮 Your visions</b>
+      <b>🔮 What you've seen</b>
       {view.myInspects.map((r, i) => {
         const target = view.players.find((p) => p.id === r.targetId);
         const label =
@@ -101,23 +101,23 @@ export function LogFeed({ log, players }: { log: LogEntry[]; players: PublicPlay
 function describe(e: LogEntry, name: (id: string) => string): string | null {
   switch (e.type) {
     case "death":
-      return `🌙 Night ${e.round}: ${name(e.playerId)} was devoured by the werewolves.`;
+      return `🌙 Night ${e.round}: the wolves had ${name(e.playerId)} for a midnight snack.`;
     case "saved":
-      return `🌅 Night ${e.round}: the wolves struck, but ${name(e.playerId)} was protected!`;
+      return `🌅 Night ${e.round}: the wolves pounced, but ${name(e.playerId)} lived to tell the tale!`;
     case "noDeath":
       return e.cause === "wolves"
-        ? `🌅 Night ${e.round}: nobody died.`
-        : `🗳️ Day ${e.round}: the town spared everyone.`;
+        ? `🌅 Night ${e.round}: everyone woke up in one piece. Suspicious.`
+        : `🗳️ Day ${e.round}: the town lost its nerve — nobody eliminated.`;
     case "lynch":
-      return `🗳️ Day ${e.round}: ${name(e.playerId)} was eliminated by vote.`;
+      return `🗳️ Day ${e.round}: the town pointed fingers, and ${name(e.playerId)} got the boot.`;
     case "hunterShot":
-      return `🏹 ${name(e.playerId)} was struck down by a dying Hunter's shot.`;
+      return `🏹 ${name(e.playerId)} caught a parting arrow from a dying Hunter. Rude.`;
     case "poisoned":
-      return `☠️ ${name(e.playerId)} was found dead in the night.`;
+      return `☠️ ${name(e.playerId)} was found extremely dead in the night. (Poison? Who's to say.)`;
     case "raised":
-      return `👻 ${name(e.playerId)} was raised from the dead by the Medium!`;
+      return `👻 A séance worked?! ${name(e.playerId)} is back among the living.`;
     case "voteTie":
-      return `🗳️ Day ${e.round}: the vote tied — no one was eliminated.`;
+      return `🗳️ Day ${e.round}: the vote tied — the town shrugged and moved on.`;
     default:
       return null;
   }
