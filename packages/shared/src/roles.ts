@@ -22,6 +22,24 @@ export const ROLES: Record<string, RoleDef> = {
     blurb: "Each night, you and your pack secretly devour one villager. Win when wolves equal the town.",
     night: { kind: "kill", order: 10, group: true, canTargetSelf: false },
   },
+  henchman: {
+    id: "henchman",
+    name: "Henchman",
+    team: "werewolf",
+    emoji: "🦹",
+    countsAsWolf: false, // wins with the wolves, but isn't one
+    blurb:
+      "You know who the werewolves are and you win with them — but you have no bite of your own. If the wolves are wiped out, you fall with them.",
+  },
+  infector: {
+    id: "infector",
+    name: "Infector",
+    team: "werewolf",
+    emoji: "🧛",
+    blurb:
+      "A werewolf who wins with the pack. Once in the game, instead of resting, spread the curse: turn a living non-wolf into a werewolf, who secretly joins the pack.",
+    night: { kind: "convert", order: 12, canTargetSelf: false },
+  },
   seer: {
     id: "seer",
     name: "Seer",
@@ -59,8 +77,10 @@ export const ROLES: Record<string, RoleDef> = {
     name: "Village Drunk",
     team: "village",
     emoji: "🍺",
-    // Presents itself as the Seer; the player never learns they're the Drunk.
-    blurb: "Each night, inspect one player to learn their exact role.",
+    // In-game the player is shown the Seer's card (disguiseAs) and never learns
+    // the truth; this honest blurb is what the setup/reveal screens display.
+    blurb:
+      "You're certain you're the Seer — but you're three sheets to the wind. Your nightly 'visions' are pure nonsense. A villager at heart.",
     disguiseAs: "seer",
     night: { kind: "inspect", order: 22, canTargetSelf: false, reveal: "fabricated" },
   },
@@ -69,7 +89,7 @@ export const ROLES: Record<string, RoleDef> = {
     name: "Tanner",
     team: "solo",
     emoji: "🃏",
-    blurb: "You hate your life. You win — alone — if the town votes to lynch you.",
+    blurb: "You hate your life. You win — alone — if the town votes to eliminate you.",
     winsIfLynched: true,
   },
   witch: {
@@ -132,12 +152,16 @@ export function assignableSpecialRoles(): RoleDef[] {
   return Object.values(ROLES).filter((r) => r.id !== VILLAGER_ROLE_ID);
 }
 
+/** Whether a role counts as a real werewolf for win math (default: wolf team). */
+export function roleCountsAsWolf(role: RoleDef): boolean {
+  return role.countsAsWolf ?? role.team === "werewolf";
+}
+
 /**
- * Roles eligible for a pool: everything except werewolves (their count comes
- * from the team ratio). The plain Villager IS included, so a host can leave it
- * in (extra slots become villagers) or take it out (a villager-free game where
- * extra slots draw more specials).
+ * Roles eligible for a pool: everything except the base Werewolf (whose count
+ * comes from the team ratio). Wolf-team specials (Henchman, Infector) ARE
+ * included, as are the Villager and every village/solo role.
  */
 export function poolEligibleRoles(): RoleDef[] {
-  return Object.values(ROLES).filter((r) => r.team !== "werewolf");
+  return Object.values(ROLES).filter((r) => r.id !== "werewolf");
 }

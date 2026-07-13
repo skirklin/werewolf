@@ -18,7 +18,8 @@ export type NightActionKind =
   | "swap"
   | "silence"
   | "detect"
-  | "raise";
+  | "raise"
+  | "convert";
 
 /**
  * What a single actor submitted for their night step. Most roles pick one
@@ -57,12 +58,19 @@ export interface RoleDef {
   /** Emoji used as the role's avatar in the UI. */
   emoji: string;
   night?: NightAbility;
-  /** On death (night or lynch), this player takes someone down with them. */
+  /** On death (night or vote), this player takes someone down with them. */
   onDeathShoot?: boolean;
-  /** A solo role that wins immediately if the town lynches them (Tanner). */
+  /** A solo role that wins immediately if the town votes to eliminate them (Tanner). */
   winsIfLynched?: boolean;
   /** Shown to this player as a different role — they never learn the truth (Drunk). */
   disguiseAs?: string;
+  /**
+   * Whether this role counts as a werewolf for win math (parity / village win)
+   * and the Aura Seer's read. Defaults to `team === "werewolf"`. A Henchman is
+   * on the werewolf team (wins with them, knows them) but sets this false — the
+   * village still wins once the real wolves are gone.
+   */
+  countsAsWolf?: boolean;
 }
 
 export type Phase =
@@ -174,6 +182,8 @@ export interface GameState {
   silenced: PlayerId[];
   /** Per-Medium: whether their one-time raise has been spent. */
   mediumUsed: Record<PlayerId, boolean>;
+  /** Per-Infector: whether their one-time conversion has been spent. */
+  convertUsed: Record<PlayerId, boolean>;
   /** voterId -> targetId, or null for an explicit skip. */
   votes: Record<PlayerId, PlayerId | null>;
   /** Per-Witch remaining potions (heal/poison), each usable once all game. */

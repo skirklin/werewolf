@@ -49,6 +49,7 @@ const NIGHT_PROMPT: Record<string, string> = {
   protect: "Choose someone to protect",
   inspect: "Choose someone to inspect",
   silence: "Choose whose vote to silence tomorrow",
+  convert: "Choose someone to turn into a werewolf",
 };
 
 /** The acting player's night UI. Assumes view.nightPrompt is present. */
@@ -112,7 +113,7 @@ export function WitchPanel({
         <div className="big">🧪</div>
         <h2>The Witch wakes</h2>
         <p className="muted">
-          {victim ? <>The wolves are about to kill <b>{victim.name}</b>.</> : "The wolves struck no one."}
+          {victim ? <>The wolves are about to devour <b>{victim.name}</b>.</> : "The wolves struck no one."}
         </p>
       </div>
 

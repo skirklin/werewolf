@@ -308,6 +308,7 @@ function NightTurn({
     prompt.kind === "kill" ? "Choose tonight's victim"
     : prompt.kind === "protect" ? "Choose someone to protect"
     : prompt.kind === "silence" ? "Choose whose vote to silence tomorrow"
+    : prompt.kind === "convert" ? "Choose someone to turn into a werewolf"
     : "Choose someone to inspect";
 
   return (

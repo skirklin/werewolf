@@ -1,5 +1,5 @@
 import type { GameConfig, Player, RoleSelection } from "./types.js";
-import { getRole, VILLAGER_ROLE_ID } from "./roles.js";
+import { getRole, roleCountsAsWolf, VILLAGER_ROLE_ID } from "./roles.js";
 import { shuffle, pick } from "./rng.js";
 
 /** Default target fraction of werewolves in pool mode (~1 per 4 players). */
@@ -65,9 +65,9 @@ export function validateConfig(config: GameConfig, playerCount: number): ConfigP
       problems.push({ message: "Too many werewolves — the wolves would start already winning." });
   } else {
     for (const roleId of sel.pool) {
-      const role = getRole(roleId); // throws on unknown
-      if (role.team === "werewolf")
-        problems.push({ message: "Don't add werewolves to the pool — their count comes from the ratio." });
+      getRole(roleId); // throws on unknown
+      if (roleId === "werewolf")
+        problems.push({ message: "The base Werewolf is added automatically by the ratio — no need to pool it." });
     }
     if (sel.pool.length === 0) problems.push({ message: "Add at least one role to the pool." });
     const hasVillageSide = sel.pool.some(
@@ -101,16 +101,16 @@ export function previewComposition(
     };
   }
   const wolves = werewolfCountFor(playerCount, sel.werewolfRatio);
-  const slots = Math.max(0, playerCount - wolves);
-  const specialPoolLen = sel.pool.filter((r) => r !== VILLAGER_ROLE_ID).length;
+  const restSlots = Math.max(0, playerCount - wolves);
+  const restPoolLen = sel.pool.filter(
+    (id) => id !== "werewolf" && id !== VILLAGER_ROLE_ID && !roleCountsAsWolf(getRole(id))
+  ).length;
   const villagerAllowed = sel.pool.includes(VILLAGER_ROLE_ID);
-  const distinct = Math.min(specialPoolLen, slots);
-  // Without villagers, the remaining slots draw more (possibly repeated) specials.
-  const villageSpecials = villagerAllowed ? distinct : slots;
+  const distinct = Math.min(restPoolLen, restSlots);
   return {
-    werewolves: wolves,
-    villageSpecials,
-    villagers: villagerAllowed ? slots - distinct : 0,
+    werewolves: wolves, // wolf-team specials (Infector) fill part of this count
+    villageSpecials: villagerAllowed ? distinct : restSlots,
+    villagers: villagerAllowed ? restSlots - distinct : 0,
   };
 }
 
@@ -128,17 +128,25 @@ function buildDeck(sel: RoleSelection, playerCount: number, rng: () => number): 
       for (let i = 0; i < Math.max(0, count); i++) deck.push(roleId);
     }
   } else {
-    const wolves = werewolfCountFor(playerCount, sel.werewolfRatio);
-    for (let i = 0; i < wolves; i++) deck.push("werewolf");
-    const slots = Math.max(0, playerCount - wolves);
-    const specialPool = sel.pool.filter((r) => r !== VILLAGER_ROLE_ID);
+    const wolfCount = werewolfCountFor(playerCount, sel.werewolfRatio);
+    // Wolf slots: draw wolf-team specials (Infector) from the pool, but always
+    // keep at least one plain Werewolf so the pack has a killer.
+    const wolfSpecials = sel.pool.filter((id) => id !== "werewolf" && roleCountsAsWolf(getRole(id)));
+    const nWolfSpecials = Math.min(wolfSpecials.length, Math.max(0, wolfCount - 1));
+    deck.push(...shuffle(wolfSpecials, rng).slice(0, nWolfSpecials));
+    for (let i = nWolfSpecials; i < wolfCount; i++) deck.push("werewolf");
+
+    // Remaining slots: village specials, solo roles, and the Henchman (a
+    // wolf-ally that doesn't count as a wolf), then villagers or repeats.
+    const restSlots = Math.max(0, playerCount - wolfCount);
+    const restPool = sel.pool.filter(
+      (id) => id !== "werewolf" && id !== VILLAGER_ROLE_ID && !roleCountsAsWolf(getRole(id))
+    );
     const villagerAllowed = sel.pool.includes(VILLAGER_ROLE_ID);
-    // Distinct specials first (each at most once)...
-    const chosen = shuffle(specialPool, rng).slice(0, slots);
+    const chosen = shuffle(restPool, rng).slice(0, restSlots);
     deck.push(...chosen);
-    // ...then fill the rest: villagers if allowed, else repeated specials.
-    for (let i = chosen.length; i < slots; i++) {
-      deck.push(villagerAllowed || specialPool.length === 0 ? VILLAGER_ROLE_ID : pick(specialPool, rng));
+    for (let i = chosen.length; i < restSlots; i++) {
+      deck.push(villagerAllowed || restPool.length === 0 ? VILLAGER_ROLE_ID : pick(restPool, rng));
     }
   }
   while (deck.length < playerCount) deck.push(VILLAGER_ROLE_ID);

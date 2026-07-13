@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import {
   assignableSpecialRoles,
   poolEligibleRoles,
@@ -7,6 +8,7 @@ import {
   DEFAULT_WEREWOLF_RATIO,
   type GameConfig,
   type RoleSelection,
+  type RoleDef,
 } from "@werewolf/shared";
 
 const RATIO_PRESETS: { label: string; value: number }[] = [
@@ -14,6 +16,30 @@ const RATIO_PRESETS: { label: string; value: number }[] = [
   { label: "Standard", value: DEFAULT_WEREWOLF_RATIO },
   { label: "Heavy", value: 0.34 },
 ];
+
+const TEAM_SECTIONS: { team: RoleDef["team"]; label: string }[] = [
+  { team: "village", label: "🏡 Village team" },
+  { team: "werewolf", label: "🐺 Werewolf team" },
+  { team: "solo", label: "🎭 Solo" },
+];
+
+/** Render a set of roles grouped under team headers, in a fixed team order. */
+function TeamGroups({ roles, render }: { roles: RoleDef[]; render: (r: RoleDef) => ReactNode }) {
+  return (
+    <>
+      {TEAM_SECTIONS.map(({ team, label }) => {
+        const group = roles.filter((r) => r.team === team);
+        if (group.length === 0) return null;
+        return (
+          <div key={team} className="stack">
+            <div className="muted small" style={{ marginTop: 6, fontWeight: 700, letterSpacing: 0.5 }}>{label}</div>
+            {group.map(render)}
+          </div>
+        );
+      })}
+    </>
+  );
+}
 
 export function RoleConfigEditor({
   config,
@@ -109,24 +135,27 @@ function PoolEditor({
       </div>
 
       <div className="muted small">Roles allowed in the pool (may exceed player count — drawn at random)</div>
-      {poolEligibleRoles().map((role) => {
-        const on = sel.pool.includes(role.id);
-        return (
-          <button
-            key={role.id}
-            className={`chip ${on ? "" : ""}`}
-            style={{ borderColor: on ? "var(--accent-2)" : undefined, textAlign: "left" }}
-            onClick={() => toggle(role.id)}
-          >
-            <span className="avatar">{role.emoji}</span>
-            <div className="grow">
-              <div className="name">{role.name}</div>
-              <div className="muted small">{role.blurb}</div>
-            </div>
-            <span className="pill">{on ? "✓ in pool" : "add"}</span>
-          </button>
-        );
-      })}
+      <TeamGroups
+        roles={poolEligibleRoles()}
+        render={(role) => {
+          const on = sel.pool.includes(role.id);
+          return (
+            <button
+              key={role.id}
+              className="chip"
+              style={{ borderColor: on ? "var(--accent-2)" : undefined, textAlign: "left" }}
+              onClick={() => toggle(role.id)}
+            >
+              <span className="avatar">{role.emoji}</span>
+              <div className="grow">
+                <div className="name">{role.name}</div>
+                <div className="muted small">{role.blurb}</div>
+              </div>
+              <span className="pill">{on ? "✓ in pool" : "add"}</span>
+            </button>
+          );
+        }}
+      />
     </div>
   );
 }
@@ -144,22 +173,25 @@ function ExactEditor({
   return (
     <div className="stack">
       <div className="muted small">Set exactly how many of each role. Villagers fill the rest.</div>
-      {assignableSpecialRoles().map((role) => (
-        <div key={role.id} className="chip">
-          <span className="avatar">{role.emoji}</span>
-          <div className="grow">
-            <div className="name">{role.name}</div>
-            <div className="muted small">{role.blurb}</div>
+      <TeamGroups
+        roles={assignableSpecialRoles()}
+        render={(role) => (
+          <div key={role.id} className="chip">
+            <span className="avatar">{role.emoji}</span>
+            <div className="grow">
+              <div className="name">{role.name}</div>
+              <div className="muted small">{role.blurb}</div>
+            </div>
+            <div className="btn-row" style={{ width: 128 }}>
+              <button onClick={() => setCount(role.id, (sel.roleCounts[role.id] ?? 0) - 1)}>–</button>
+              <span className="count" style={{ minWidth: 24, textAlign: "center", alignSelf: "center" }}>
+                {sel.roleCounts[role.id] ?? 0}
+              </span>
+              <button onClick={() => setCount(role.id, (sel.roleCounts[role.id] ?? 0) + 1)}>+</button>
+            </div>
           </div>
-          <div className="btn-row" style={{ width: 128 }}>
-            <button onClick={() => setCount(role.id, (sel.roleCounts[role.id] ?? 0) - 1)}>–</button>
-            <span className="count" style={{ minWidth: 24, textAlign: "center", alignSelf: "center" }}>
-              {sel.roleCounts[role.id] ?? 0}
-            </span>
-            <button onClick={() => setCount(role.id, (sel.roleCounts[role.id] ?? 0) + 1)}>+</button>
-          </div>
-        </div>
-      ))}
+        )}
+      />
     </div>
   );
 }
@@ -186,9 +218,9 @@ function SharedToggles({
       <label className="chip" style={{ cursor: "pointer" }}>
         <span className="avatar">📢</span>
         <div className="grow">
-          <div className="name">Detailed night recap</div>
+          <div className="name">Reveal more information</div>
           <div className="muted small">
-            Off = a protected kill just reads "quiet night" (hides the doctor). On = announces saves.
+            Tilts the game toward the villagers — announces saves and protected kills instead of a vague "quiet night".
           </div>
         </div>
         <input

@@ -101,7 +101,7 @@ export function LogFeed({ log, players }: { log: LogEntry[]; players: PublicPlay
 function describe(e: LogEntry, name: (id: string) => string): string | null {
   switch (e.type) {
     case "death":
-      return `🌙 Night ${e.round}: ${name(e.playerId)} was killed by werewolves.`;
+      return `🌙 Night ${e.round}: ${name(e.playerId)} was devoured by the werewolves.`;
     case "saved":
       return `🌅 Night ${e.round}: the wolves struck, but ${name(e.playerId)} was protected!`;
     case "noDeath":
@@ -109,7 +109,7 @@ function describe(e: LogEntry, name: (id: string) => string): string | null {
         ? `🌅 Night ${e.round}: nobody died.`
         : `🗳️ Day ${e.round}: the town spared everyone.`;
     case "lynch":
-      return `🗳️ Day ${e.round}: ${name(e.playerId)} was voted out.`;
+      return `🗳️ Day ${e.round}: ${name(e.playerId)} was eliminated by vote.`;
     case "hunterShot":
       return `🏹 ${name(e.playerId)} was struck down by a dying Hunter's shot.`;
     case "poisoned":

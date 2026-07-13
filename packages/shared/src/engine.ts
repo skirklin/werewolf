@@ -30,14 +30,23 @@ export function teamOf(state: GameState, id: PlayerId): Team | null {
   return getRole(p.roleId).team;
 }
 
-export function livingWerewolves(state: GameState): Player[] {
-  return living(state).filter((p) => p.roleId && getRole(p.roleId).team === "werewolf");
+/** Whether a role counts as a real werewolf for win math + the aura read. */
+export function isWolfForWin(roleId: string): boolean {
+  const role = getRole(roleId);
+  return role.countsAsWolf ?? role.team === "werewolf";
 }
 
-/** Standard win check. Village: no wolves left. Wolves: reach parity. */
+export function livingWerewolves(state: GameState): Player[] {
+  return living(state).filter((p) => p.roleId && isWolfForWin(p.roleId));
+}
+
+/**
+ * Standard win check. Village: no real wolves left (a wolf-aligned Henchman
+ * doesn't keep the wolves alive). Wolves: real wolves reach parity.
+ */
 export function checkWinner(state: GameState): Team | null {
   const alive = living(state);
-  const wolves = alive.filter((p) => p.roleId && getRole(p.roleId).team === "werewolf");
+  const wolves = alive.filter((p) => p.roleId && isWolfForWin(p.roleId));
   if (wolves.length === 0) return "village";
   if (wolves.length * 2 >= alive.length) return "werewolf";
   return null;
@@ -57,8 +66,12 @@ export function validNightTargets(state: GameState, actorId: PlayerId): Player[]
   if (!ability) return [];
   return living(state).filter((t) => {
     if (t.id === actorId && !ability.canTargetSelf) return false;
-    // Wolves never eat their own pack.
-    if (ability.kind === "kill" && t.roleId && getRole(t.roleId).team === "werewolf")
+    // Wolves never eat their own pack; the Infector only turns non-wolves.
+    if (
+      (ability.kind === "kill" || ability.kind === "convert") &&
+      t.roleId &&
+      getRole(t.roleId).team === "werewolf"
+    )
       return false;
     return true;
   });
@@ -132,9 +145,11 @@ function startGame(state: GameState, config: GameConfig): GameState {
   const players = dealRoles(state.players, config, rng);
   const witchPotions: GameState["witchPotions"] = {};
   const mediumUsed: GameState["mediumUsed"] = {};
+  const convertUsed: GameState["convertUsed"] = {};
   for (const p of players) {
     if (p.roleId === "witch") witchPotions[p.id] = { heal: true, poison: true };
     if (p.roleId === "medium") mediumUsed[p.id] = false;
+    if (p.roleId === "infector") convertUsed[p.id] = false;
   }
   return {
     ...state,
@@ -142,6 +157,7 @@ function startGame(state: GameState, config: GameConfig): GameState {
     players,
     witchPotions,
     mediumUsed,
+    convertUsed,
     phase: "roleReveal",
     round: 0,
     log: [{ type: "gameStart", round: 0 }],
@@ -159,6 +175,13 @@ function beginNight(state: GameState): GameState {
     if (!ability) continue;
     // The Medium only wakes while their raise is unspent and someone is dead.
     if (ability.kind === "raise" && (state.mediumUsed[p.id] || !deadExist)) continue;
+    // The Infector only wakes while their conversion is unspent and a non-wolf lives.
+    if (
+      ability.kind === "convert" &&
+      (state.convertUsed[p.id] ||
+        !living(state).some((t) => t.roleId && getRole(t.roleId).team !== "werewolf"))
+    )
+      continue;
     const list = byRole.get(p.roleId) ?? [];
     list.push(p.id);
     byRole.set(p.roleId, list);
@@ -209,7 +232,7 @@ function nightChoice(state: GameState, actorId: PlayerId, targetId: PlayerId): G
         ? target.roleId!
         : ability.reveal === "fabricated"
           ? fabricatedReveal(state.seed, state.round, targetId)
-          : getRole(target.roleId!).team === "werewolf"
+          : isWolfForWin(target.roleId!)
             ? "werewolf"
             : "not-werewolf";
     inspects = [
@@ -462,11 +485,17 @@ function endNight(state: GameState): GameState {
   for (const id of deaths) if (id !== victimId) log.push({ type: "poisoned", round: state.round, playerId: id });
 
   const killed = markDead(state.players, [...deaths]);
-  // Medium: raise a dead player (spends the power). BEFORE swaps, so the spent
-  // flag is written under the current id and then travels with the role.
-  const raised = applyRaises(killed.players, { ...state.mediumUsed }, steps, log, state.round);
-  // Troublemaker: swap two living players' roles (role state follows the role).
-  const swapped = applySwaps(raised.players, witchPotions, raised.mediumUsed, steps);
+  const roleState = {
+    witchPotions,
+    mediumUsed: { ...state.mediumUsed },
+    convertUsed: { ...state.convertUsed },
+  };
+  // Spend one-time powers (Medium raise, Infector convert) BEFORE swaps, so the
+  // spent flag is written under the current id and then travels with the role...
+  let players = applyRaises(killed.players, roleState.mediumUsed, steps, log, state.round);
+  players = applyConverts(players, roleState.convertUsed, steps);
+  // ...then the Troublemaker swap carries all that role state to the new holder.
+  players = applySwaps(players, roleState, steps);
 
   // Silencer: whoever is silenced can't vote in the coming day.
   const silenced: PlayerId[] = [];
@@ -476,9 +505,10 @@ function endNight(state: GameState): GameState {
 
   const next: GameState = {
     ...state,
-    players: swapped.players,
-    witchPotions: swapped.witchPotions,
-    mediumUsed: swapped.mediumUsed,
+    players,
+    witchPotions: roleState.witchPotions,
+    mediumUsed: roleState.mediumUsed,
+    convertUsed: roleState.convertUsed,
     silenced,
     night: null,
     log,
@@ -497,58 +527,80 @@ function swapEntry<T>(map: Record<string, T>, a: PlayerId, b: PlayerId) {
   if (va !== undefined) map[b] = va;
 }
 
+/** Mutable bundle of per-player role state that swaps carry with the role. */
+interface RoleState {
+  witchPotions: GameState["witchPotions"];
+  mediumUsed: GameState["mediumUsed"];
+  convertUsed: GameState["convertUsed"];
+}
+
 /**
- * Apply every Troublemaker swap for which both targets are still alive. Role
- * state (Witch potions, Medium's spent flag) travels with the role, so a player
- * swapped into a role inherits its state and the ex-holder loses it.
+ * Apply every Troublemaker swap for which both targets are still alive. All
+ * per-player role state (potions, spent flags) travels with the role, so a
+ * player swapped into a role inherits its state and the ex-holder loses it.
  */
-function applySwaps(
-  players: Player[],
-  witchPotions: GameState["witchPotions"],
-  mediumUsed: GameState["mediumUsed"],
-  steps: NightStep[]
-): { players: Player[]; witchPotions: GameState["witchPotions"]; mediumUsed: GameState["mediumUsed"] } {
-  let nextPlayers = players;
-  const nextPotions = { ...witchPotions };
+function applySwaps(players: Player[], roleState: RoleState, steps: NightStep[]): Player[] {
+  let next = players;
   for (const step of steps) {
     if (step.kind !== "swap") continue;
     for (const sub of Object.values(step.subs)) {
       if (sub.t !== "swap") continue;
-      const a = nextPlayers.find((p) => p.id === sub.a);
-      const b = nextPlayers.find((p) => p.id === sub.b);
+      const a = next.find((p) => p.id === sub.a);
+      const b = next.find((p) => p.id === sub.b);
       if (!a?.alive || !b?.alive) continue;
       const roleA = a.roleId;
-      nextPlayers = nextPlayers.map((p) =>
+      next = next.map((p) =>
         p.id === sub.a ? { ...p, roleId: b.roleId } : p.id === sub.b ? { ...p, roleId: roleA } : p
       );
-      swapEntry(nextPotions, sub.a, sub.b);
-      swapEntry(mediumUsed, sub.a, sub.b);
+      swapEntry(roleState.witchPotions, sub.a, sub.b);
+      swapEntry(roleState.mediumUsed, sub.a, sub.b);
+      swapEntry(roleState.convertUsed, sub.a, sub.b);
     }
   }
-  return { players: nextPlayers, witchPotions: nextPotions, mediumUsed };
+  return next;
 }
 
-/** Apply Medium raises, mutating the shared log, spending each Medium's power. */
+/** Apply Medium raises, mutating the shared log + spent flags. */
 function applyRaises(
   players: Player[],
   mediumUsed: GameState["mediumUsed"],
   steps: NightStep[],
   log: GameState["log"],
   round: number
-): { players: Player[]; mediumUsed: GameState["mediumUsed"] } {
-  let nextPlayers = players;
+): Player[] {
+  let next = players;
   for (const step of steps) {
     if (step.kind !== "raise") continue;
     for (const [actorId, sub] of Object.entries(step.subs)) {
       if (sub.t !== "raise" || sub.target === null || mediumUsed[actorId]) continue;
-      const target = nextPlayers.find((p) => p.id === sub.target);
+      const target = next.find((p) => p.id === sub.target);
       if (!target || target.alive) continue;
-      nextPlayers = nextPlayers.map((p) => (p.id === sub.target ? { ...p, alive: true } : p));
+      next = next.map((p) => (p.id === sub.target ? { ...p, alive: true } : p));
       mediumUsed[actorId] = true;
       log.push({ type: "raised", round, playerId: sub.target });
     }
   }
-  return { players: nextPlayers, mediumUsed };
+  return next;
+}
+
+/** Apply Infector conversions: turn a living non-wolf into a werewolf. */
+function applyConverts(
+  players: Player[],
+  convertUsed: GameState["convertUsed"],
+  steps: NightStep[]
+): Player[] {
+  let next = players;
+  for (const step of steps) {
+    if (step.kind !== "convert") continue;
+    for (const [actorId, sub] of Object.entries(step.subs)) {
+      if (sub.t !== "target" || convertUsed[actorId]) continue;
+      const target = next.find((p) => p.id === sub.target);
+      if (!target?.alive || (target.roleId && getRole(target.roleId).team === "werewolf")) continue;
+      next = next.map((p) => (p.id === sub.target ? { ...p, roleId: "werewolf" } : p));
+      convertUsed[actorId] = true;
+    }
+  }
+  return next;
 }
 
 function shoot(state: GameState, hunterId: PlayerId, targetId: PlayerId): GameState {
@@ -673,6 +725,7 @@ export function createGame(code: string, seed: number): GameState {
     detections: [],
     silenced: [],
     mediumUsed: {},
+    convertUsed: {},
     votes: {},
     witchPotions: {},
     pendingShots: [],
