@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import type { GameState, Player, GameConfig } from "./types.js";
-import { reduce, createGame, checkWinner, living, allVotesIn, fabricatedReveal, fabricatedInspect, fabricatedSameTeam } from "./engine.js";
+import { reduce, createGame, checkWinner, living, allVotesIn, fabricatedReveal, fabricatedInspect, fabricatedSameTeam, DRUNK_MIMIC_KINDS } from "./engine.js";
+import { getRole } from "./roles.js";
 import { projectView } from "./views.js";
 import { dealRoles, validateConfig } from "./setup.js";
 import { mimicableRoleIds } from "./roles.js";
@@ -317,6 +318,17 @@ describe("Village Drunk (mimics any role)", () => {
     const v = projectView(s, "p2");
     expect(v.nightPrompt!.kind).toBe("kill");
     expect(v.packmates).toContain("p0");
+  });
+
+  it("every mimicable role uses a night kind the Drunk safely handles (extension guard)", () => {
+    // Adding a new mimicable role is just a flag — unless it introduces a NEW
+    // night kind, in which case this fails until DRUNK_MIMIC_KINDS + handling
+    // (and a leak check) are added. This is the tripwire that keeps it safe.
+    for (const id of mimicableRoleIds()) {
+      const kind = getRole(id).night?.kind;
+      expect(kind, `${id} is drunkMimicable but has no night action`).toBeDefined();
+      expect(DRUNK_MIMIC_KINDS, `Drunk can't safely fake '${kind}' (role ${id})`).toContain(kind!);
+    }
   });
 
   it("startGame secretly assigns each Drunk a random mimicable role", () => {
