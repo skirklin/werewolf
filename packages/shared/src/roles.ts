@@ -64,7 +64,8 @@ export const ROLES: Record<string, RoleDef> = {
     name: "Doctor",
     team: "village",
     emoji: "💉",
-    blurb: "Each night, patch someone up (yourself counts). If the wolves come knocking, your patient just shrugs it off.",
+    blurb:
+      "Each night, patch someone up (yourself counts) — but never the same patient two nights running. If the wolves come knocking, your patient just shrugs it off.",
     drunkMimicable: true,
     night: { kind: "protect", order: 30, canTargetSelf: true },
   },

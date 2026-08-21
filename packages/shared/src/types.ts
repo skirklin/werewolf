@@ -116,6 +116,11 @@ export interface GameConfig {
    *  - "detailed": announces who the wolves struck and that they were saved.
    */
   nightSummary: "discreet" | "detailed";
+  /**
+   * Skip the wolves' hunt on night 1, so nobody dies before the town has said
+   * a word. The pack still learns who they are on the role card.
+   */
+  peacefulFirstNight: boolean;
 }
 
 /** One night-action slot: a role acting on a given night. */
@@ -185,6 +190,8 @@ export interface GameState {
   convertUsed: Record<PlayerId, boolean>;
   /** Per-Drunk: the role they've been dealt to secretly impersonate. */
   drunkDisguise: Record<PlayerId, string>;
+  /** Per-protector: who they shielded last night (can't be shielded again). */
+  lastProtect: Record<PlayerId, PlayerId>;
   /** voterId -> targetId, or null for an explicit skip. */
   votes: Record<PlayerId, PlayerId | null>;
   /** Per-Witch remaining potions (heal/poison), each usable once all game. */

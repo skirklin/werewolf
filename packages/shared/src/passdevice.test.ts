@@ -6,7 +6,7 @@ import { passDeviceTurn, nightAckKey, type Turn } from "./passdevice.js";
 const exact = (roleCounts: Record<string, number>): GameConfig => ({
   selection: { mode: "exact", roleCounts },
   revealRoleOnDeath: true,
-  nightSummary: "discreet",
+  nightSummary: "discreet", peacefulFirstNight: false,
 });
 
 /** A game dealt with explicit roles, advanced to the first night. */

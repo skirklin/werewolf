@@ -7,6 +7,7 @@ import {
   living,
   allNightStepsDone,
   allVotesIn,
+  validNightTargets,
 } from "./engine.js";
 import { projectView, publicPlayers } from "./views.js";
 import { recommendedConfig, validateConfig, dealRoles, werewolfCountFor, previewComposition } from "./setup.js";
@@ -15,7 +16,7 @@ import { makeRng } from "./rng.js";
 const exact = (roleCounts: Record<string, number>): GameConfig => ({
   selection: { mode: "exact", roleCounts },
   revealRoleOnDeath: true,
-  nightSummary: "discreet",
+  nightSummary: "discreet", peacefulFirstNight: false,
 });
 
 /** Build a game already in roleReveal with explicit roles (bypasses shuffle). */
@@ -34,6 +35,13 @@ function gameWith(roles: string[], config?: Partial<GameConfig>): GameState {
     players,
     config: { ...exact({}), ...config },
   };
+}
+
+/** Abstain the whole table so the day ends without a lynch. */
+function skipDay(s: GameState): GameState {
+  let next = reduce(s, { type: "startVote" });
+  for (const p of living(next)) next = reduce(next, { type: "castVote", voterId: p.id, targetId: null });
+  return reduce(next, { type: "resolveVote" });
 }
 
 function countRoles(players: Player[]): Record<string, number> {
@@ -65,7 +73,7 @@ describe("role selection", () => {
     }));
     const config: GameConfig = {
       selection: { mode: "pool", pool: ["villager", "seer", "doctor"], werewolfRatio: 0.26 },
-      revealRoleOnDeath: true, nightSummary: "discreet",
+      revealRoleOnDeath: true, nightSummary: "discreet", peacefulFirstNight: false,
     };
     const dealt = dealRoles(players, config, makeRng(42));
     const counts = countRoles(dealt);
@@ -81,7 +89,7 @@ describe("role selection", () => {
     }));
     const config: GameConfig = {
       selection: { mode: "pool", pool: ["seer", "doctor"], werewolfRatio: 0.26 },
-      revealRoleOnDeath: true, nightSummary: "discreet",
+      revealRoleOnDeath: true, nightSummary: "discreet", peacefulFirstNight: false,
     };
     const counts = countRoles(dealRoles(players, config, makeRng(7)));
     expect(counts.werewolf).toBe(2);
@@ -95,7 +103,7 @@ describe("role selection", () => {
     }));
     const config: GameConfig = {
       selection: { mode: "pool", pool: ["villager", "seer", "doctor"], werewolfRatio: 0.26 },
-      revealRoleOnDeath: true, nightSummary: "discreet",
+      revealRoleOnDeath: true, nightSummary: "discreet", peacefulFirstNight: false,
     };
     const counts = countRoles(dealRoles(players, config, makeRng(1)));
     // 4 players, 1 wolf, 3 non-wolf slots, 2 distinct specials + 1 villager.
@@ -140,7 +148,7 @@ describe("role selection", () => {
   it("rejects a pool with no village side (and an empty pool)", () => {
     const pool = (ids: string[]) =>
       validateConfig(
-        { selection: { mode: "pool", pool: ids, werewolfRatio: 0.26 }, revealRoleOnDeath: false, nightSummary: "discreet" },
+        { selection: { mode: "pool", pool: ids, werewolfRatio: 0.26 }, revealRoleOnDeath: false, nightSummary: "discreet", peacefulFirstNight: false },
         6
       );
     expect(pool([]).length).toBeGreaterThan(0); // empty
@@ -449,5 +457,133 @@ describe("view redaction", () => {
     expect(JSON.stringify(discreet.log)).not.toContain("p2");
     const detailed = play("detailed");
     expect(detailed.log.some((e) => e.type === "saved")).toBe(true);
+  });
+});
+
+describe("peaceful first night", () => {
+  it("is off by default — night 1 is lethal", () => {
+    const s = reduce(gameWith(["werewolf", "villager", "villager", "villager"]), { type: "startNight" });
+    expect(s.night!.steps.some((st) => st.kind === "kill")).toBe(true);
+  });
+
+  it("gives the wolves no hunt on night 1, then hunts as normal on night 2", () => {
+    let s = gameWith(["werewolf", "villager", "villager", "villager"], { peacefulFirstNight: true });
+    s = reduce(s, { type: "startNight" });
+    expect(s.night!.steps.some((st) => st.kind === "kill")).toBe(false);
+    expect(allNightStepsDone(s)).toBe(true); // nothing to wait on
+    s = reduce(s, { type: "endNight" });
+    expect(living(s)).toHaveLength(4);
+    expect(s.log.some((e) => e.type === "noDeath" && e.round === 1)).toBe(true);
+
+    s = skipDay(s);
+    expect(s.phase).toBe("night");
+    expect(s.round).toBe(2);
+    expect(s.night!.steps.some((st) => st.kind === "kill")).toBe(true);
+    s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p1" });
+    s = reduce(s, { type: "endNight" });
+    expect(living(s)).toHaveLength(3);
+  });
+
+  it("leaves the other night roles awake on the peaceful night", () => {
+    let s = gameWith(["werewolf", "seer", "villager", "villager"], { peacefulFirstNight: true });
+    s = reduce(s, { type: "startNight" });
+    s = reduce(s, { type: "nightChoice", actorId: "p1", targetId: "p0" });
+    expect(projectView(s, "p1").myInspects.at(-1)).toMatchObject({ targetId: "p0", reveal: "werewolf" });
+  });
+});
+
+describe("doctor cooldown", () => {
+  it("can't shield the same patient two nights running, but can the night after", () => {
+    let s = gameWith(["werewolf", "doctor", "villager", "villager", "villager"]);
+    s = reduce(s, { type: "startNight" });
+    s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p2" });
+    s = reduce(s, { type: "nightChoice", actorId: "p1", targetId: "p2" }); // doctor shields p2
+    s = reduce(s, { type: "endNight" });
+    expect(living(s)).toHaveLength(5);
+
+    s = skipDay(s);
+    expect(s.round).toBe(2);
+    expect(validNightTargets(s, "p1").map((p) => p.id)).not.toContain("p2");
+    expect(() => reduce(s, { type: "nightChoice", actorId: "p1", targetId: "p2" })).toThrow();
+    s = reduce(s, { type: "nightChoice", actorId: "p1", targetId: "p3" }); // someone else is fine
+    s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p4" });
+    s = reduce(s, { type: "endNight" });
+
+    s = skipDay(s);
+    expect(s.round).toBe(3);
+    expect(validNightTargets(s, "p1").map((p) => p.id)).toContain("p2"); // free again
+    expect(validNightTargets(s, "p1").map((p) => p.id)).not.toContain("p3");
+  });
+
+  it("a doctor who sat a night out is unrestricted the next one", () => {
+    let s = gameWith(["werewolf", "doctor", "villager", "villager", "villager"]);
+    s = reduce(s, { type: "startNight" });
+    s = reduce(s, { type: "nightChoice", actorId: "p1", targetId: "p2" });
+    s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p3" });
+    s = reduce(s, { type: "endNight" });
+    s = skipDay(s);
+    // Night 2: the doctor is AFK and the host forces the night to end.
+    s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p4" });
+    s = reduce(s, { type: "endNight" });
+    s = skipDay(s);
+    expect(validNightTargets(s, "p1").map((p) => p.id)).toContain("p2");
+  });
+
+  it("would rather allow a repeat than leave a protector with nobody to pick", () => {
+    const s: GameState = {
+      ...gameWith(["doctor", "villager"]),
+      players: gameWith(["doctor", "villager"]).players.map((p) =>
+        p.id === "p1" ? { ...p, alive: false } : p
+      ),
+      lastProtect: { p0: "p0" },
+    };
+    expect(validNightTargets(s, "p0").map((p) => p.id)).toEqual(["p0"]);
+  });
+});
+
+describe("rematch", () => {
+  /** Play a 4-player game through to a village win. */
+  function finishedGame(config?: Partial<GameConfig>): GameState {
+    let s = gameWith(["werewolf", "villager", "villager", "villager"], config);
+    s = reduce(s, { type: "startNight" });
+    s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p1" });
+    s = reduce(s, { type: "endNight" });
+    s = reduce(s, { type: "startVote" });
+    s = reduce(s, { type: "castVote", voterId: "p0", targetId: "p2" });
+    s = reduce(s, { type: "castVote", voterId: "p2", targetId: "p0" });
+    s = reduce(s, { type: "castVote", voterId: "p3", targetId: "p0" });
+    s = reduce(s, { type: "resolveVote" });
+    expect(s.phase).toBe("gameOver");
+    return s;
+  }
+
+  it("keeps the room, its players and its setup, but deals a fresh game", () => {
+    const done = finishedGame({ nightSummary: "detailed" });
+    const s = reduce(done, { type: "playAgain" });
+    expect(s.phase).toBe("lobby");
+    expect(s.code).toBe(done.code);
+    expect(s.config).toEqual(done.config); // no re-toggling the role setup
+    expect(s.players.map((p) => p.id)).toEqual(["p0", "p1", "p2", "p3"]);
+    expect(s.players.every((p) => p.alive && p.roleId === null)).toBe(true);
+    expect(s.players.filter((p) => p.isHost)).toHaveLength(1);
+    expect(s.seed).not.toBe(done.seed); // a different deal next time
+    expect(s.log).toEqual([]);
+    expect(s.winner).toBeNull();
+    expect(s.night).toBeNull();
+  });
+
+  it("leaves behind players whose device is gone, and hands on the crown", () => {
+    const done = finishedGame();
+    const s = reduce(
+      { ...done, players: done.players.map((p) => (p.id === "p0" ? { ...p, connected: false } : p)) },
+      { type: "playAgain" }
+    );
+    expect(s.players.map((p) => p.id)).toEqual(["p1", "p2", "p3"]);
+    expect(s.players.filter((p) => p.isHost)).toHaveLength(1);
+    expect(s.players[0].isHost).toBe(true);
+  });
+
+  it("refuses to restart a game that is still running", () => {
+    expect(() => reduce(gameWith(["werewolf", "villager", "villager"]), { type: "playAgain" })).toThrow();
   });
 });

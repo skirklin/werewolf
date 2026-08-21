@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { GameState, Player, GameConfig } from "./types.js";
-import { reduce, createGame, checkWinner, living, allVotesIn, fabricatedReveal, fabricatedInspect, fabricatedSameTeam, DRUNK_MIMIC_KINDS } from "./engine.js";
+import { reduce, createGame, checkWinner, living, allVotesIn, validNightTargets, fabricatedReveal, fabricatedInspect, fabricatedSameTeam, DRUNK_MIMIC_KINDS } from "./engine.js";
 import { getRole } from "./roles.js";
 import { projectView } from "./views.js";
 import { dealRoles, validateConfig } from "./setup.js";
@@ -17,7 +17,7 @@ function countRoles(players: Player[]): Record<string, number> {
 const exact = (): GameConfig => ({
   selection: { mode: "exact", roleCounts: {} },
   revealRoleOnDeath: true,
-  nightSummary: "discreet",
+  nightSummary: "discreet", peacefulFirstNight: false,
 });
 
 function gameWith(roles: string[]): GameState {
@@ -227,6 +227,21 @@ describe("Village Drunk (mimics any role)", () => {
     expect(alive(s, "p2")).toBe(false); // the fake protection did nothing
   });
 
+  it("mimicking the Doctor is bound by the same no-repeat rule, so the fake holds", () => {
+    let s = drunkAs("doctor", ["villager", "villager", "villager"]);
+    s = reduce(s, { type: "startNight" });
+    s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p2" });
+    s = reduce(s, { type: "nightChoice", actorId: "p1", targetId: "p3" }); // drunk "protects" p3
+    s = reduce(s, { type: "endNight" });
+    s = reduce(s, { type: "startVote" });
+    for (const p of living(s)) s = reduce(s, { type: "castVote", voterId: p.id, targetId: null });
+    s = reduce(s, { type: "resolveVote" });
+    expect(s.round).toBe(2);
+    // A real doctor couldn't repeat, so neither can the drunk — otherwise the
+    // missing-name tell would give the disguise away.
+    expect(validNightTargets(s, "p1").map((p) => p.id)).not.toContain("p3");
+  });
+
   it("mimicking the Silencer silences no one", () => {
     let s = drunkAs("silencer");
     s = reduce(s, { type: "startNight" });
@@ -338,7 +353,7 @@ describe("Village Drunk (mimics any role)", () => {
     const cfg: GameConfig = {
       selection: { mode: "exact", roleCounts: { werewolf: 1, drunk: 1 } },
       revealRoleOnDeath: false,
-      nightSummary: "discreet",
+      nightSummary: "discreet", peacefulFirstNight: false,
     };
     const s = reduce({ ...createGame("X", 99), phase: "lobby", players }, { type: "startGame", config: cfg });
     const drunk = s.players.find((p) => p.roleId === "drunk")!;
@@ -671,7 +686,7 @@ describe("Henchman", () => {
     const cfg: GameConfig = {
       selection: { mode: "exact", roleCounts: { henchman: 1 } },
       revealRoleOnDeath: false,
-      nightSummary: "discreet",
+      nightSummary: "discreet", peacefulFirstNight: false,
     };
     expect(validateConfig(cfg, 5)).toEqual(
       expect.arrayContaining([{ message: "Need at least 1 werewolf." }])
@@ -766,7 +781,7 @@ describe("wolf-team roles in the pool", () => {
   const poolConfig = (pool: string[]): GameConfig => ({
     selection: { mode: "pool", pool, werewolfRatio: 0.26 },
     revealRoleOnDeath: false,
-    nightSummary: "discreet",
+    nightSummary: "discreet", peacefulFirstNight: false,
   });
 
   it("draws the Infector into a wolf slot but keeps a base Werewolf", () => {

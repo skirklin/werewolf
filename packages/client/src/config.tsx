@@ -216,6 +216,19 @@ function SharedToggles({
         />
       </label>
       <label className="chip" style={{ cursor: "pointer" }}>
+        <span className="avatar">🕊️</span>
+        <div className="grow">
+          <div className="name">Peaceful first night</div>
+          <div className="muted small">The wolves skip night one, so nobody's out before the town has spoken.</div>
+        </div>
+        <input
+          type="checkbox"
+          style={{ width: 24, minHeight: 24 }}
+          checked={config.peacefulFirstNight}
+          onChange={(e) => onChange({ ...config, peacefulFirstNight: e.target.checked })}
+        />
+      </label>
+      <label className="chip" style={{ cursor: "pointer" }}>
         <span className="avatar">📢</span>
         <div className="grow">
           <div className="name">Reveal more information</div>

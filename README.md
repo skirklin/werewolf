@@ -25,7 +25,9 @@ tests, and it's yours to change.
 ## Play modes
 
 - **Play together** — each person on their own phone. One player creates a room,
-  everyone else joins with the 4-letter code.
+  everyone else joins with the 4-letter code (letters only, so phone keyboards
+  never have to switch to digits). When a game ends the host can deal another
+  one in place — the room, the code and the roster all stay put.
 - **Pass the device** — one phone shared around the table, with privacy handoff
   screens. Role reveal is folded into the first night so the device only circles
   once.
@@ -44,6 +46,18 @@ Two ways to pick who's what, both fair:
   can hold more roles than players). The werewolf count comes from a team-ratio
   (Light / Standard / Heavy) so it always scales with the table.
 - **Exact counts** — set exactly how many of each role; villagers fill the rest.
+
+## House rules
+
+Toggles that sit alongside the role setup:
+
+- **Reveal roles on death** — off keeps everyone guessing.
+- **Peaceful first night** — the wolves skip night one, so nobody is out of the
+  game before the town has said a word.
+- **Reveal more information** — announces saves and protected kills instead of a
+  vague "quiet night" (tilts things toward the villagers).
+
+Always on: the Doctor can't shield the same patient two nights running.
 
 ## Running it
 

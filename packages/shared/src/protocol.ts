@@ -6,6 +6,13 @@ import type { PlayerView } from "./views.js";
  * engine directly and never uses these; only the WebSocket transport does.
  */
 
+/** Room codes are letters only, so a phone keyboard never has to switch modes. */
+export const ROOM_CODE_LENGTH = 4;
+
+export function normalizeRoomCode(raw: string): string {
+  return raw.toUpperCase().replace(/[^A-Z]/g, "").slice(0, ROOM_CODE_LENGTH);
+}
+
 export interface RoomSummary {
   code: string;
   players: { id: PlayerId; name: string; isHost: boolean; connected: boolean }[];
@@ -31,7 +38,8 @@ export type ClientMessage =
   | { type: "resolveVote" }
   | { type: "shoot"; targetId: PlayerId }
   | { type: "skipShot" }
-  | { type: "kick"; playerId: PlayerId };
+  | { type: "kick"; playerId: PlayerId }
+  | { type: "playAgain" };
 
 /** Messages the server sends to a client. */
 export type ServerMessage =

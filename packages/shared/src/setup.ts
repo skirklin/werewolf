@@ -32,6 +32,7 @@ export function recommendedConfig(_playerCount: number): GameConfig {
     },
     revealRoleOnDeath: false,
     nightSummary: "discreet",
+    peacefulFirstNight: false,
   };
 }
 

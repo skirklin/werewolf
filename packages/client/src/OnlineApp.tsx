@@ -3,6 +3,8 @@ import QRCode from "qrcode";
 import {
   recommendedConfig,
   validateConfig,
+  normalizeRoomCode,
+  ROOM_CODE_LENGTH,
   type GameConfig,
   type PlayerView,
   type ClientMessage,
@@ -36,8 +38,8 @@ export function OnlineApp({ onExit }: { onExit: () => void }) {
 function Landing({ game, onExit }: { game: ReturnType<typeof useOnlineGame>; onExit: () => void }) {
   const [name, setName] = useState("");
   // Pre-fill the code when arriving via a shared invite link (?room=CODE).
-  const [joinCode, setJoinCode] = useState(
-    () => new URLSearchParams(location.search).get("room")?.toUpperCase().slice(0, 4) ?? ""
+  const [joinCode, setJoinCode] = useState(() =>
+    normalizeRoomCode(new URLSearchParams(location.search).get("room") ?? "")
   );
   return (
     <div className="app">
@@ -57,14 +59,18 @@ function Landing({ game, onExit }: { game: ReturnType<typeof useOnlineGame>; onE
           <input
             className="code"
             value={joinCode}
-            onChange={(e) => setJoinCode(e.target.value.toUpperCase().slice(0, 4))}
+            onChange={(e) => setJoinCode(normalizeRoomCode(e.target.value))}
             placeholder="ABCD"
-            maxLength={4}
+            maxLength={ROOM_CODE_LENGTH}
+            autoCapitalize="characters"
+            autoCorrect="off"
+            autoComplete="off"
+            spellCheck={false}
           />
         </label>
         <button
           className="full lg"
-          disabled={!name.trim() || joinCode.length < 4}
+          disabled={!name.trim() || joinCode.length < ROOM_CODE_LENGTH}
           onClick={() => game.join(joinCode, name)}
         >
           Join room
@@ -131,6 +137,21 @@ function RoomInvite({ code }: { code: string }) {
   );
 }
 
+/**
+ * After a rematch the room still carries the last game's setup, so reuse it
+ * rather than making the host redo their toggles. Falls back to the defaults if
+ * it no longer fits the table — or came from a client that knows a role we
+ * don't, which makes validateConfig throw.
+ */
+function reusableConfig(view: PlayerView): GameConfig {
+  try {
+    if (validateConfig(view.config, view.players.length).length === 0) return view.config;
+  } catch {
+    /* unknown role id — fall through to the defaults */
+  }
+  return recommendedConfig(view.players.length);
+}
+
 function Lobby({
   view,
   send,
@@ -142,7 +163,7 @@ function Lobby({
   error: string | null;
   onExit: () => void;
 }) {
-  const [config, setConfig] = useState<GameConfig>(recommendedConfig(view.players.length));
+  const [config, setConfig] = useState<GameConfig>(() => reusableConfig(view));
   const isHost = view.you.isHost;
   const problems = validateConfig(config, view.players.length);
 
@@ -258,7 +279,15 @@ function renderPhase(view: PlayerView, send: (m: ClientMessage) => void, onExit:
       return <VoteAction view={view} send={send} />;
 
     case "gameOver":
-      return <GameOver view={view} onExit={onExit} />;
+      // The host deals a rematch in place — everyone stays in the room, so no
+      // one has to re-enter the code.
+      return (
+        <GameOver
+          view={view}
+          onPlayAgain={view.you.isHost ? () => send({ type: "playAgain" }) : null}
+          onExit={onExit}
+        />
+      );
 
     default:
       return null;

@@ -13,6 +13,11 @@ export function makeRng(seed: number): () => number {
   };
 }
 
+/** Derive the next seed in a chain, so a rematch deals a different game. */
+export function nextSeed(seed: number): number {
+  return Math.floor(makeRng(seed)() * 2 ** 31);
+}
+
 /** Fisher-Yates shuffle returning a new array. Fair and unbiased. */
 export function shuffle<T>(items: readonly T[], rng: () => number): T[] {
   const out = items.slice();

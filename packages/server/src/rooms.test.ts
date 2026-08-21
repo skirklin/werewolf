@@ -26,7 +26,7 @@ class FakeClient implements Client {
 const exact = (roleCounts: Record<string, number>): GameConfig => ({
   selection: { mode: "exact", roleCounts },
   revealRoleOnDeath: true,
-  nightSummary: "discreet",
+  nightSummary: "discreet", peacefulFirstNight: false,
 });
 
 let mgr: RoomManager;
@@ -40,18 +40,20 @@ function seatPlayers(count: number) {
   const clients: FakeClient[] = [];
   for (let i = 0; i < count; i++) {
     const c = new FakeClient();
-    c.playerId = room.addPlayer(`P${i}`, c).playerId;
-    // capture token from the joined message the room does NOT send (server does);
-    // the room returns creds directly:
+    // The room returns creds directly; the server is what wraps them in a
+    // "joined" message, so copy them onto the fake client by hand.
+    const creds = room.addPlayer(`P${i}`, c);
+    c.playerId = creds.playerId;
+    c.token = creds.token;
     clients.push(c);
   }
   return { room, clients };
 }
 
 describe("lobby", () => {
-  it("first player is host, code is 4 chars", () => {
+  it("first player is host, code is 4 letters (no keyboard switching)", () => {
     const { room, clients } = seatPlayers(3);
-    expect(room.code).toHaveLength(4);
+    expect(room.code).toMatch(/^[A-Z]{4}$/);
     expect(clients[0].view!.players[0].isHost).toBe(true);
     expect(clients[0].view!.players.filter((p) => p.isHost)).toHaveLength(1);
   });
@@ -249,5 +251,52 @@ describe("role registry", () => {
       expect(role.emoji.length).toBeGreaterThan(0);
       expect(["village", "werewolf", "solo"]).toContain(role.team);
     }
+  });
+});
+
+describe("rematch", () => {
+  /** Seat a table, start a game, then jump straight to its end. */
+  function finished(count: number) {
+    const { room, clients } = seatPlayers(count);
+    room.handle(clients[0].playerId, { type: "startGame", config: exact({ werewolf: 1 }) });
+    room.state = { ...room.state, phase: "gameOver", winner: "village" };
+    return { room, clients };
+  }
+
+  it("restarts in place, so nobody re-enters the code", () => {
+    const { room, clients } = finished(4);
+    const code = room.code;
+    room.handle(clients[0].playerId, { type: "playAgain" });
+    expect(room.code).toBe(code);
+    for (const c of clients) {
+      expect(c.view!.phase).toBe("lobby");
+      expect(c.view!.code).toBe(code);
+      expect(c.view!.players).toHaveLength(4);
+      expect(c.view!.you.roleId).toBeNull();
+      expect(c.view!.you.alive).toBe(true);
+    }
+  });
+
+  it("only the host can call one", () => {
+    const { room, clients } = finished(4);
+    expect(() => room.handle(clients[1].playerId, { type: "playAgain" })).toThrow(/host/i);
+  });
+
+  it("drops anyone who left before it, and retires their token", () => {
+    const { room, clients } = finished(4);
+    const gone = clients[3];
+    room.disconnect(gone);
+    room.handle(clients[0].playerId, { type: "playAgain" });
+    expect(room.state.players).toHaveLength(3);
+    expect(room.rejoin(gone.playerId, gone.token, gone)).toBe(false);
+  });
+
+  it("still lets a mid-game dropout rejoin if they beat the rematch back", () => {
+    const { room, clients } = finished(4);
+    const away = clients[3];
+    room.disconnect(away);
+    expect(room.rejoin(away.playerId, away.token, away)).toBe(true);
+    room.handle(clients[0].playerId, { type: "playAgain" });
+    expect(room.state.players).toHaveLength(4);
   });
 });

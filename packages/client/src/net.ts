@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { normalizeRoomCode } from "@werewolf/shared";
 import type { ClientMessage, ServerMessage, PlayerView } from "@werewolf/shared";
 
 interface Creds {
@@ -96,7 +97,7 @@ export function useOnlineGame(): OnlineGame {
   // On mount, if we have stored creds, try to rejoin the existing game — unless
   // an invite link points at a different room, which should take precedence.
   useEffect(() => {
-    const invite = new URLSearchParams(location.search).get("room")?.toUpperCase();
+    const invite = normalizeRoomCode(new URLSearchParams(location.search).get("room") ?? "") || null;
     if (credsRef.current && invite && invite !== credsRef.current.code) {
       localStorage.removeItem(STORE_KEY);
       credsRef.current = null;
@@ -122,7 +123,7 @@ export function useOnlineGame(): OnlineGame {
 
   const join = useCallback(
     (roomCode: string, name: string) => {
-      onOpenRef.current = () => rawSend({ type: "joinRoom", code: roomCode.toUpperCase(), name });
+      onOpenRef.current = () => rawSend({ type: "joinRoom", code: normalizeRoomCode(roomCode), name });
       ensureSocket();
       flush();
     },

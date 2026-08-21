@@ -147,7 +147,8 @@ function LocalPlay({
   if (state.phase === "gameOver") {
     return (
       <div className="app">
-        <GameOver view={view} onExit={() => { game.reset(); onExit(); }} />
+        {/* Back to setup, where the roster is already remembered. */}
+        <GameOver view={view} onPlayAgain={game.reset} onExit={() => { game.reset(); onExit(); }} />
       </div>
     );
   }
@@ -315,7 +316,7 @@ function NightTurn({
 
   const promptText =
     prompt.kind === "kill" ? "Choose tonight's victim"
-    : prompt.kind === "protect" ? "Choose someone to protect"
+    : prompt.kind === "protect" ? "Choose someone to protect — never the same patient twice running"
     : prompt.kind === "silence" ? "Choose whose vote to silence tomorrow"
     : prompt.kind === "convert" ? "Choose someone to turn into a werewolf"
     : "Choose someone to inspect";

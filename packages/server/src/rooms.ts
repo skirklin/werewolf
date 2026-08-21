@@ -6,6 +6,8 @@ import {
   allNightStepsDone,
   allVotesIn,
   validateConfig,
+  normalizeRoomCode,
+  ROOM_CODE_LENGTH,
   EngineError,
   type GameState,
   type Action,
@@ -18,13 +20,15 @@ export interface Client {
   send(msg: ServerMessage): void;
 }
 
-const CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"; // no ambiguous chars
+// Letters only (no ambiguous I/L/O) so nobody has to hop between the letter and
+// number keyboards on a phone to type a code.
+const CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ";
 /** How long an in-game room may sit empty before it's reclaimed. */
 const EMPTY_ROOM_GRACE_MS = 15 * 60_000;
 
 function randomCode(): string {
   let s = "";
-  for (let i = 0; i < 4; i++)
+  for (let i = 0; i < ROOM_CODE_LENGTH; i++)
     s += CODE_ALPHABET[Math.floor(Math.random() * CODE_ALPHABET.length)];
   return s;
 }
@@ -168,6 +172,15 @@ class Room {
         hostOnly();
         this.apply({ type: "resolveVote" });
         break;
+      case "playAgain": {
+        hostOnly();
+        this.apply({ type: "playAgain" });
+        // Anyone whose device left during the last game is gone from the roster
+        // now, so retire their token too.
+        for (const pid of this.tokens.keys())
+          if (!this.state.players.some((p) => p.id === pid)) this.tokens.delete(pid);
+        break;
+      }
       case "kick": {
         hostOnly();
         if (this.state.phase !== "lobby") throw new EngineError("Can only kick in the lobby.");
@@ -218,7 +231,7 @@ export class RoomManager {
   }
 
   get(code: string): Room | undefined {
-    return this.rooms.get(code.toUpperCase());
+    return this.rooms.get(normalizeRoomCode(code));
   }
 
   /**

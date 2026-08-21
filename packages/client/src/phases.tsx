@@ -46,7 +46,7 @@ export function TargetGrid({
 
 const NIGHT_PROMPT: Record<string, string> = {
   kill: "Choose tonight's victim",
-  protect: "Choose someone to protect",
+  protect: "Choose someone to protect — never the same patient twice running",
   inspect: "Choose someone to inspect",
   silence: "Choose whose vote to silence",
   convert: "Choose someone to infect",
@@ -353,7 +353,16 @@ export function PlayerList({ players, youId }: { players: PublicPlayer[]; youId:
   );
 }
 
-export function GameOver({ view, onExit }: { view: PlayerView; onExit: () => void }) {
+export function GameOver({
+  view,
+  onPlayAgain,
+  onExit,
+}: {
+  view: PlayerView;
+  /** Null for players who can't start the rematch (everyone but the host). */
+  onPlayAgain: (() => void) | null;
+  onExit: () => void;
+}) {
   const soloWinner = view.soloWinnerId
     ? view.players.find((p) => p.id === view.soloWinnerId)
     : undefined;
@@ -381,8 +390,15 @@ export function GameOver({ view, onExit }: { view: PlayerView; onExit: () => voi
           </div>
         ))}
       </div>
-      <button className="primary full lg" onClick={onExit}>
-        Play again? 🔁
+      {onPlayAgain ? (
+        <button className="primary full lg" onClick={onPlayAgain}>
+          Play again? 🔁
+        </button>
+      ) : (
+        <p className="center muted">Waiting for the host to deal another round…</p>
+      )}
+      <button className="ghost full" onClick={onExit}>
+        Leave
       </button>
     </div>
   );

@@ -11,7 +11,7 @@ import type {
 } from "./types.js";
 import { getRole, mimicableRoleIds } from "./roles.js";
 import { dealRoles } from "./setup.js";
-import { makeRng, shuffle, pick } from "./rng.js";
+import { makeRng, shuffle, pick, nextSeed } from "./rng.js";
 
 // ---------------------------------------------------------------------------
 // Queries (pure helpers, safe to use from client for view logic)
@@ -94,7 +94,7 @@ export function validNightTargets(state: GameState, actorId: PlayerId): Player[]
   if (!playerById(state, actorId)?.alive || !roleId) return [];
   const ability = getRole(roleId).night;
   if (!ability) return [];
-  return living(state).filter((t) => {
+  const targets = living(state).filter((t) => {
     if (t.id === actorId && !ability.canTargetSelf) return false;
     // Wolves never eat their own pack; the Infector only turns non-wolves.
     if (
@@ -105,6 +105,13 @@ export function validNightTargets(state: GameState, actorId: PlayerId): Player[]
       return false;
     return true;
   });
+  // No shielding the same patient two nights running — unless that would leave
+  // the protector nobody at all to pick, which would wedge the night.
+  if (ability.kind === "protect") {
+    const fresh = targets.filter((t) => t.id !== state.lastProtect[actorId]);
+    if (fresh.length) return fresh;
+  }
+  return targets;
 }
 
 // ---------------------------------------------------------------------------
@@ -124,7 +131,8 @@ export type Action =
   | { type: "castVote"; voterId: PlayerId; targetId: PlayerId | null }
   | { type: "resolveVote" }
   | { type: "shoot"; hunterId: PlayerId; targetId: PlayerId }
-  | { type: "skipShot" };
+  | { type: "skipShot" }
+  | { type: "playAgain" };
 
 export class EngineError extends Error {}
 
@@ -166,7 +174,24 @@ export function reduce(state: GameState, action: Action): GameState {
       return shoot(state, action.hunterId, action.targetId);
     case "skipShot":
       return skipShot(state);
+    case "playAgain":
+      return playAgain(state);
   }
+}
+
+/**
+ * Rematch: drop the finished game but keep the room, its players and their
+ * setup, so a group on separate devices never re-enters the code. Players whose
+ * device has gone are left behind (the lobby drops them anyway).
+ */
+function playAgain(state: GameState): GameState {
+  assert(state.phase === "gameOver", "The game isn't over yet.");
+  const players = state.players
+    .filter((p) => p.connected)
+    .map((p) => ({ ...p, roleId: null, alive: true }));
+  assert(players.length > 0, "Nobody's still here to play.");
+  if (!players.some((p) => p.isHost)) players[0] = { ...players[0], isHost: true };
+  return { ...createGame(state.code, nextSeed(state.seed)), players, config: state.config };
 }
 
 function startGame(state: GameState, config: GameConfig): GameState {
@@ -215,6 +240,9 @@ function beginNight(state: GameState): GameState {
     if (!roleId) continue;
     const ability = getRole(roleId).night;
     if (!ability) continue;
+    // Peaceful first night: the wolves sit night 1 out, so nobody dies before
+    // the town has had a single conversation.
+    if (ability.kind === "kill" && round === 1 && state.config.peacefulFirstNight) continue;
     // The Medium only wakes while their raise is unspent and someone is dead.
     if (ability.kind === "raise" && (state.mediumUsed[p.id] || !deadExist)) continue;
     // The Infector only wakes while their conversion is unspent and a non-wolf lives.
@@ -518,6 +546,16 @@ function endNight(state: GameState): GameState {
     subs: Object.fromEntries(Object.entries(s.subs).filter(([id]) => !isDrunk(state, id))),
   }));
 
+  // Remember tonight's patients so nobody can be shielded twice running. Taken
+  // from the RAW steps, not liveSteps: a Drunk mimicking the Doctor is bound by
+  // the same restriction, so the blocked name can't give the disguise away.
+  const lastProtect: GameState["lastProtect"] = {};
+  for (const step of steps) {
+    if (step.kind !== "protect") continue;
+    for (const [actorId, sub] of Object.entries(step.subs))
+      if (sub.t === "target") lastProtect[actorId] = sub.target;
+  }
+
   // Protections (doctor) + the wolves' victim.
   const protectedIds = new Set<PlayerId>();
   for (const step of liveSteps) {
@@ -566,6 +604,7 @@ function endNight(state: GameState): GameState {
     mediumUsed,
     convertUsed: { ...state.convertUsed },
     drunkDisguise: { ...state.drunkDisguise },
+    lastProtect,
   };
   // Spend one-time powers (Medium raise, Infector convert) BEFORE swaps, so the
   // spent flag is written under the current id and then travels with the role...
@@ -587,6 +626,7 @@ function endNight(state: GameState): GameState {
     mediumUsed: roleState.mediumUsed,
     convertUsed: roleState.convertUsed,
     drunkDisguise: roleState.drunkDisguise,
+    lastProtect: roleState.lastProtect,
     silenced,
     night: null,
     log,
@@ -611,6 +651,7 @@ interface RoleState {
   mediumUsed: GameState["mediumUsed"];
   convertUsed: GameState["convertUsed"];
   drunkDisguise: GameState["drunkDisguise"];
+  lastProtect: GameState["lastProtect"];
 }
 
 /**
@@ -635,6 +676,7 @@ function applySwaps(players: Player[], roleState: RoleState, steps: NightStep[])
       swapEntry(roleState.mediumUsed, sub.a, sub.b);
       swapEntry(roleState.convertUsed, sub.a, sub.b);
       swapEntry(roleState.drunkDisguise, sub.a, sub.b);
+      swapEntry(roleState.lastProtect, sub.a, sub.b);
     }
   }
   return next;
@@ -802,6 +844,7 @@ export function createGame(code: string, seed: number): GameState {
       selection: { mode: "exact", roleCounts: {} },
       revealRoleOnDeath: false,
       nightSummary: "discreet",
+      peacefulFirstNight: false,
     },
     round: 0,
     night: null,
@@ -811,6 +854,7 @@ export function createGame(code: string, seed: number): GameState {
     mediumUsed: {},
     convertUsed: {},
     drunkDisguise: {},
+    lastProtect: {},
     votes: {},
     witchPotions: {},
     pendingShots: [],
