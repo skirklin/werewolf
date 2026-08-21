@@ -7,8 +7,10 @@ import {
   allVotesIn,
   validateConfig,
   normalizeRoomCode,
+  toGameRecord,
   ROOM_CODE_LENGTH,
   EngineError,
+  type GameRecord,
   type GameState,
   type Action,
   type ClientMessage,
@@ -33,14 +35,15 @@ function randomCode(): string {
   return s;
 }
 
-class Room {
+export class Room {
   state: GameState;
   private clients = new Map<PlayerId, Client>();
   private tokens = new Map<PlayerId, string>();
   /** When the room last became empty (for sweeping), or null while occupied. */
   emptySince: number | null = null;
 
-  constructor(code: string) {
+  /** @param onFinish called once with the anonymous record of each finished game. */
+  constructor(code: string, private readonly onFinish?: (record: GameRecord) => void) {
     this.state = createGame(code, Math.floor(Math.random() * 2 ** 31));
   }
 
@@ -197,6 +200,7 @@ class Room {
 
   /** Apply an engine action, then auto-advance any phase that has completed. */
   private apply(action: Action) {
+    const wasOver = this.state.phase === "gameOver";
     this.state = reduce(this.state, action);
     // Auto-resolve phases so play flows without manual prompting.
     if (this.state.phase === "night" && this.state.night && allNightStepsDone(this.state)) {
@@ -204,6 +208,16 @@ class Room {
     }
     if (this.state.phase === "dayVote" && allVotesIn(this.state)) {
       this.state = reduce(this.state, { type: "resolveVote" });
+    }
+    // File the anonymous record exactly once, as the game crosses into its end.
+    // Bookkeeping must never break a game, so a failure here is swallowed.
+    if (!wasOver && this.state.phase === "gameOver") {
+      try {
+        const record = toGameRecord(this.state, "online");
+        if (record) this.onFinish?.(record);
+      } catch (err) {
+        console.error("Could not record a finished game:", err);
+      }
     }
     this.broadcast();
   }
@@ -222,10 +236,13 @@ class Room {
 export class RoomManager {
   private rooms = new Map<string, Room>();
 
+  /** @param onFinish called once with the anonymous record of each finished game. */
+  constructor(private readonly onFinish?: (record: GameRecord) => void) {}
+
   create(): Room {
     let code = randomCode();
     while (this.rooms.has(code)) code = randomCode();
-    const room = new Room(code);
+    const room = new Room(code, this.onFinish);
     this.rooms.set(code, room);
     return room;
   }

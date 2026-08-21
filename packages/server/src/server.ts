@@ -4,8 +4,15 @@ import { existsSync } from "node:fs";
 import Fastify, { type FastifyInstance } from "fastify";
 import websocket from "@fastify/websocket";
 import fastifyStatic from "@fastify/static";
-import { EngineError, type ClientMessage, type ServerMessage } from "@werewolf/shared";
+import {
+  EngineError,
+  aggregate,
+  parseGameRecord,
+  type ClientMessage,
+  type ServerMessage,
+} from "@werewolf/shared";
 import { RoomManager, type Client } from "./rooms.js";
+import { GameStore } from "./store.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const clientDist = join(__dirname, "../../client/dist");
@@ -13,20 +20,61 @@ const clientDist = join(__dirname, "../../client/dist");
 export interface AppOptions {
   /** Serve the built client (default true when the dist exists). */
   serveClient?: boolean;
+  /**
+   * Where to keep finished-game records. Defaults to `WEREWOLF_DATA_DIR`; with
+   * neither, records live in memory only and vanish on restart.
+   */
+  dataDir?: string | null;
 }
+
+/** Biggest game record we'll accept from a client, in bytes. */
+const MAX_RECORD_BYTES = 64 * 1024;
+/** Records one address may submit per hour. Generous for a household, useless for a flood. */
+const SUBMIT_LIMIT = 30;
+const SUBMIT_WINDOW_MS = 60 * 60_000;
 
 /** Build the Fastify app (not yet listening). Exported so tests can drive it. */
 export async function createApp(opts: AppOptions = {}): Promise<FastifyInstance> {
-  const manager = new RoomManager();
+  const store = await GameStore.open(
+    opts.dataDir === undefined ? process.env.WEREWOLF_DATA_DIR : opts.dataDir
+  );
+  const manager = new RoomManager((record) => store.add({ ...record, finishedAt: stamp() }));
   const sweep = setInterval(() => manager.sweep(), 60_000);
   sweep.unref();
 
-  const app = Fastify({ logger: false });
+  // trustProxy so `req.ip` is the player's address rather than Caddy's —
+  // without it every submission would share a single rate-limit bucket.
+  const app = Fastify({ logger: false, bodyLimit: MAX_RECORD_BYTES, trustProxy: true });
   app.addHook("onClose", async () => clearInterval(sweep));
 
   await app.register(websocket);
 
   app.get("/api/health", async () => ({ ok: true }));
+
+  // ---- Anonymous game stats (public: the records hold nobody's name) ----
+
+  app.get("/api/stats", async () => aggregate(store.all()));
+
+  app.get<{ Querystring: { limit?: string } }>("/api/games", async (req) => {
+    const all = store.all();
+    const limit = Math.min(Math.max(Number(req.query.limit) || 500, 1), 5000);
+    return { total: all.length, games: all.slice(-limit) };
+  });
+
+  /**
+   * Pass-the-device games run entirely in the browser, so that client posts its
+   * own record here. Untrusted by definition: the body is re-validated, the
+   * timestamp is ours, and the mode is forced to "local" so a submission can
+   * never masquerade as a server-refereed game.
+   */
+  const submits = new RateLimiter(SUBMIT_LIMIT, SUBMIT_WINDOW_MS);
+  app.post("/api/games", async (req, reply) => {
+    if (!submits.allow(req.ip)) return reply.code(429).send({ error: "Slow down." });
+    const record = parseGameRecord(req.body);
+    if (!record) return reply.code(400).send({ error: "Not a game record." });
+    store.add({ ...record, mode: "local", finishedAt: stamp() });
+    return { ok: true };
+  });
 
   await app.register(async (instance) => {
     instance.get("/ws", { websocket: true }, (socket) => {
@@ -97,6 +145,8 @@ export async function createApp(opts: AppOptions = {}): Promise<FastifyInstance>
     });
   });
 
+  app.addHook("onClose", async () => submits.stop());
+
   const shouldServe = opts.serveClient ?? existsSync(clientDist);
   if (shouldServe && existsSync(clientDist)) {
     await app.register(fastifyStatic, { root: clientDist });
@@ -104,4 +154,46 @@ export async function createApp(opts: AppOptions = {}): Promise<FastifyInstance>
   }
 
   return app;
+}
+
+function stamp(): string {
+  return new Date().toISOString();
+}
+
+/**
+ * Fixed-window limiter, per client address. In-memory and single-process, which
+ * matches the one replica this runs as — it exists to stop a bored visitor from
+ * flooding the stats, not to survive a determined attacker.
+ */
+class RateLimiter {
+  private hits = new Map<string, { count: number; resetAt: number }>();
+  private readonly timer: NodeJS.Timeout;
+
+  constructor(
+    private readonly limit: number,
+    private readonly windowMs: number
+  ) {
+    // Sweep expired buckets so a churn of addresses can't grow the map forever.
+    this.timer = setInterval(() => {
+      const now = Date.now();
+      for (const [key, hit] of this.hits) if (hit.resetAt <= now) this.hits.delete(key);
+    }, windowMs);
+    this.timer.unref();
+  }
+
+  allow(key: string): boolean {
+    const now = Date.now();
+    const hit = this.hits.get(key);
+    if (!hit || hit.resetAt <= now) {
+      this.hits.set(key, { count: 1, resetAt: now + this.windowMs });
+      return true;
+    }
+    if (hit.count >= this.limit) return false;
+    hit.count++;
+    return true;
+  }
+
+  stop() {
+    clearInterval(this.timer);
+  }
 }

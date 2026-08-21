@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { ROLES, type ServerMessage, type PlayerView, type GameConfig } from "@werewolf/shared";
-import { RoomManager, type Client } from "./rooms.js";
+import { ROLES, type ServerMessage, type PlayerView, type GameConfig, type GameRecord } from "@werewolf/shared";
+import { RoomManager, type Client, type Room } from "./rooms.js";
 
 /** A fake client that records the latest view and every message it received. */
 class FakeClient implements Client {
@@ -298,5 +298,68 @@ describe("rematch", () => {
     expect(room.rejoin(away.playerId, away.token, away)).toBe(true);
     room.handle(clients[0].playerId, { type: "playAgain" });
     expect(room.state.players).toHaveLength(4);
+  });
+});
+
+describe("recording finished games", () => {
+  /** Seat a table on a manager that captures the records it files. */
+  function recordingTable(count: number) {
+    const records: GameRecord[] = [];
+    const manager = new RoomManager((r) => records.push(r));
+    const room = manager.create();
+    const clients: FakeClient[] = [];
+    for (let i = 0; i < count; i++) {
+      const c = new FakeClient();
+      const creds = room.addPlayer(`P${i}`, c);
+      c.playerId = creds.playerId;
+      c.token = creds.token;
+      clients.push(c);
+    }
+    return { room, clients, records };
+  }
+
+  /** Play a 4-player game out to a village win: the wolf eats, then is lynched. */
+  function playToVillageWin(room: Room, clients: FakeClient[]) {
+    room.handle(clients[0].playerId, { type: "startGame", config: exact({ werewolf: 1 }) });
+    room.handle(clients[0].playerId, { type: "startNight" });
+    const wolf = clients.find((c) => c.view!.you.roleId === "werewolf")!;
+    const victim = clients.find((c) => c !== wolf)!;
+    room.handle(wolf.playerId, { type: "nightChoice", targetId: victim.playerId });
+
+    room.handle(clients[0].playerId, { type: "startVote" });
+    const villagers = clients.filter((c) => c !== wolf && c !== victim);
+    room.handle(wolf.playerId, { type: "castVote", targetId: villagers[0].playerId });
+    for (const v of villagers) room.handle(v.playerId, { type: "castVote", targetId: wolf.playerId });
+    return { wolf, victim };
+  }
+
+  it("files exactly one anonymous record as the game ends", () => {
+    const { room, clients, records } = recordingTable(4);
+    playToVillageWin(room, clients);
+
+    expect(room.state.phase).toBe("gameOver");
+    expect(records).toHaveLength(1);
+    expect(records[0]).toMatchObject({ mode: "online", winner: "village", playerCount: 4 });
+    expect(records[0].seats.filter((s) => s.dealt === "werewolf")).toHaveLength(1);
+  });
+
+  it("keeps players' names and ids out of what it files", () => {
+    const { room, clients, records } = recordingTable(4);
+    playToVillageWin(room, clients);
+    const json = JSON.stringify(records[0]);
+    for (const c of clients) expect(json).not.toContain(c.playerId);
+    for (let i = 0; i < clients.length; i++) expect(json).not.toContain(`P${i}`);
+    expect(json).not.toContain(room.code);
+  });
+
+  it("files a second record for a rematch, and none for the restart itself", () => {
+    const { room, clients, records } = recordingTable(4);
+    playToVillageWin(room, clients);
+    room.handle(clients[0].playerId, { type: "playAgain" });
+    expect(room.state.phase).toBe("lobby");
+    expect(records).toHaveLength(1); // restarting is not a game
+
+    playToVillageWin(room, clients);
+    expect(records).toHaveLength(2);
   });
 });

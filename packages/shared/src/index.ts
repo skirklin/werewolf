@@ -6,3 +6,5 @@ export * from "./engine.js";
 export * from "./views.js";
 export * from "./passdevice.js";
 export * from "./protocol.js";
+export * from "./record.js";
+export * from "./stats.js";

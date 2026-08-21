@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   createGame,
   reduce,
@@ -15,6 +15,7 @@ import {
   type PlayerView,
   type Turn,
 } from "@werewolf/shared";
+import { reportGame } from "./report.js";
 
 function randomSeed(): number {
   return Math.floor(Math.random() * 2 ** 31);
@@ -41,6 +42,16 @@ export interface LocalGame {
 export function useLocalGame(): LocalGame {
   const [state, setState] = useState<GameState | null>(null);
   const [acks, setAcks] = useState<Set<string>>(new Set());
+
+  // File this game's anonymous record the moment it ends. Keyed on the state
+  // object itself, so a re-run of the effect can't report the same game twice.
+  const reported = useRef<GameState | null>(null);
+  useEffect(() => {
+    if (state?.phase === "gameOver" && reported.current !== state) {
+      reported.current = state;
+      reportGame(state);
+    }
+  }, [state]);
 
   // Role reveal is folded into the first night, so there is no separate reveal
   // pass — an empty `revealed` set keeps the sequencer in its night branch.

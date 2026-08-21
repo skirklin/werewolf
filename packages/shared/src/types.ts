@@ -192,6 +192,12 @@ export interface GameState {
   drunkDisguise: Record<PlayerId, string>;
   /** Per-protector: who they shielded last night (can't be shielded again). */
   lastProtect: Record<PlayerId, PlayerId>;
+  /**
+   * The role dealt to each seat at game start, by index into `players`. Roles
+   * move around mid-game (swaps, conversions), so this is the only surviving
+   * record of the original deal — used for post-game stats.
+   */
+  dealtRoles: string[];
   /** voterId -> targetId, or null for an explicit skip. */
   votes: Record<PlayerId, PlayerId | null>;
   /** Per-Witch remaining potions (heal/poison), each usable once all game. */

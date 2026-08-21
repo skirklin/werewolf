@@ -59,6 +59,26 @@ Toggles that sit alongside the role setup:
 
 Always on: the Doctor can't shield the same patient two nights running.
 
+## Stats
+
+Every finished game is filed as one anonymous record — who was dealt what, who
+survived, who won, and the beat-by-beat timeline. **Names, player ids, room
+codes and the RNG seed are all dropped on the way in**, so the numbers can be
+public without exposing anyone's game.
+
+- **📊 House numbers** on the home screen (or `/stats`) — win rates by team and
+  by role, survival rates, how people go out, table sizes, house-rule usage.
+- **`GET /api/stats`** — the same aggregates as JSON.
+- **`GET /api/games?limit=N`** — the raw records, for anything ad hoc.
+- **`POST /api/games`** — how the pass-the-device client reports its own games,
+  since those never touch the server. Untrusted: every body is re-validated,
+  the timestamp is the server's, the mode is forced to `local`, and one address
+  may file 30 records an hour.
+
+Records append to `$WEREWOLF_DATA_DIR/games.jsonl`, one JSON object per line
+(`kubectl cp` it out, or `tail` it). With no `WEREWOLF_DATA_DIR` set they stay
+in memory and vanish on restart, which is what happens in local dev.
+
 ## Running it
 
 Requires Node 20+.

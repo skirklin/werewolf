@@ -186,3 +186,7 @@ label.field { display: flex; flex-direction: column; gap: 6px; }
 .pill { display:inline-block; padding: 4px 10px; border-radius: 999px; background: var(--panel-2); font-size: 0.8rem; }
 .err { color: var(--danger-2); font-size: 0.9rem; }
 .count { font-variant-numeric: tabular-nums; }
+
+/* ---- Stats bars ---- */
+.bar { height: 8px; border-radius: 999px; background: var(--bg-2); overflow: hidden; }
+.bar .fill { height: 100%; border-radius: 999px; min-width: 2px; transition: width 0.3s ease; }

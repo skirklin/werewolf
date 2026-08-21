@@ -1,4 +1,4 @@
-export function Home({ onPick }: { onPick: (mode: "online" | "local") => void }) {
+export function Home({ onPick }: { onPick: (mode: "online" | "local" | "stats") => void }) {
   return (
     <div className="app">
       <div className="spacer" />
@@ -19,6 +19,12 @@ export function Home({ onPick }: { onPick: (mode: "online" | "local") => void })
           🤝 Pass the device
           <div className="small muted" style={{ fontWeight: 400 }}>
             One phone, shared around the table
+          </div>
+        </button>
+        <button className="ghost full" onClick={() => onPick("stats")}>
+          📊 House numbers
+          <div className="small muted" style={{ fontWeight: 400 }}>
+            Win rates and other anonymous trivia
           </div>
         </button>
       </div>
