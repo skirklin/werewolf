@@ -23,17 +23,20 @@ export interface Spend {
   inputTokens: number;
   outputTokens: number;
   failures: number;
+  /** Replies that read as notes rather than speech. */
+  leaks: number;
   /** Null when any model in the run has no published price here. */
   dollars: number | null;
 }
 
 export function totalSpend(strategies: readonly LlmStrategy[]): Spend {
-  const spend: Spend = { calls: 0, inputTokens: 0, outputTokens: 0, failures: 0, dollars: 0 };
+  const spend: Spend = { calls: 0, inputTokens: 0, outputTokens: 0, failures: 0, leaks: 0, dollars: 0 };
   for (const s of strategies) {
     spend.calls += s.calls;
     spend.inputTokens += s.inputTokens;
     spend.outputTokens += s.outputTokens;
     spend.failures += s.failures;
+    spend.leaks += s.leaks;
     const price = PRICES[s.modelId];
     if (!price || spend.dollars === null) spend.dollars = null;
     else
@@ -97,6 +100,8 @@ export class LlmStrategy implements Strategy {
   inputTokens = 0;
   outputTokens = 0;
   failures = 0;
+  /** Replies that read as notes rather than speech, and had to be redone or dropped. */
+  leaks = 0;
 
   constructor(opts: LlmOptions = {}) {
     this.modelId = opts.model ?? DEFAULT_MODEL;
@@ -273,19 +278,37 @@ export class LlmStrategy implements Strategy {
 
   async speak(view: PlayerView): Promise<string | null> {
     try {
-      const said = await this.ask(
-        view,
-        `${this.situation(view)}\n\nIt is your turn to speak to the town. Say one or two ` +
-          `sentences, in your own voice, as ${view.you.name}. Do not describe what you are ` +
-          `doing or mention that you are an AI — just say the words you would say out loud.`,
-        150
-      );
-      const text = said.replace(/^["']|["']$/g, "").trim();
-      return text.length ? text.slice(0, 300) : null;
+      let text = clean(await this.ask(view, this.speechPrompt(view), 150));
+      // A model that writes its notes into the dialogue field will happily
+      // announce its own packmates. That's a formatting failure, not a play, so
+      // give it one sharper nudge before giving up on the turn.
+      if (looksLikeNotes(text) || confesses(text)) {
+        this.leaks++;
+        text = clean(
+          await this.ask(
+            view,
+            `${this.speechPrompt(view)}\n\nIMPORTANT: output ONLY the sentence you speak ` +
+              `aloud, in quotes-free plain text. No notes, no lists, no reasoning, and ` +
+              `nothing about your own role that you would not shout across the square.`,
+            150
+          )
+        );
+      }
+      // Silence beats publishing a confession the player never meant to make.
+      if (!text.length || looksLikeNotes(text) || confesses(text)) return null;
+      return text.slice(0, 300);
     } catch (err) {
       this.note(err);
       return null;
     }
+  }
+
+  private speechPrompt(view: PlayerView): string {
+    return (
+      `${this.situation(view)}\n\nIt is your turn to speak to the town. Everyone hears ` +
+      `this, including the werewolves. Say one or two sentences, in your own voice, as ` +
+      `${view.you.name} — just the words you would say out loud, nothing else.`
+    );
   }
 
   async vote(view: PlayerView): Promise<PlayerId | null> {
@@ -340,4 +363,28 @@ function summarize(entry: PlayerView["log"][number], view: PlayerView): string {
     default:
       return "";
   }
+}
+
+/** Strip surrounding quotes and whitespace a model likes to wrap speech in. */
+function clean(text: string): string {
+  return text.replace(/^["'\s]+|["'\s]+$/g, "");
+}
+
+/**
+ * Scratchpad, not speech: bullet lists, or the deliberating tone of a model
+ * narrating its plan instead of playing its part.
+ */
+function looksLikeNotes(text: string): boolean {
+  return (
+    /^\s*[-*•]\s/m.test(text) ||
+    /^(okay|alright|let me think|looking at this|i need to be careful|my (?:strategy|plan|goal) (?:here )?is)\b/i.test(text)
+  );
+}
+
+/**
+ * Things no player would ever say aloud. A wolf naming its pack is the game
+ * ending by accident, so this is the one case worth suppressing outright.
+ */
+function confesses(text: string): boolean {
+  return /\b(my packmate|fellow (?:wolf|werewolf)|i(?:'m| am) (?:a|the) (?:wolf|werewolf))\b/i.test(text);
 }

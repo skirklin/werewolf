@@ -6,7 +6,8 @@
   "scripts": {
     "arena": "tsx src/cli.ts",
     "test": "vitest run",
-    "analyze": "tsx src/analyze.ts"
+    "analyze": "tsx src/analyze.ts",
+    "annotate": "tsx src/annotate.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.120.0",

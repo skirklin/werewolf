@@ -246,7 +246,7 @@ export class Arena {
  * would tell everyone else who the interesting opponents are. Attribution lives
  * in the record instead, keyed by player id.
  */
-const SEAT_NAMES = [
+export const SEAT_NAMES = [
   "Alex", "Bailey", "Casey", "Devon", "Ellis", "Frankie", "Glen", "Harper",
   "Indigo", "Jules", "Kai", "Lane", "Marlow", "Nico", "Onyx", "Parker",
   "Quinn", "Reese", "Sage", "Tatum", "Umber", "Vale", "Wren", "Yuki",
