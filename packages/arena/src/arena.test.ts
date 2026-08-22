@@ -36,7 +36,7 @@ class Talker extends RandomStrategy {
   constructor(readonly line: string) {
     super(Math.random, "talker");
   }
-  override async speak(): Promise<string | null> {
+  override async speak(_view: PlayerView): Promise<string | null> {
     return this.line;
   }
 }
@@ -120,6 +120,51 @@ describe("a match", () => {
     // And the record counts the speech without keeping the words.
     expect(record.seats.filter((s) => s.said > 0).length).toBeGreaterThan(0);
     for (const line of spokenLines) expect(JSON.stringify(record)).not.toContain(line);
+  }, 60_000);
+});
+
+describe("the referee", () => {
+  /** Records any time it is asked to act while dead — which must never happen. */
+  class DeadCanary extends RandomStrategy {
+    readonly violations: string[] = [];
+    constructor() {
+      super(Math.random, "canary");
+    }
+    private check(view: PlayerView, what: string) {
+      if (!view.you.alive) this.violations.push(`asked to ${what} while dead`);
+      return view;
+    }
+    override async speak(view: PlayerView): Promise<string | null> {
+      this.check(view, "speak");
+      return "still here, still suspicious of everyone";
+    }
+    override async vote(view: PlayerView): Promise<PlayerId | null> {
+      return super.vote(this.check(view, "vote"));
+    }
+  }
+
+  it("never asks a dead seat to speak or vote", async () => {
+    // Each client learns of a death on its own socket, so a seat killed last
+    // night can be one broadcast behind when the day opens. The referee has to
+    // catch up each view before asking it anything.
+    const canaries = Array.from({ length: 7 }, () => new DeadCanary());
+    const { record } = await arena.play({ strategies: canaries, discussionRounds: 2 });
+
+    expect(canaries.flatMap((c) => c.violations)).toEqual([]);
+    // And the game really did kill someone, so the check had something to catch.
+    expect(record.seats.some((s) => !s.survived)).toBe(true);
+  }, 60_000);
+
+  it("only records talk the town actually heard", async () => {
+    const talkers = Array.from({ length: 5 }, (_, i) => new Talker(`line from seat ${i}`));
+    const { record, transcript } = await arena.play({
+      strategies: talkers,
+      discussionRounds: 2,
+    });
+    // Every transcript line corresponds to a message the engine accepted, so the
+    // counts in the record and the lines in the transcript agree exactly.
+    const said = record.seats.reduce((sum, seat) => sum + seat.said, 0);
+    expect(transcript).toHaveLength(said);
   }, 60_000);
 });
 

@@ -1,4 +1,4 @@
-import { appendFile, mkdir, writeFile } from "node:fs/promises";
+import { appendFile, mkdir } from "node:fs/promises";
 import { dirname } from "node:path";
 import { aggregate, recommendedConfig, type GameConfig, type GameRecord } from "@werewolf/shared";
 import { Arena } from "./match.js";
@@ -50,6 +50,13 @@ async function main() {
   if (lineup.some((s) => s.startsWith("llm")))
     console.log("LLM seats will call the Anthropic API — this costs money.\n");
 
+  // Written as each game finishes, not at the end: a long LLM run is expensive
+  // enough that losing it to a crash on the last game would be a real loss.
+  const outFile = args.out ? String(args.out) : null;
+  const transcriptFile = args.transcript ? String(args.transcript) : null;
+  if (outFile) await ensureDir(outFile);
+  if (transcriptFile) await ensureDir(transcriptFile);
+
   const arena = await Arena.open();
   const records: GameRecord[] = [];
   const transcripts: string[] = [];
@@ -66,9 +73,15 @@ async function main() {
         onEvent: quiet ? undefined : (line) => console.log(line),
       });
       records.push(result.record);
-      for (const said of result.transcript)
-        transcripts.push(`[game ${i + 1} day ${said.round}] ${said.speaker} (${said.strategy}): ${said.text}`);
-      if (quiet) process.stdout.write(".");
+      const lines = result.transcript.map(
+        (said) => `[game ${i + 1} day ${said.round}] ${said.speaker} (${said.strategy}): ${said.text}`
+      );
+      transcripts.push(...lines);
+      if (outFile) await appendFile(outFile, JSON.stringify(result.record) + "\n");
+      if (transcriptFile && lines.length) await appendFile(transcriptFile, lines.join("\n") + "\n");
+      // A progress line rather than a dot: piped output buffers, and a long run
+      // that looks dead for twenty minutes is indistinguishable from a hung one.
+      if (quiet) console.log(`game ${i + 1}/${games}: ${result.record.winner} won`);
     }
   } finally {
     await arena.close();
@@ -89,16 +102,8 @@ async function main() {
     );
   }
 
-  if (args.out) {
-    await ensureDir(String(args.out));
-    await appendFile(String(args.out), records.map((r) => JSON.stringify(r)).join("\n") + "\n");
-    console.log(`\nRecords appended to ${args.out}`);
-  }
-  if (args.transcript) {
-    await ensureDir(String(args.transcript));
-    await writeFile(String(args.transcript), transcripts.join("\n") + "\n");
-    console.log(`Transcript written to ${args.transcript}`);
-  }
+  if (outFile) console.log(`\n${records.length} records appended to ${outFile}`);
+  if (transcriptFile) console.log(`${transcripts.length} lines of talk in ${transcriptFile}`);
 }
 
 const fmt = (n: number) => (n >= 1000 ? `${Math.round(n / 1000)}k` : String(n));

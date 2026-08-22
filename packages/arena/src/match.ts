@@ -117,7 +117,20 @@ export class Arena {
   }) {
     const { clients, strategies, config, rounds, say, transcript } = ctx;
     const host = clients[0];
-    const living = () => clients.filter((c) => c.view?.you.alive);
+
+    /**
+     * Bring a seat's view level with the host's before asking its strategy
+     * anything. Each client learns about a death on its own socket, so without
+     * this the referee can catch a just-killed agent one broadcast behind and
+     * ask a dead player to speak — a wasted call, and a line the server will
+     * rightly refuse.
+     */
+    const current = async (client: ArenaClient) => {
+      const target = host.view!;
+      await client.soft((v) => v.phase === target.phase && v.round === target.round, 2000);
+      const view = client.view;
+      return view?.you.alive ? view : null;
+    };
 
     for (let step = 0; step < MAX_STEPS; step++) {
       const view = await host.waitFor(() => true, "the first view");
@@ -145,21 +158,24 @@ export class Arena {
         case "dayDiscussion": {
           say(`Day ${view.round}.`);
           for (let round = 0; round < rounds; round++) {
-            for (const client of living()) {
+            for (const client of clients) {
+              const me = await current(client);
+              if (!me) continue; // dead, or out of step — either way, not speaking
               const seat = clients.indexOf(client);
-              const text = await strategies[seat].speak(client.view!);
+              const text = await strategies[seat].speak(me);
               if (!text) continue;
-              const chatBefore = client.view!.chat.length;
+              const chatBefore = me.chat.length;
               client.send({ type: "say", text });
-              await client.soft((v) => v.chat.length > chatBefore, 2000);
-              const entry = {
-                round: client.view!.round,
-                speaker: client.view!.you.name,
+              // Only record what the town actually heard: a refused line never
+              // entered the game, so it has no business in the transcript.
+              if (!(await client.soft((v) => v.chat.length > chatBefore, 2000))) continue;
+              transcript.push({
+                round: me.round,
+                speaker: me.you.name,
                 strategy: strategies[seat].name,
                 text,
-              };
-              transcript.push(entry);
-              say(`  ${entry.speaker}: ${text}`);
+              });
+              say(`  ${me.you.name}: ${text}`);
             }
           }
           host.send({ type: "startVote" });
@@ -168,9 +184,10 @@ export class Arena {
         }
 
         case "dayVote": {
-          for (const client of living()) {
+          for (const client of clients) {
+            const me = await current(client);
+            if (!me) continue;
             const seat = clients.indexOf(client);
-            const me = client.view!;
             if (me.myVote !== undefined || me.silencedIds.includes(me.you.id)) continue;
             const target = await strategies[seat].vote(me);
             client.send({ type: "castVote", targetId: target });

@@ -34,7 +34,8 @@ export class RandomStrategy implements Strategy {
     return nightMessage(prompt, picks, this.rng() < 0.5);
   }
 
-  async speak(): Promise<string | null> {
+  // Takes the view it ignores, so subclasses can override with one.
+  async speak(_view: PlayerView): Promise<string | null> {
     return null; // the strong and silent type
   }
 
