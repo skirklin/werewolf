@@ -2,9 +2,21 @@ import { describe, it, expect } from "vitest";
 import { ROLES } from "@werewolf/shared";
 import { PLAYBOOKS, adviceFor, getPlaybook, SPECIALIST, BASELINE } from "./playbooks.js";
 import { makeStrategy, parseLineup } from "./lineup.js";
-import { LlmStrategy } from "./strategies/llm.js";
+import { LlmStrategy, type LlmOptions } from "./strategies/llm.js";
 import { analyzeSpeech } from "./speech.js";
-import type { GameRecord } from "@werewolf/shared";
+import type { GameRecord, PlayerView } from "@werewolf/shared";
+
+/** A stand-in API client, so none of these tests cost anything. */
+function stubClient(reply: string) {
+  return {
+    messages: {
+      create: async () => ({
+        content: [{ type: "text", text: reply }],
+        usage: { input_tokens: 5, output_tokens: 2, cache_read_input_tokens: 0 },
+      }),
+    },
+  } as unknown as NonNullable<LlmOptions["client"]>;
+}
 
 describe("playbooks", () => {
   it("gives a seat the advice for the role it was actually dealt", () => {
@@ -69,6 +81,74 @@ describe("lineup specs with playbooks", () => {
 
   it("rejects an unknown playbook before a run spends anything", () => {
     expect(() => makeStrategy("llm+telepathy")).toThrow(/Unknown playbook/);
+  });
+});
+
+describe("assigning playbooks by team", () => {
+  /** A seat only ever consults its own role, which it legitimately knows. */
+  const seat = (roleId: string) =>
+    ({
+      round: 1,
+      you: { id: "p0", name: "Alex", roleId, alive: true, isHost: true },
+      players: [{ id: "p0", name: "Alex", alive: true, isHost: true, connected: true, roleId }],
+      packmates: [],
+      chat: [],
+      log: [],
+      myInspects: [],
+      myDetections: [],
+      silencedIds: [],
+      voteTally: {},
+      votesRemaining: 0,
+      nightPrompt: null,
+      shootPrompt: null,
+      phase: "dayDiscussion",
+      winner: null,
+      soloWinnerId: null,
+      code: "T",
+      config: {},
+    }) as unknown as PlayerView;
+
+  const build = (roleId: string) => {
+    const s = new LlmStrategy({
+      client: stubClient("Bailey seems off."),
+      playbook: (team) => getPlaybook(team === "werewolf" ? "specialist" : "baseline"),
+    });
+    return { s, view: seat(roleId) };
+  };
+
+  it("resolves from the seat's own role once it is dealt", async () => {
+    const wolf = build("werewolf");
+    await wolf.s.speak(wolf.view);
+    expect(wolf.s.playbook.name).toBe("specialist");
+
+    const town = build("seer");
+    await town.s.speak(town.view);
+    expect(town.s.playbook.name).toBe("baseline");
+  });
+
+  it("labels the seat by what it actually played, so results split by side", async () => {
+    const wolf = build("werewolf");
+    await wolf.s.speak(wolf.view);
+    // The record labels seats from this name, which is how a mirrored
+    // tournament ends up comparing A-as-wolves with B-as-wolves.
+    expect(wolf.s.name).toBe("llm:specialist");
+  });
+
+  it("settles on one playbook and never changes mid-game", async () => {
+    const { s, view } = build("werewolf");
+    await s.speak(view);
+    const first = s.playbook.name;
+    // Even handed a view claiming another role, the seat keeps what it resolved.
+    await s.speak(seat("seer"));
+    expect(s.playbook.name).toBe(first);
+  });
+
+  it("reports the control before anything has been dealt", () => {
+    const s = new LlmStrategy({
+      client: stubClient("hi"),
+      playbook: () => getPlaybook("decisive"),
+    });
+    expect(s.playbook.name).toBe("baseline"); // nothing resolved yet
   });
 });
 

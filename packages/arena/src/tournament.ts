@@ -9,36 +9,43 @@ import { analyzeSpeech } from "./speech.js";
 /**
  * Play prompt variants against each other and rank them.
  *
- * Every playbook sits at the *same* table, so all of them face the same games,
- * the same deals and the same opponents. Roles are dealt at random, so over
- * enough games each variant draws wolf and village in similar proportion and
- * the per-side win rates are comparable.
+ * Assignment is BY TEAM, mirrored. In one set the wolves all run playbook A and
+ * the village all runs B; in the mirror set they swap. A seat picks its
+ * playbook from its own role, which it legitimately knows, so nothing leaks.
  *
- * The caveat worth stating up front: teammates share an outcome. A seat can win
- * because a different playbook on its team played well, which dilutes the
- * measured difference rather than inventing one — so this understates gaps, and
- * needs more games than it feels like it should.
+ * The alternative — alternating playbooks by seat — sounds fairer but mostly
+ * measures nothing: with two wolves among seven mixed seats, 57% of games hand
+ * you a mixed pack whose members win or lose together, so the majority of the
+ * sample cannot tell the variants apart. Splitting by team costs twice the
+ * games and makes every one of them discriminate.
+ *
+ * Because each variant ends up with wolf seats from one set and village seats
+ * from the other, the ordinary per-side win rates answer the question directly:
+ * A-as-wolves against B-as-wolves, and the same for the village.
  */
 
 const USAGE = `
-Play prompt variants against each other.
+Play prompt variants against each other, assigned by team and mirrored.
 
   npm run arena:tournament -- [options]
 
 Options
-  --playbooks A,B[,C]   variants to seat (default "baseline,specialist")
-  --games N             games to play (default 10)
+  --playbooks A,B[,C]   variants to compare (default "baseline,specialist")
+  --games N             games per side, per pairing (default 10)
   --players N           seats per game (default 7)
   --model ID            model for every seat (default claude-haiku-4-5)
   --discussion N        times round the table before each vote (default 2)
   --out FILE            append the anonymous records here as JSONL
+
+Every unordered pair is played twice: once with the first variant on the wolf
+team, once with it in the village. Total games = pairs x 2 x --games.
 
 Known playbooks: ${Object.keys(PLAYBOOKS)
   .map((k) => `${k} — ${PLAYBOOKS[k].about}`)
   .join("\n                 ")}
 
 Example
-  npm run arena:tournament -- --playbooks baseline,specialist --games 20
+  npm run arena:tournament -- --playbooks baseline,specialist --games 12
 `;
 
 async function main() {
@@ -53,37 +60,58 @@ async function main() {
   for (const name of names) getPlaybook(name); // fail before spending anything
 
   const players = Number(args.players ?? 7);
-  const games = Number(args.games ?? 10);
+  const perSide = Number(args.games ?? 10);
   const model = args.model ? String(args.model) : undefined;
-  if (players < names.length) throw new Error("Need at least one seat per playbook.");
 
-  // Deal seats round-robin so every variant gets a near-equal share of the table.
-  const seating = Array.from({ length: players }, (_, i) => names[i % names.length]);
+  // Every unordered pair, each played from both sides.
+  const pairings: [string, string][] = [];
+  for (let i = 0; i < names.length; i++)
+    for (let j = i + 1; j < names.length; j++) {
+      pairings.push([names[i], names[j]]);
+      pairings.push([names[j], names[i]]);
+    }
+  const total = pairings.length * perSide;
+
   const config: GameConfig = recommendedConfig(players);
   const outFile = args.out ? String(args.out) : null;
   if (outFile) await ensureDir(outFile);
 
   console.log(`Tournament: ${names.join(" vs ")}`);
-  console.log(`${games} games of ${players} — seats: ${seating.join(", ")}`);
-  console.log("Every variant plays the same games, so the comparison is paired.\n");
+  console.log(`${total} games of ${players} — ${perSide} per side, per pairing:`);
+  for (const [wolves, village] of pairings)
+    console.log(`  wolves ${wolves} vs village ${village}`);
+  console.log("");
 
   const arena = await Arena.open();
   const played: { record: GameRecord; transcript: readonly Said[] }[] = [];
   const seats: LlmStrategy[] = [];
+  let done = 0;
   try {
-    for (let i = 0; i < games; i++) {
-      const strategies = seating.map(
-        (name) => new LlmStrategy({ model, playbook: getPlaybook(name) })
-      );
-      seats.push(...strategies);
-      const result = await arena.play({
-        strategies,
-        config,
-        discussionRounds: Number(args.discussion ?? 2),
-      });
-      played.push(result);
-      if (outFile) await appendFile(outFile, JSON.stringify(result.record) + "\n");
-      console.log(`game ${i + 1}/${games}: ${result.record.winner} won`);
+    for (const [wolfSide, villageSide] of pairings) {
+      for (let i = 0; i < perSide; i++) {
+        // Each seat asks only about its own role, so this assigns by team
+        // without any seat learning anything about another.
+        const strategies = Array.from(
+          { length: players },
+          () =>
+            new LlmStrategy({
+              model,
+              playbook: (team) => getPlaybook(team === "werewolf" ? wolfSide : villageSide),
+            })
+        );
+        seats.push(...strategies);
+        const result = await arena.play({
+          strategies,
+          config,
+          discussionRounds: Number(args.discussion ?? 2),
+        });
+        played.push(result);
+        if (outFile) await appendFile(outFile, JSON.stringify(result.record) + "\n");
+        done++;
+        console.log(
+          `game ${done}/${total} (wolves ${wolfSide}): ${result.record.winner} won`
+        );
+      }
     }
   } finally {
     await arena.close();

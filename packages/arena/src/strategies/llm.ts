@@ -52,9 +52,16 @@ export interface LlmOptions {
   /** Label used in the results table. Defaults to `llm:<model>`. */
   name?: string;
   client?: Anthropic;
-  /** Which prompt variant this seat plays. Defaults to the baseline control. */
-  playbook?: Playbook;
+  /**
+   * Which prompt variant this seat plays. Either a fixed playbook, or a choice
+   * made from the seat's OWN role once it is dealt — which is how a tournament
+   * assigns playbooks by team without anyone learning anyone else's role.
+   */
+  playbook?: Playbook | PlaybookChoice;
 }
+
+/** Picks a playbook from the seat's own role. Never sees another seat's. */
+export type PlaybookChoice = (team: string, roleId: string | null) => Playbook;
 
 /** How many messages of backchat to hand the model. Keeps input tokens bounded. */
 const CHAT_WINDOW = 30;
@@ -86,11 +93,13 @@ How it works:
  * killed by one hiccup.
  */
 export class LlmStrategy implements Strategy {
-  readonly name: string;
   /** The model this seat is running, exposed so a run can price itself. */
   readonly modelId: string;
   private readonly client: Anthropic;
-  readonly playbook: Playbook;
+  private readonly choose_playbook: Playbook | PlaybookChoice;
+  private resolved: Playbook | null = null;
+  private readonly label: string | undefined;
+  private readonly pinnedModel: boolean;
   private readonly fallback = new RandomStrategy();
   /** Rough running totals, reported at the end of a run. */
   calls = 0;
@@ -102,18 +111,40 @@ export class LlmStrategy implements Strategy {
 
   constructor(opts: LlmOptions = {}) {
     this.modelId = opts.model ?? DEFAULT_MODEL;
-    this.playbook = opts.playbook ?? BASELINE;
+    this.choose_playbook = opts.playbook ?? BASELINE;
     this.client = opts.client ?? new Anthropic();
-    // The label carries the playbook, since that is usually what a run varies;
-    // the model only appears when it was pinned explicitly.
-    this.name =
-      opts.name ?? `llm:${this.playbook.name}${opts.model ? `@${opts.model}` : ""}`;
+    this.label = opts.name;
+    this.pinnedModel = !!opts.model;
+  }
+
+  /**
+   * The playbook actually in force. When the choice depends on the role, it is
+   * fixed the first time this seat sees its own view and never changes after —
+   * so the results table labels the seat by what it really played.
+   */
+  get playbook(): Playbook {
+    if (this.resolved) return this.resolved;
+    return typeof this.choose_playbook === "function" ? BASELINE : this.choose_playbook;
+  }
+
+  /**
+   * The label used in results. The playbook carries the variation a run is
+   * testing; the model only appears when it was pinned explicitly.
+   */
+  get name(): string {
+    return this.label ?? `llm:${this.playbook.name}${this.pinnedModel ? `@${this.modelId}` : ""}`;
   }
 
   // -- prompt building ------------------------------------------------------
 
   private system(view: PlayerView): string {
     const role = view.you.roleId ? ROLES[view.you.roleId] : null;
+    // Settle the playbook now that this seat knows what it is.
+    if (!this.resolved)
+      this.resolved =
+        typeof this.choose_playbook === "function"
+          ? this.choose_playbook(role?.team ?? "village", view.you.roleId)
+          : this.choose_playbook;
     const mates = view.packmates.map((id) => nameOf(view, id));
     const lines = [
       RULES,
