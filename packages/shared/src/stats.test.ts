@@ -147,6 +147,21 @@ describe("stats", () => {
     expect(s.raises).toBe(1);
   });
 
+  it("separates days that achieved something from days that deadlocked", () => {
+    const s = aggregate([
+      record({
+        events: [
+          { type: "lynch", round: 1, seat: 0 },
+          { type: "voteTie", round: 2 },
+          { type: "noDeath", round: 3, detail: "lynch" },
+          { type: "noDeath", round: 3, detail: "wolves" }, // a quiet night, not a day
+        ],
+      }),
+      record({ events: [{ type: "lynch", round: 1, seat: 1 }] }),
+    ]);
+    expect(s.days).toEqual({ lynched: 2, tied: 2 });
+  });
+
   it("counts table sizes, averages and which house rules were on", () => {
     const s = aggregate([
       record(),

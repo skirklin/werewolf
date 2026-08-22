@@ -60,6 +60,12 @@ export interface Stats {
   avgRounds: number;
   /** How players left the game: eaten, lynched, shot, poisoned. */
   deaths: Record<string, number>;
+  /**
+   * What the town's votes actually achieved. A day that ends `tied` is a day
+   * the village spent and got nothing for — the clearest measure of whether a
+   * table can agree on anything.
+   */
+  days: { lynched: number; tied: number };
   /** Nights a doctor/witch save actually cancelled a kill. */
   saves: number;
   /** Dead players dragged back by a Medium. */
@@ -102,6 +108,7 @@ export function aggregate(records: readonly GameRecord[]): Stats {
   const teamWins = new Map<Team, number>(TEAMS.map((t) => [t, 0]));
   const byPlayerCount: Record<string, number> = {};
   const deaths: Record<string, number> = {};
+  const days = { lynched: 0, tied: 0 };
   const roles = new Map<string, { dealt: number; games: number; wins: number; survived: number }>();
   const options = { peacefulFirstNight: 0, revealRoleOnDeath: 0, detailedSummary: 0 };
   let players = 0;
@@ -157,6 +164,10 @@ export function aggregate(records: readonly GameRecord[]): Stats {
       if (cause) deaths[cause] = (deaths[cause] ?? 0) + 1;
       if (event.type === "saved") saves++;
       if (event.type === "raised") raises++;
+      if (event.type === "lynch") days.lynched++;
+      // A tie and a table that all abstained come out the same way: no lynch.
+      if (event.type === "voteTie" || (event.type === "noDeath" && event.detail === "lynch"))
+        days.tied++;
     }
   }
 
@@ -195,6 +206,7 @@ export function aggregate(records: readonly GameRecord[]): Stats {
     avgPlayers: ratio(players, games),
     avgRounds: ratio(rounds, games),
     deaths,
+    days,
     saves,
     raises,
     options,

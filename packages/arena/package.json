@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "arena": "tsx src/cli.ts",
-    "test": "vitest run"
+    "test": "vitest run",
+    "analyze": "tsx src/analyze.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.120.0",

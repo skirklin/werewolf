@@ -10,6 +10,39 @@ import { RandomStrategy } from "./random.js";
  */
 export const DEFAULT_MODEL = "claude-haiku-4-5";
 
+/** Published $/MTok, for the run's cost estimate. Unknown models just report tokens. */
+const PRICES: Record<string, { input: number; output: number }> = {
+  "claude-haiku-4-5": { input: 1, output: 5 },
+  "claude-sonnet-5": { input: 3, output: 15 },
+  "claude-opus-5": { input: 5, output: 25 },
+};
+
+/** Running totals for a whole run, summed across every seat and game. */
+export interface Spend {
+  calls: number;
+  inputTokens: number;
+  outputTokens: number;
+  failures: number;
+  /** Null when any model in the run has no published price here. */
+  dollars: number | null;
+}
+
+export function totalSpend(strategies: readonly LlmStrategy[]): Spend {
+  const spend: Spend = { calls: 0, inputTokens: 0, outputTokens: 0, failures: 0, dollars: 0 };
+  for (const s of strategies) {
+    spend.calls += s.calls;
+    spend.inputTokens += s.inputTokens;
+    spend.outputTokens += s.outputTokens;
+    spend.failures += s.failures;
+    const price = PRICES[s.modelId];
+    if (!price || spend.dollars === null) spend.dollars = null;
+    else
+      spend.dollars +=
+        (s.inputTokens / 1e6) * price.input + (s.outputTokens / 1e6) * price.output;
+  }
+  return spend;
+}
+
 export interface LlmOptions {
   model?: string;
   /** Label used in the results table. Defaults to `llm:<model>`. */
@@ -54,7 +87,8 @@ How to play well:
  */
 export class LlmStrategy implements Strategy {
   readonly name: string;
-  private readonly model: string;
+  /** The model this seat is running, exposed so a run can price itself. */
+  readonly modelId: string;
   private readonly client: Anthropic;
   private readonly persona: string;
   private readonly fallback = new RandomStrategy();
@@ -65,8 +99,8 @@ export class LlmStrategy implements Strategy {
   failures = 0;
 
   constructor(opts: LlmOptions = {}) {
-    this.model = opts.model ?? DEFAULT_MODEL;
-    this.name = opts.name ?? `llm:${this.model}`;
+    this.modelId = opts.model ?? DEFAULT_MODEL;
+    this.name = opts.name ?? `llm:${this.modelId}`;
     this.client = opts.client ?? new Anthropic();
     this.persona = opts.persona ?? "";
   }
@@ -153,7 +187,7 @@ export class LlmStrategy implements Strategy {
 
   private async ask(view: PlayerView, prompt: string, maxTokens: number): Promise<string> {
     const response = await this.client.messages.create({
-      model: this.model,
+      model: this.modelId,
       max_tokens: maxTokens,
       // The rules and this seat's role never change during a game, so they sit
       // in a cacheable prefix ahead of the volatile situation.

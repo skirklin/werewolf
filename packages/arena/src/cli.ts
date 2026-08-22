@@ -4,6 +4,7 @@ import { aggregate, recommendedConfig, type GameConfig, type GameRecord } from "
 import { Arena } from "./match.js";
 import { report, confidenceNote } from "./report.js";
 import { makeStrategy, parseLineup, STRATEGY_HELP } from "./lineup.js";
+import { LlmStrategy, totalSpend } from "./strategies/llm.js";
 
 const USAGE = `
 Agent-vs-agent Werewolf.
@@ -52,9 +53,11 @@ async function main() {
   const arena = await Arena.open();
   const records: GameRecord[] = [];
   const transcripts: string[] = [];
+  const llmSeats: LlmStrategy[] = [];
   try {
     for (let i = 0; i < games; i++) {
       const strategies = lineup.map((spec) => makeStrategy(spec, model));
+      llmSeats.push(...strategies.filter((s): s is LlmStrategy => s instanceof LlmStrategy));
       if (!quiet) console.log(`\n─── game ${i + 1}/${games} ───`);
       const result = await arena.play({
         strategies,
@@ -73,6 +76,19 @@ async function main() {
 
   console.log(`\n\n${report(records)}${confidenceNote(aggregate(records))}`);
 
+  if (llmSeats.length) {
+    const spend = totalSpend(llmSeats);
+    const cost = spend.dollars === null ? "unpriced model" : `~$${spend.dollars.toFixed(2)}`;
+    const perGame =
+      spend.dollars !== null && records.length
+        ? ` · $${(spend.dollars / records.length).toFixed(3)}/game`
+        : "";
+    console.log(
+      `\nAPI: ${spend.calls} calls · ${fmt(spend.inputTokens)} in / ${fmt(spend.outputTokens)} out · ${cost}${perGame}` +
+        (spend.failures ? `\n${spend.failures} calls fell back to a random move.` : "")
+    );
+  }
+
   if (args.out) {
     await ensureDir(String(args.out));
     await appendFile(String(args.out), records.map((r) => JSON.stringify(r)).join("\n") + "\n");
@@ -84,6 +100,8 @@ async function main() {
     console.log(`Transcript written to ${args.transcript}`);
   }
 }
+
+const fmt = (n: number) => (n >= 1000 ? `${Math.round(n / 1000)}k` : String(n));
 
 async function ensureDir(file: string) {
   const dir = dirname(file);

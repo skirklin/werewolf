@@ -44,6 +44,15 @@ export function report(records: readonly GameRecord[]): string {
     );
   }
 
+  const days = stats.days.lynched + stats.days.tied;
+  if (days) {
+    lines.push("");
+    lines.push(
+      `Days: ${stats.days.lynched} ended in a lynch, ${stats.days.tied} in deadlock ` +
+        `(${pct(stats.days.tied / days)} of days wasted)`
+    );
+  }
+
   const deaths = Object.entries(stats.deaths);
   if (deaths.length) {
     lines.push("");
