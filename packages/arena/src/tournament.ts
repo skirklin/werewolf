@@ -35,6 +35,7 @@ Options
   --players N           seats per game (default 7)
   --model ID            model for every seat (default claude-haiku-4-5)
   --discussion N        times round the table before each vote (default 2)
+  --lethal              let the wolves kill on night one (default: they do not)
   --out FILE            append the anonymous records here as JSONL
   --transcript FILE     append everything said here, tagged with the playbook
 
@@ -73,14 +74,23 @@ async function main() {
     }
   const total = pairings.length * perSide;
 
-  const config: GameConfig = recommendedConfig(players);
+  // Peaceful first night by default: with a lethal one, a seven-player village
+  // must find a wolf on day one AND day two or lose, which floors the win rate
+  // near zero and leaves prompt differences nowhere to show up.
+  const config: GameConfig = {
+    ...recommendedConfig(players),
+    peacefulFirstNight: !args.lethal,
+  };
   const outFile = args.out ? String(args.out) : null;
   const transcriptFile = args.transcript ? String(args.transcript) : null;
   if (outFile) await ensureDir(outFile);
   if (transcriptFile) await ensureDir(transcriptFile);
 
   console.log(`Tournament: ${names.join(" vs ")}`);
-  console.log(`${total} games of ${players} — ${perSide} per side, per pairing:`);
+  console.log(
+    `${total} games of ${players}${config.peacefulFirstNight ? ", peaceful first night" : ""}` +
+      ` — ${perSide} per side, per pairing:`
+  );
   for (const [wolves, village] of pairings)
     console.log(`  wolves ${wolves} vs village ${village}`);
   console.log("");
@@ -154,8 +164,10 @@ function table(played: { record: GameRecord; transcript: readonly Said[] }[]): s
       ` (${pct(stats.days.tied / Math.max(stats.days.lynched + stats.days.tied, 1))} wasted)`
   );
   lines.push("");
+  // Names carry the model when it was pinned, so size the column to fit.
+  const width = Math.max(8, ...stats.strategies.map((s) => s.name.length));
   lines.push(
-    `  ${"playbook".padEnd(22)} ${"seats".padStart(6)} ${"win".padStart(5)} ${"village".padStart(8)} ${"wolf".padStart(6)} ${"bluffs".padStart(7)}`
+    `  ${"playbook".padEnd(width)} ${"seats".padStart(6)} ${"win".padStart(5)} ${"village".padStart(8)} ${"wolf".padStart(6)} ${"bluffs".padStart(7)}`
   );
   for (const s of stats.strategies) {
     const said = speech.get(s.name);
@@ -163,7 +175,7 @@ function table(played: { record: GameRecord; transcript: readonly Said[] }[]): s
     // visions, so claiming one is a lie by construction.
     const bluffRate = said && said.wolfLines ? pct(said.bluffs / said.wolfLines) : "–";
     lines.push(
-      `  ${s.name.padEnd(22)} ${String(s.seats).padStart(6)} ${pct(s.winRate).padStart(5)} ` +
+      `  ${s.name.padEnd(width)} ${String(s.seats).padStart(6)} ${pct(s.winRate).padStart(5)} ` +
         `${(s.asVillage ? pct(s.villageWinRate) : "–").padStart(8)} ` +
         `${(s.asWerewolf ? pct(s.werewolfWinRate) : "–").padStart(6)} ${bluffRate.padStart(7)}`
     );
