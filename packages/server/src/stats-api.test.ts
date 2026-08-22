@@ -35,9 +35,9 @@ function record(patch: Partial<GameRecord> = {}): GameRecord {
       peacefulFirstNight: true,
     },
     seats: [
-      { dealt: "werewolf", final: "werewolf", disguise: null, survived: true, won: true },
-      { dealt: "seer", final: "seer", disguise: null, survived: false, won: false },
-      { dealt: "villager", final: "villager", disguise: null, survived: true, won: false },
+      { dealt: "werewolf", final: "werewolf", disguise: null, survived: true, won: true, agent: null, said: 0 },
+      { dealt: "seer", final: "seer", disguise: null, survived: false, won: false, agent: null, said: 0 },
+      { dealt: "villager", final: "villager", disguise: null, survived: true, won: false, agent: null, said: 0 },
     ],
     events: [{ type: "death", round: 1, seat: 1, detail: "wolves" }],
     ...patch,
@@ -71,7 +71,7 @@ describe("stats API", () => {
     const a = await freshApp();
     await post(a, record({ mode: "online" }));
     const stats = (await a.inject({ method: "GET", url: "/api/stats" })).json<Stats>();
-    expect(stats.byMode).toEqual({ online: 0, local: 1 });
+    expect(stats.byMode).toEqual({ online: 0, local: 1, agent: 0 });
   });
 
   it("stamps its own finish time and ignores the client's", async () => {

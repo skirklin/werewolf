@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { ROLES, type PlayerView, type ClientMessage, type PublicPlayer } from "@werewolf/shared";
+import { useEffect, useRef, useState } from "react";
+import { ROLES, MAX_CHAT_TEXT, type PlayerView, type ClientMessage, type PublicPlayer } from "@werewolf/shared";
 import { PlayerChip, LogFeed, roleEmoji } from "./ui.js";
 
 type Send = (msg: ClientMessage) => void;
@@ -272,6 +272,7 @@ export function DayBoard({
       </div>
       <LogFeed log={view.log} players={view.players} />
       <SilencedNote view={view} />
+      <ChatPanel view={view} send={send} />
       <PlayerList players={view.players} youId={view.you.id} />
       {isHost && (
         <button className="primary full lg" onClick={() => send({ type: "startVote" })}>
@@ -279,6 +280,60 @@ export function DayBoard({
         </button>
       )}
       {!isHost && <p className="muted center small">Waiting for the host to round everyone up…</p>}
+    </div>
+  );
+}
+
+/**
+ * The town square. Everything said is public and daytime-only, so this panel
+ * can never leak a role its speaker didn't give away. The dead get to read it
+ * but not add to it.
+ */
+export function ChatPanel({ view, send }: { view: PlayerView; send: Send }) {
+  const [draft, setDraft] = useState("");
+  const feed = useRef<HTMLDivElement>(null);
+  const nameOf = (id: string) => view.players.find((p) => p.id === id)?.name ?? "someone";
+
+  // Stick to the newest message as talk comes in.
+  useEffect(() => {
+    if (feed.current) feed.current.scrollTop = feed.current.scrollHeight;
+  }, [view.chat.length]);
+
+  const say = () => {
+    const text = draft.trim();
+    if (!text) return;
+    send({ type: "say", text });
+    setDraft("");
+  };
+
+  return (
+    <div className="card tight stack">
+      <b>💬 Town square</b>
+      <div className="chat" ref={feed}>
+        {view.chat.length === 0 ? (
+          <p className="muted small center">Nobody's said anything yet.</p>
+        ) : (
+          view.chat.map((m, i) => (
+            <div key={i} className="said">
+              <b>{nameOf(m.playerId)}{m.playerId === view.you.id ? " (you)" : ""}</b> {m.text}
+            </div>
+          ))
+        )}
+      </div>
+      {view.you.alive ? (
+        <div className="spread" style={{ gap: 8 }}>
+          <input
+            value={draft}
+            placeholder="Make your case…"
+            maxLength={MAX_CHAT_TEXT}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && say()}
+          />
+          <button className="primary" disabled={!draft.trim()} onClick={say}>Say</button>
+        </div>
+      ) : (
+        <p className="muted small center">The dead don't get a say.</p>
+      )}
     </div>
   );
 }
@@ -313,6 +368,7 @@ export function VoteAction({ view, send }: { view: PlayerView; send: Send }) {
           </button>
         </>
       )}
+      <ChatPanel view={view} send={send} />
     </div>
   );
 }

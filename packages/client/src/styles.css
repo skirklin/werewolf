@@ -190,3 +190,8 @@ label.field { display: flex; flex-direction: column; gap: 6px; }
 /* ---- Stats bars ---- */
 .bar { height: 8px; border-radius: 999px; background: var(--bg-2); overflow: hidden; }
 .bar .fill { height: 100%; border-radius: 999px; min-width: 2px; transition: width 0.3s ease; }
+
+/* ---- Town square chat ---- */
+.chat { display: flex; flex-direction: column; gap: 6px; max-height: 240px; overflow-y: auto; }
+.chat .said { font-size: 0.9rem; padding: 6px 10px; background: var(--bg-2); border-radius: 8px; overflow-wrap: anywhere; }
+.chat .said b { color: var(--accent-2); }

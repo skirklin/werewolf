@@ -158,6 +158,13 @@ export interface NightState {
   steps: NightStep[];
 }
 
+/** One thing somebody said during a day. Public: the whole town hears it. */
+export interface ChatMessage {
+  round: number;
+  playerId: PlayerId;
+  text: string;
+}
+
 export type LogEntry =
   | { type: "gameStart"; round: number }
   | { type: "night"; round: number }
@@ -198,6 +205,8 @@ export interface GameState {
    * record of the original deal — used for post-game stats.
    */
   dealtRoles: string[];
+  /** Everything said out loud this game, oldest first. */
+  chat: ChatMessage[];
   /** voterId -> targetId, or null for an explicit skip. */
   votes: Record<PlayerId, PlayerId | null>;
   /** Per-Witch remaining potions (heal/poison), each usable once all game. */

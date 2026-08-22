@@ -7,7 +7,14 @@ import type {
   LogEntry,
   InspectResult,
   DetectionResult,
+  ChatMessage,
 } from "./types.js";
+
+/**
+ * How much of the transcript rides along in every view. The whole thing is
+ * public, but it's broadcast on each action, so only the recent tail is sent.
+ */
+const CHAT_IN_VIEW = 100;
 
 /**
  * The log as safe to show anyone. In "discreet" mode a protected kill is
@@ -90,6 +97,8 @@ export interface PlayerView {
   silencedIds: PlayerId[];
   /** Your current vote this round (undefined if not cast). */
   myVote?: PlayerId | null;
+  /** The town's recent talk (public, oldest first). Capped for payload size. */
+  chat: ChatMessage[];
   /** Live vote tally during the day vote (public). */
   voteTally: Record<PlayerId, number>;
   votesRemaining: number;
@@ -252,6 +261,7 @@ export function projectView(state: GameState, viewerId: PlayerId): PlayerView {
     // player shouldn't linger on the day board).
     silencedIds: state.silenced.filter((id) => playerById(state, id)?.alive),
     myVote: viewerId in state.votes ? state.votes[viewerId] : undefined,
+    chat: state.chat.slice(-CHAT_IN_VIEW),
     voteTally,
     votesRemaining,
     log: publicLog(state),

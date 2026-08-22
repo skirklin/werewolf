@@ -39,7 +39,8 @@ export type ClientMessage =
   | { type: "shoot"; targetId: PlayerId }
   | { type: "skipShot" }
   | { type: "kick"; playerId: PlayerId }
-  | { type: "playAgain" };
+  | { type: "playAgain" }
+  | { type: "say"; text: string };
 
 /** Messages the server sends to a client. */
 export type ServerMessage =

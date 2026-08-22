@@ -132,7 +132,12 @@ export type Action =
   | { type: "resolveVote" }
   | { type: "shoot"; hunterId: PlayerId; targetId: PlayerId }
   | { type: "skipShot" }
-  | { type: "playAgain" };
+  | { type: "playAgain" }
+  | { type: "say"; speakerId: PlayerId; text: string };
+
+/** Longest single message, and the most a game will keep before it stops listening. */
+export const MAX_CHAT_TEXT = 300;
+export const MAX_CHAT_MESSAGES = 300;
 
 export class EngineError extends Error {}
 
@@ -176,7 +181,30 @@ export function reduce(state: GameState, action: Action): GameState {
       return skipShot(state);
     case "playAgain":
       return playAgain(state);
+    case "say":
+      return say(state, action.speakerId, action.text);
   }
+}
+
+/**
+ * Say something to the town. Daytime only and living players only — the night
+ * is silent and the dead stay out of it — and always public, so nothing here
+ * can leak a role the speaker didn't choose to give away.
+ */
+function say(state: GameState, speakerId: PlayerId, text: string): GameState {
+  assert(
+    state.phase === "dayDiscussion" || state.phase === "dayVote",
+    "The town only talks by day."
+  );
+  const speaker = playerById(state, speakerId);
+  assert(speaker?.alive, "The dead don't get a say.");
+  const clean = text.trim().slice(0, MAX_CHAT_TEXT);
+  assert(clean.length > 0, "Say something first.");
+  assert(state.chat.length < MAX_CHAT_MESSAGES, "This town has talked itself hoarse.");
+  return {
+    ...state,
+    chat: [...state.chat, { round: state.round, playerId: speakerId, text: clean }],
+  };
 }
 
 /**
@@ -857,6 +885,7 @@ export function createGame(code: string, seed: number): GameState {
     drunkDisguise: {},
     lastProtect: {},
     dealtRoles: [],
+    chat: [],
     votes: {},
     witchPotions: {},
     pendingShots: [],

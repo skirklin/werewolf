@@ -22,6 +22,13 @@ export interface Client {
   send(msg: ServerMessage): void;
 }
 
+/**
+ * Notified as each game ends. `playerIds` is in the same order as the record's
+ * seats, so a caller that already knows who sat where (the arena) can attribute
+ * seats without the record itself ever carrying an identity.
+ */
+export type GameFinishedHook = (record: GameRecord, playerIds: PlayerId[]) => void;
+
 // Letters only (no ambiguous I/L/O) so nobody has to hop between the letter and
 // number keyboards on a phone to type a code.
 const CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ";
@@ -42,8 +49,8 @@ export class Room {
   /** When the room last became empty (for sweeping), or null while occupied. */
   emptySince: number | null = null;
 
-  /** @param onFinish called once with the anonymous record of each finished game. */
-  constructor(code: string, private readonly onFinish?: (record: GameRecord) => void) {
+  /** @param onFinish called once per finished game, with the ids in seat order. */
+  constructor(code: string, private readonly onFinish?: GameFinishedHook) {
     this.state = createGame(code, Math.floor(Math.random() * 2 ** 31));
   }
 
@@ -164,6 +171,9 @@ export class Room {
       case "castVote":
         this.apply({ type: "castVote", voterId: playerId, targetId: msg.targetId });
         break;
+      case "say":
+        this.apply({ type: "say", speakerId: playerId, text: msg.text });
+        break;
       case "shoot":
         this.apply({ type: "shoot", hunterId: playerId, targetId: msg.targetId });
         break;
@@ -214,7 +224,9 @@ export class Room {
     if (!wasOver && this.state.phase === "gameOver") {
       try {
         const record = toGameRecord(this.state, "online");
-        if (record) this.onFinish?.(record);
+        // The ids ride alongside, never inside: a harness that already knows
+        // who sat where can label the seats, while the record stays anonymous.
+        if (record) this.onFinish?.(record, this.state.players.map((p) => p.id));
       } catch (err) {
         console.error("Could not record a finished game:", err);
       }
@@ -236,8 +248,8 @@ export class Room {
 export class RoomManager {
   private rooms = new Map<string, Room>();
 
-  /** @param onFinish called once with the anonymous record of each finished game. */
-  constructor(private readonly onFinish?: (record: GameRecord) => void) {}
+  /** @param onFinish called once per finished game, with the ids in seat order. */
+  constructor(private readonly onFinish?: GameFinishedHook) {}
 
   create(): Room {
     let code = randomCode();

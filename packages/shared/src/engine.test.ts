@@ -8,6 +8,8 @@ import {
   allNightStepsDone,
   allVotesIn,
   validNightTargets,
+  MAX_CHAT_TEXT,
+  MAX_CHAT_MESSAGES,
 } from "./engine.js";
 import { projectView, publicPlayers } from "./views.js";
 import { recommendedConfig, validateConfig, dealRoles, werewolfCountFor, previewComposition } from "./setup.js";
@@ -585,5 +587,63 @@ describe("rematch", () => {
 
   it("refuses to restart a game that is still running", () => {
     expect(() => reduce(gameWith(["werewolf", "villager", "villager"]), { type: "playAgain" })).toThrow();
+  });
+});
+
+describe("the town square", () => {
+  /** A game sitting in day discussion, with p1 already eaten. */
+  function daytime(): GameState {
+    let s = gameWith(["werewolf", "villager", "villager", "villager"]);
+    s = reduce(s, { type: "startNight" });
+    s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p1" });
+    return reduce(s, { type: "endNight" });
+  }
+
+  it("carries what was said to everyone, tagged with the round", () => {
+    let s = daytime();
+    s = reduce(s, { type: "say", speakerId: "p2", text: "p0 has been very quiet." });
+    expect(s.chat).toEqual([{ round: 1, playerId: "p2", text: "p0 has been very quiet." }]);
+    // Public: every seat sees it, including the wolf who was accused.
+    for (const id of ["p0", "p2", "p3"])
+      expect(projectView(s, id).chat.at(-1)!.text).toBe("p0 has been very quiet.");
+  });
+
+  it("keeps the dead and the night quiet", () => {
+    const day = daytime();
+    expect(() => reduce(day, { type: "say", speakerId: "p1", text: "I was framed!" })).toThrow(
+      /dead/i
+    );
+    const night = reduce(gameWith(["werewolf", "villager", "villager"]), { type: "startNight" });
+    expect(() => reduce(night, { type: "say", speakerId: "p1", text: "psst" })).toThrow(/day/i);
+  });
+
+  it("still lets the town argue while the vote is open", () => {
+    let s = reduce(daytime(), { type: "startVote" });
+    s = reduce(s, { type: "say", speakerId: "p2", text: "Last chance to change your mind." });
+    expect(s.chat).toHaveLength(1);
+  });
+
+  it("tidies up what it stores, and stops listening eventually", () => {
+    let s = daytime();
+    s = reduce(s, { type: "say", speakerId: "p2", text: `  spaced out  ` });
+    expect(s.chat[0].text).toBe("spaced out");
+    expect(() => reduce(s, { type: "say", speakerId: "p2", text: "   " })).toThrow(/say something/i);
+
+    s = reduce(s, { type: "say", speakerId: "p2", text: "x".repeat(MAX_CHAT_TEXT + 50) });
+    expect(s.chat[1].text).toHaveLength(MAX_CHAT_TEXT);
+
+    const flooded = { ...s, chat: Array(MAX_CHAT_MESSAGES).fill(s.chat[0]) };
+    expect(() => reduce(flooded, { type: "say", speakerId: "p2", text: "one more" })).toThrow(
+      /hoarse/i
+    );
+  });
+
+  it("starts every game with an empty room", () => {
+    expect(createGame("TEST", 1).chat).toEqual([]);
+    const rematch = reduce(
+      { ...gameWith(["werewolf", "villager", "villager"]), phase: "gameOver", winner: "village", chat: [{ round: 1, playerId: "p0", text: "gg" }] },
+      { type: "playAgain" }
+    );
+    expect(rematch.chat).toEqual([]);
   });
 });

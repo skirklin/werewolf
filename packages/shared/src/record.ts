@@ -10,10 +10,13 @@ import { ROLES, getRole } from "./roles.js";
  * What's left is the shape of the game — who was dealt what, who survived, who
  * won, and the beat-by-beat timeline.
  */
-export const GAME_RECORD_VERSION = 1;
+export const GAME_RECORD_VERSION = 2;
 
-/** Which client produced the record. */
-export type GameMode = "online" | "local";
+/**
+ * Where the game came from. "online" and "local" are people playing; "agent" is
+ * the arena, kept separate so bot games never muddy the house numbers.
+ */
+export type GameMode = "online" | "local" | "agent";
 
 /** One seat's story, with the person behind it removed. */
 export interface SeatRecord {
@@ -25,6 +28,13 @@ export interface SeatRecord {
   disguise: string | null;
   survived: boolean;
   won: boolean;
+  /**
+   * The strategy that played this seat, for arena games. Null for people —
+   * naming a human player is exactly what this record exists not to do.
+   */
+  agent: string | null;
+  /** How many times this seat spoke. The words themselves are never kept. */
+  said: number;
 }
 
 /**
@@ -66,7 +76,9 @@ export interface GameRecord {
 const MAX_PLAYERS = 30;
 const MAX_ROUNDS = 200;
 const MAX_EVENTS = 2000;
+const MAX_AGENT_NAME = 40;
 const TEAMS: Team[] = ["village", "werewolf", "solo"];
+const MODES: GameMode[] = ["online", "local", "agent"];
 
 /**
  * Build the record for a finished game. Returns null while a game is still
@@ -76,6 +88,9 @@ export function toGameRecord(state: GameState, mode: GameMode): GameRecord | nul
   if (state.phase !== "gameOver" || !state.winner) return null;
   const winner = state.winner;
   const seatOf = new Map<PlayerId, number>(state.players.map((p, i) => [p.id, i]));
+
+  const said = new Map<PlayerId, number>();
+  for (const msg of state.chat) said.set(msg.playerId, (said.get(msg.playerId) ?? 0) + 1);
 
   const seats: SeatRecord[] = state.players.map((p, i) => {
     const final = p.roleId ?? "villager";
@@ -88,6 +103,8 @@ export function toGameRecord(state: GameState, mode: GameMode): GameRecord | nul
         winner === "solo"
           ? p.id === state.soloWinnerId
           : getRole(final).team === winner,
+      agent: null, // the arena labels its own seats after the fact
+      said: said.get(p.id) ?? 0,
     };
   });
 
@@ -134,8 +151,9 @@ function toEvent(entry: LogEntry, seatOf: Map<PlayerId, number>): RecordEvent {
  */
 export function parseGameRecord(raw: unknown): GameRecord | null {
   if (!isObject(raw)) return null;
-  if (raw.v !== GAME_RECORD_VERSION) return null;
-  if (raw.mode !== "online" && raw.mode !== "local") return null;
+  // v1 predates strategy labels and speech counts; those seats read as blank.
+  if (raw.v !== 1 && raw.v !== GAME_RECORD_VERSION) return null;
+  if (!MODES.includes(raw.mode as GameMode)) return null;
 
   const playerCount = asInt(raw.playerCount, 3, MAX_PLAYERS);
   const rounds = asInt(raw.rounds, 0, MAX_ROUNDS);
@@ -153,12 +171,19 @@ export function parseGameRecord(raw: unknown): GameRecord | null {
     if (!isRoleId(s.dealt) || !isRoleId(s.final)) return null;
     if (s.disguise !== null && !isRoleId(s.disguise)) return null;
     if (typeof s.survived !== "boolean" || typeof s.won !== "boolean") return null;
+    if (s.agent !== undefined && s.agent !== null) {
+      if (typeof s.agent !== "string" || s.agent.length > MAX_AGENT_NAME) return null;
+    }
+    const spoke = s.said === undefined ? 0 : asInt(s.said, 0, MAX_EVENTS);
+    if (spoke === null) return null;
     seats.push({
       dealt: s.dealt,
       final: s.final,
       disguise: s.disguise as string | null,
       survived: s.survived,
       won: s.won,
+      agent: (s.agent as string | null) ?? null,
+      said: spoke,
     });
   }
 
@@ -185,7 +210,7 @@ export function parseGameRecord(raw: unknown): GameRecord | null {
   return {
     v: GAME_RECORD_VERSION,
     finishedAt: typeof raw.finishedAt === "string" ? raw.finishedAt : "",
-    mode: raw.mode,
+    mode: raw.mode as GameMode,
     playerCount,
     rounds,
     winner: raw.winner as Team,

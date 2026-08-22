@@ -98,6 +98,29 @@ describe("game records", () => {
     expect(rec.seats[1].won).toBe(true);
   });
 
+  it("counts what each seat said without keeping a word of it", () => {
+    const spoken = "I saw p0 do something strange last night";
+    const s = {
+      ...villageWin(),
+      chat: [
+        { round: 1, playerId: "uuid-secret-2", text: spoken },
+        { round: 1, playerId: "uuid-secret-2", text: "vote p0" },
+        { round: 1, playerId: "uuid-secret-3", text: "agreed" },
+      ],
+    };
+    const rec = toGameRecord(s, "agent")!;
+    expect(rec.seats.map((seat) => seat.said)).toEqual([0, 0, 2, 1]);
+    // Speech is the one thing people write themselves, so it never goes in.
+    expect(JSON.stringify(rec)).not.toContain(spoken);
+    expect(JSON.stringify(rec)).not.toContain("agreed");
+  });
+
+  it("leaves the strategy label blank for the engine to fill in later", () => {
+    const rec = toGameRecord(villageWin(), "agent")!;
+    expect(rec.mode).toBe("agent");
+    expect(rec.seats.every((seat) => seat.agent === null)).toBe(true);
+  });
+
   it("notes what a Drunk thought they were", () => {
     const s = { ...villageWin(), drunkDisguise: { "uuid-secret-2": "seer" } };
     const rec = toGameRecord(s, "online")!;
@@ -148,6 +171,29 @@ describe("game record validation", () => {
     expect(parseGameRecord({ ...rec, events: [{ type: "death", round: 1, seat: 99 }] })).toBeNull();
     expect(parseGameRecord({ ...rec, events: [{ type: "death", round: 1, detail: "x".repeat(25) }] })).toBeNull();
     expect(parseGameRecord({ ...rec, events: "lots" })).toBeNull();
+  });
+
+  it("still reads a version 1 record, filling in what it predates", () => {
+    const modern = valid();
+    const v1 = {
+      ...modern,
+      v: 1,
+      seats: modern.seats.map(({ agent, said, ...rest }) => rest),
+    };
+    const parsed = parseGameRecord(v1)!;
+    expect(parsed).not.toBeNull();
+    expect(parsed.v).toBe(GAME_RECORD_VERSION);
+    expect(parsed.seats.every((s) => s.agent === null && s.said === 0)).toBe(true);
+  });
+
+  it("refuses an over-long strategy label", () => {
+    const rec = valid();
+    expect(
+      parseGameRecord({ ...rec, seats: rec.seats.map((s) => ({ ...s, agent: "x".repeat(41) })) })
+    ).toBeNull();
+    expect(
+      parseGameRecord({ ...rec, seats: rec.seats.map((s) => ({ ...s, said: -1 })) })
+    ).toBeNull();
   });
 
   it("drops a client-supplied timestamp rather than trusting its type", () => {

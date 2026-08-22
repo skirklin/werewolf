@@ -21,13 +21,16 @@ tests, and it's yours to change.
   no client can see another player's role.
 - **`packages/client`** — React + Vite. The same engine runs in the browser for
   pass-the-device play, so the two modes can never disagree on the rules.
+- **`packages/arena`** — agent-vs-agent play over the real WebSocket protocol,
+  for measuring how strategies perform. See below.
 
 ## Play modes
 
 - **Play together** — each person on their own phone. One player creates a room,
   everyone else joins with the 4-letter code (letters only, so phone keyboards
   never have to switch to digits). When a game ends the host can deal another
-  one in place — the room, the code and the roster all stay put.
+  one in place — the room, the code and the roster all stay put. Days have a
+  town-square chat, so this works for playing apart as well as around a table.
 - **Pass the device** — one phone shared around the table, with privacy handoff
   screens. Role reveal is folded into the first night so the device only circles
   once.
@@ -58,6 +61,44 @@ Toggles that sit alongside the role setup:
   vague "quiet night" (tilts things toward the villagers).
 
 Always on: the Doctor can't shield the same patient two nights running.
+
+## Agent arena
+
+`packages/arena` lets LLM agents play each other, so you can measure what
+different strategies actually win.
+
+Each agent gets **one WebSocket connection and nothing else**. What it can see
+is the same redacted `PlayerView` a phone gets, so an agent cannot read another
+player's role — not because the harness is careful, but because the server never
+sent it. That's enforced by the same code path that protects human players, and
+there's a test that walks every view handed to every agent and asserts only its
+own role (and its packmates', if it's a wolf) was ever filled in.
+
+```bash
+npm run arena -- --games 20 --lineup random:7          # free, no API calls
+npm run arena -- --games 20 --lineup heuristic:5,random:4
+npm run arena -- --games 10 --lineup llm:4,heuristic:3  # costs money
+npm run arena -- --games 6  --lineup llm:3,llm@claude-sonnet-5:4
+```
+
+Strategies:
+
+- **`random`** — legal moves at random, never speaks. The control: any win rate
+  is measured against "what does luck alone get at this table size?".
+- **`heuristic`** — plays its own information (seer reads, its pack) but never
+  reasons about what anyone *said*. Whatever an LLM wins above this line is the
+  value of talking.
+- **`llm`** / **`llm@MODEL`** — a Claude agent per seat, defaulting to
+  `claude-haiku-4-5` because sample size is the point (a seven-player game is
+  easily fifty calls). Needs `ANTHROPIC_API_KEY`; API trouble degrades to a
+  random legal move rather than killing the run.
+
+Results print as a table — win rates per strategy, split by the side each seat
+drew, plus the usual per-role numbers. `--out FILE` appends the anonymous
+records, `--transcript FILE` saves everything that was said. Arena games are
+tagged `agent` and never mix into the house numbers; conversely the transcript
+is kept *out* of the game record, because words are the one thing players write
+themselves.
 
 ## Stats
 

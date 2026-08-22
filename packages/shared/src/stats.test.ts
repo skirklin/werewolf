@@ -2,12 +2,20 @@ import { describe, it, expect } from "vitest";
 import { GAME_RECORD_VERSION, type GameRecord, type SeatRecord } from "./record.js";
 import { aggregate } from "./stats.js";
 
-const seat = (dealt: string, won: boolean, survived: boolean): SeatRecord => ({
+const seat = (
+  dealt: string,
+  won: boolean,
+  survived: boolean,
+  agent: string | null = null,
+  said = 0
+): SeatRecord => ({
   dealt,
   final: dealt,
   disguise: null,
   survived,
   won,
+  agent,
+  said,
 });
 
 function record(patch: Partial<GameRecord> = {}): GameRecord {
@@ -77,6 +85,48 @@ describe("stats", () => {
     expect(s.roles[0].roleId).toBe("villager");
   });
 
+  it("scores each strategy separately, and by the side it played", () => {
+    const s = aggregate([
+      record({
+        mode: "agent",
+        winner: "werewolf",
+        seats: [
+          seat("werewolf", true, true, "llm", 4),
+          seat("seer", false, false, "random"),
+          seat("villager", false, false, "random"),
+          seat("villager", false, true, "llm", 2),
+        ],
+      }),
+      record({
+        mode: "agent",
+        winner: "village",
+        seats: [
+          seat("werewolf", false, false, "random"),
+          seat("seer", true, true, "llm", 6),
+          seat("villager", true, true, "llm"),
+          seat("villager", true, true, "random"),
+        ],
+      }),
+    ]);
+    const byName = Object.fromEntries(s.strategies.map((x) => [x.name, x]));
+    expect(byName.llm.seats).toBe(4);
+    expect(byName.llm.wins).toBe(3);
+    expect(byName.llm.winRate).toBeCloseTo(0.75);
+    expect(byName.llm.asWerewolf).toBe(1);
+    expect(byName.llm.werewolfWinRate).toBe(1);
+    expect(byName.llm.asVillage).toBe(3);
+    expect(byName.llm.villageWinRate).toBeCloseTo(2 / 3);
+    expect(byName.llm.saidPerSeat).toBeCloseTo(3); // 4 + 2 + 6 + 0 over four seats
+    expect(byName.random.winRate).toBeCloseTo(0.25);
+    // Best win rate leads the table.
+    expect(s.strategies[0].name).toBe("llm");
+    expect(s.byMode.agent).toBe(2);
+  });
+
+  it("leaves the strategy table empty for games people played", () => {
+    expect(aggregate([record()]).strategies).toEqual([]);
+  });
+
   it("tallies how people went out, plus saves and raises", () => {
     const s = aggregate([
       record(),
@@ -114,7 +164,7 @@ describe("stats", () => {
     expect(s.byPlayerCount).toEqual({ "4": 1, "8": 2 });
     expect(s.avgPlayers).toBeCloseTo(20 / 3);
     expect(s.avgRounds).toBeCloseTo(8 / 3);
-    expect(s.byMode).toEqual({ online: 2, local: 1 });
+    expect(s.byMode).toEqual({ online: 2, local: 1, agent: 0 });
     expect(s.options).toEqual({
       peacefulFirstNight: 1,
       revealRoleOnDeath: 1,

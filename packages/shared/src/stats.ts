@@ -1,4 +1,5 @@
 import type { Team } from "./types.js";
+import { ROLES } from "./roles.js";
 import type { GameMode, GameRecord } from "./record.js";
 
 /**
@@ -27,11 +28,32 @@ export interface RoleStats {
   survivalRate: number;
 }
 
+/** How one strategy fared, across every seat it played. */
+export interface StrategyStats {
+  name: string;
+  /** Seats this strategy played. */
+  seats: number;
+  wins: number;
+  survived: number;
+  winRate: number;
+  survivalRate: number;
+  /** Seats played on each side, so a lopsided draw is visible. */
+  asVillage: number;
+  asWerewolf: number;
+  /** Win rate on each side — where strategies actually differ. */
+  villageWinRate: number;
+  werewolfWinRate: number;
+  /** Messages spoken per seat. */
+  saidPerSeat: number;
+}
+
 export interface Stats {
   games: number;
   byMode: Record<GameMode, number>;
   teams: TeamStats[];
   roles: RoleStats[];
+  /** Only populated for arena games, where seats carry a strategy label. */
+  strategies: StrategyStats[];
   /** Games by table size, e.g. `{ "6": 12 }`. */
   byPlayerCount: Record<string, number>;
   avgPlayers: number;
@@ -60,8 +82,23 @@ const DEATH_EVENTS: Record<string, string> = {
   poisoned: "poisoned",
 };
 
+/** A blank per-strategy tally, so every counter starts defined. */
+function newStrategy() {
+  return {
+    seats: 0,
+    wins: 0,
+    survived: 0,
+    asVillage: 0,
+    asWerewolf: 0,
+    villageWins: 0,
+    werewolfWins: 0,
+    said: 0,
+  };
+}
+
 export function aggregate(records: readonly GameRecord[]): Stats {
-  const byMode: Record<GameMode, number> = { online: 0, local: 0 };
+  const byMode: Record<GameMode, number> = { online: 0, local: 0, agent: 0 };
+  const strategies = new Map<string, ReturnType<typeof newStrategy>>();
   const teamWins = new Map<Team, number>(TEAMS.map((t) => [t, 0]));
   const byPlayerCount: Record<string, number> = {};
   const deaths: Record<string, number> = {};
@@ -95,6 +132,24 @@ export function aggregate(records: readonly GameRecord[]): Stats {
         seenThisGame.add(seat.dealt);
       }
       roles.set(seat.dealt, entry);
+
+      if (!seat.agent) continue;
+      const strat = strategies.get(seat.agent) ?? newStrategy();
+      strat.seats++;
+      strat.said += seat.said;
+      if (seat.won) strat.wins++;
+      if (seat.survived) strat.survived++;
+      // Sides are judged by the role actually held at the end, which is the
+      // side the seat was playing for when the game was scored.
+      const wolfSide = ROLES[seat.final]?.team === "werewolf";
+      if (wolfSide) {
+        strat.asWerewolf++;
+        if (seat.won) strat.werewolfWins++;
+      } else {
+        strat.asVillage++;
+        if (seat.won) strat.villageWins++;
+      }
+      strategies.set(seat.agent, strat);
     }
 
     for (const event of rec.events) {
@@ -121,6 +176,21 @@ export function aggregate(records: readonly GameRecord[]): Stats {
         survivalRate: ratio(r.survived, r.dealt),
       }))
       .sort((a, b) => b.dealt - a.dealt || a.roleId.localeCompare(b.roleId)),
+    strategies: [...strategies.entries()]
+      .map(([name, s]) => ({
+        name,
+        seats: s.seats,
+        wins: s.wins,
+        survived: s.survived,
+        winRate: ratio(s.wins, s.seats),
+        survivalRate: ratio(s.survived, s.seats),
+        asVillage: s.asVillage,
+        asWerewolf: s.asWerewolf,
+        villageWinRate: ratio(s.villageWins, s.asVillage),
+        werewolfWinRate: ratio(s.werewolfWins, s.asWerewolf),
+        saidPerSeat: ratio(s.said, s.seats),
+      }))
+      .sort((a, b) => b.winRate - a.winRate || a.name.localeCompare(b.name)),
     byPlayerCount,
     avgPlayers: ratio(players, games),
     avgRounds: ratio(rounds, games),

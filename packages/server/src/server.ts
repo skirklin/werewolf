@@ -11,7 +11,7 @@ import {
   type ClientMessage,
   type ServerMessage,
 } from "@werewolf/shared";
-import { RoomManager, type Client } from "./rooms.js";
+import { RoomManager, type Client, type GameFinishedHook } from "./rooms.js";
 import { GameStore } from "./store.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -25,6 +25,11 @@ export interface AppOptions {
    * neither, records live in memory only and vanish on restart.
    */
   dataDir?: string | null;
+  /**
+   * Notified as each game ends, alongside the store. The arena uses this to
+   * label seats with the strategy that played them.
+   */
+  onGameFinished?: GameFinishedHook;
 }
 
 /** Biggest game record we'll accept from a client, in bytes. */
@@ -38,7 +43,11 @@ export async function createApp(opts: AppOptions = {}): Promise<FastifyInstance>
   const store = await GameStore.open(
     opts.dataDir === undefined ? process.env.WEREWOLF_DATA_DIR : opts.dataDir
   );
-  const manager = new RoomManager((record) => store.add({ ...record, finishedAt: stamp() }));
+  const manager = new RoomManager((record, playerIds) => {
+    const stamped = { ...record, finishedAt: stamp() };
+    store.add(stamped);
+    opts.onGameFinished?.(stamped, playerIds);
+  });
   const sweep = setInterval(() => manager.sweep(), 60_000);
   sweep.unref();
 
@@ -53,12 +62,25 @@ export async function createApp(opts: AppOptions = {}): Promise<FastifyInstance>
 
   // ---- Anonymous game stats (public: the records hold nobody's name) ----
 
-  app.get("/api/stats", async () => aggregate(store.all()));
-
-  app.get<{ Querystring: { limit?: string } }>("/api/games", async (req) => {
+  /**
+   * `?mode=` picks the population: people (the default — arena games would
+   * otherwise swamp the real numbers), agent, or all.
+   */
+  const pick = (mode: string | undefined) => {
     const all = store.all();
+    if (mode === "all") return all;
+    if (mode === "agent") return all.filter((r) => r.mode === "agent");
+    return all.filter((r) => r.mode !== "agent");
+  };
+
+  app.get<{ Querystring: { mode?: string } }>("/api/stats", async (req) =>
+    aggregate(pick(req.query.mode))
+  );
+
+  app.get<{ Querystring: { limit?: string; mode?: string } }>("/api/games", async (req) => {
+    const chosen = pick(req.query.mode);
     const limit = Math.min(Math.max(Number(req.query.limit) || 500, 1), 5000);
-    return { total: all.length, games: all.slice(-limit) };
+    return { total: chosen.length, games: chosen.slice(-limit) };
   });
 
   /**

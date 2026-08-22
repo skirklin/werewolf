@@ -21,9 +21,9 @@ function record(patch: Partial<GameRecord> = {}): GameRecord {
       peacefulFirstNight: false,
     },
     seats: [
-      { dealt: "werewolf", final: "werewolf", disguise: null, survived: false, won: false },
-      { dealt: "villager", final: "villager", disguise: null, survived: true, won: true },
-      { dealt: "seer", final: "seer", disguise: null, survived: true, won: true },
+      { dealt: "werewolf", final: "werewolf", disguise: null, survived: false, won: false, agent: null, said: 0 },
+      { dealt: "villager", final: "villager", disguise: null, survived: true, won: true, agent: null, said: 0 },
+      { dealt: "seer", final: "seer", disguise: null, survived: true, won: true, agent: null, said: 0 },
     ],
     events: [{ type: "lynch", round: 1, seat: 0 }],
     ...patch,
