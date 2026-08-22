@@ -15,6 +15,7 @@ Options
   --games N            games to play (default 5)
   --lineup SPEC        who sits at the table (default "heuristic:4,random:3")
   --model ID           model for llm seats (default claude-haiku-4-5)
+  --playbook NAME      prompt variant for llm seats (default baseline)
   --discussion N       times round the table before each vote (default 2)
   --peaceful           no werewolf kill on the first night
   --out FILE           append the anonymous game records here as JSONL
@@ -37,6 +38,7 @@ async function main() {
   if (lineup.length < 3) throw new Error("Need at least 3 seats to play.");
   const games = Number(args.games ?? 5);
   const model = args.model ? String(args.model) : undefined;
+  const playbook = args.playbook ? String(args.playbook) : undefined;
   const quiet = !!args.quiet;
 
   const config: GameConfig = {
@@ -63,7 +65,7 @@ async function main() {
   const llmSeats: LlmStrategy[] = [];
   try {
     for (let i = 0; i < games; i++) {
-      const strategies = lineup.map((spec) => makeStrategy(spec, model));
+      const strategies = lineup.map((spec) => makeStrategy(spec, model, playbook));
       llmSeats.push(...strategies.filter((s): s is LlmStrategy => s instanceof LlmStrategy));
       if (!quiet) console.log(`\n─── game ${i + 1}/${games} ───`);
       const result = await arena.play({

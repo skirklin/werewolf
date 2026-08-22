@@ -7,7 +7,8 @@
     "arena": "tsx src/cli.ts",
     "test": "vitest run",
     "analyze": "tsx src/analyze.ts",
-    "annotate": "tsx src/annotate.ts"
+    "annotate": "tsx src/annotate.ts",
+    "tournament": "tsx src/tournament.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.120.0",

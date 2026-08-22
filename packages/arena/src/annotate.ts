@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { ROLES, parseGameRecord, type GameRecord } from "@werewolf/shared";
 import { SEAT_NAMES } from "./match.js";
+import { ACCUSE, CLAIM } from "./speech.js";
 
 /**
  * Join a saved transcript back to its records so you can read the talk with
@@ -14,11 +15,6 @@ import { SEAT_NAMES } from "./match.js";
  * Roles are secret *during* play; this reads finished games from the outside,
  * which is the one vantage point that gets to know everything.
  */
-
-/** Phrases that suggest somebody is claiming a role or first-hand knowledge. */
-const CLAIM = /\b(i(?:'m| am)\s+(?:the\s+)?(?:seer|doctor|villager|werewolf|wolf|medium|detective|hunter|witch)|my (?:vision|read|check|investigation)|i (?:checked|saw|inspected|protected|healed|investigated)|as the (?:seer|doctor))\b/i;
-/** Phrases that point a finger at somebody. */
-const ACCUSE = /\b(vote (?:for|out)|is a wolf|is the wolf|suspicious of|i suspect|has to be|it's got to be)\b/i;
 
 interface Line {
   game: number;

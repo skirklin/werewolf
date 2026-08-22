@@ -2,6 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { ROLES, type ClientMessage, type PlayerId, type PlayerView } from "@werewolf/shared";
 import { nameOf, nightMessage, otherLiving, picksNeeded, type Strategy } from "../strategy.js";
 import { RandomStrategy } from "./random.js";
+import { BASELINE, adviceFor, type Playbook } from "../playbooks.js";
 
 /**
  * The user picked Haiku 4.5 as the default: the point of the arena is sample
@@ -51,14 +52,18 @@ export interface LlmOptions {
   /** Label used in the results table. Defaults to `llm:<model>`. */
   name?: string;
   client?: Anthropic;
-  /** Extra guidance appended to the system prompt — the knob for A/B-ing prompts. */
-  persona?: string;
+  /** Which prompt variant this seat plays. Defaults to the baseline control. */
+  playbook?: Playbook;
 }
 
 /** How many messages of backchat to hand the model. Keeps input tokens bounded. */
 const CHAT_WINDOW = 30;
 const LOG_WINDOW = 20;
 
+/**
+ * The rules everyone gets. Deliberately free of strategy advice — that lives in
+ * the playbook, so variants differ only in the part being tested.
+ */
 const RULES = `You are playing Werewolf (also called Mafia), a social deduction game.
 
 How it works:
@@ -69,16 +74,8 @@ How it works:
 - The village wins when every werewolf is gone. The werewolves win the moment
   they equal the number of surviving players.
 - Dead players cannot speak or vote.
-
-How to play well:
-- You only know what you have personally seen. Other players lie, including
-  about their roles.
-- If you are a werewolf, you must blend in: sound like a villager, cast doubt on
-  the innocent, and never reveal your packmates.
-- If you have information (a Seer vision, for example), think about whether
-  sharing it helps the village more than it paints a target on your back.
-- Silence is suspicious, but so is talking too much. Be specific about who you
-  suspect and why.`;
+- You only know what you have personally seen. Anyone may lie about anything,
+  including their own role.`;
 
 /**
  * An LLM plays one seat. Every prompt is built from this seat's redacted view
@@ -93,7 +90,7 @@ export class LlmStrategy implements Strategy {
   /** The model this seat is running, exposed so a run can price itself. */
   readonly modelId: string;
   private readonly client: Anthropic;
-  private readonly persona: string;
+  readonly playbook: Playbook;
   private readonly fallback = new RandomStrategy();
   /** Rough running totals, reported at the end of a run. */
   calls = 0;
@@ -105,9 +102,12 @@ export class LlmStrategy implements Strategy {
 
   constructor(opts: LlmOptions = {}) {
     this.modelId = opts.model ?? DEFAULT_MODEL;
-    this.name = opts.name ?? `llm:${this.modelId}`;
+    this.playbook = opts.playbook ?? BASELINE;
     this.client = opts.client ?? new Anthropic();
-    this.persona = opts.persona ?? "";
+    // The label carries the playbook, since that is usually what a run varies;
+    // the model only appears when it was pinned explicitly.
+    this.name =
+      opts.name ?? `llm:${this.playbook.name}${opts.model ? `@${opts.model}` : ""}`;
   }
 
   // -- prompt building ------------------------------------------------------
@@ -126,7 +126,8 @@ export class LlmStrategy implements Strategy {
         : role?.team === "solo"
           ? "You win alone, on your own terms."
           : "You win when every werewolf is eliminated.",
-      this.persona,
+      "",
+      adviceFor(this.playbook, view.you.roleId, role?.team ?? "village"),
     ];
     return lines.filter(Boolean).join("\n");
   }

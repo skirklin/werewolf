@@ -19,7 +19,8 @@
     "typecheck": "tsc -b --pretty",
     "arena": "npm -w @werewolf/arena run arena --",
     "arena:analyze": "npm -w @werewolf/arena run analyze --",
-    "arena:annotate": "npm -w @werewolf/arena run annotate --"
+    "arena:annotate": "npm -w @werewolf/arena run annotate --",
+    "arena:tournament": "npm -w @werewolf/arena run tournament --"
   },
   "devDependencies": {
     "concurrently": "^9.1.0",

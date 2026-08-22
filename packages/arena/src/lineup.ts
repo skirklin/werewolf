@@ -2,12 +2,17 @@ import type { Strategy } from "./strategy.js";
 import { RandomStrategy } from "./strategies/random.js";
 import { HeuristicStrategy } from "./strategies/heuristic.js";
 import { LlmStrategy } from "./strategies/llm.js";
+import { getPlaybook, PLAYBOOKS } from "./playbooks.js";
 
 export const STRATEGY_HELP = `Strategies
   random           picks legal moves at random, never speaks — the control
   heuristic        plays its own information, no reading of what others say
   llm              a Claude agent per seat, sees only that seat's view
+  llm+PLAYBOOK     an llm seat using a named prompt variant
   llm@MODEL        an llm seat pinned to a specific model, e.g. llm@claude-sonnet-5
+  llm+PLAYBOOK@MODEL   both
+
+Playbooks: ${Object.keys(PLAYBOOKS).join(", ")}
 
 A lineup is a comma-separated list of "name:count" (order doesn't matter — seats
 are dealt roles at random either way).`;
@@ -29,17 +34,32 @@ export function parseLineup(spec: string): string[] {
   return seats;
 }
 
-/** Build one strategy instance from its spec. `defaultModel` applies to llm seats. */
-export function makeStrategy(spec: string, defaultModel?: string): Strategy {
-  const [kind, model] = spec.split("@");
+/**
+ * Build one strategy instance from its spec: `kind[+playbook][@model]`.
+ * `defaultModel` and `defaultPlaybook` fill in whatever the spec leaves out.
+ */
+export function makeStrategy(
+  spec: string,
+  defaultModel?: string,
+  defaultPlaybook?: string
+): Strategy {
+  const [before, model] = spec.split("@");
+  const [kind, playbook] = before.split("+");
   switch (kind) {
     case "random":
       return new RandomStrategy();
     case "heuristic":
       return new HeuristicStrategy();
-    case "llm":
-      return new LlmStrategy({ model: model ?? defaultModel });
+    case "llm": {
+      const chosen = playbook ?? defaultPlaybook;
+      return new LlmStrategy({
+        model: model ?? defaultModel,
+        playbook: chosen ? getPlaybook(chosen) : undefined,
+      });
+    }
     default:
-      throw new Error(`Unknown strategy "${spec}". Known: random, heuristic, llm, llm@MODEL.`);
+      throw new Error(
+        `Unknown strategy "${spec}". Known: random, heuristic, llm[+playbook][@model].`
+      );
   }
 }
