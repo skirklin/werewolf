@@ -143,6 +143,19 @@ describe("assigning playbooks by team", () => {
     expect(s.playbook.name).toBe(first);
   });
 
+  it("settles a seat that dies before it ever acts", () => {
+    // The bug this guards: a plain villager eaten on night one never speaks and
+    // never has a night action, so it used to reach the results table unresolved
+    // and be counted as the control. Nine seats in a 30-game run were misfiled.
+    const s = new LlmStrategy({
+      client: stubClient("unused"),
+      playbook: (team) => getPlaybook(team === "werewolf" ? "specialist" : "decisive"),
+    });
+    s.observe(seat("villager"));
+    expect(s.playbook.name).toBe("decisive");
+    expect(s.name).toBe("llm:decisive");
+  });
+
   it("reports the control before anything has been dealt", () => {
     const s = new LlmStrategy({
       client: stubClient("hi"),

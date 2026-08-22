@@ -36,6 +36,7 @@ Options
   --model ID            model for every seat (default claude-haiku-4-5)
   --discussion N        times round the table before each vote (default 2)
   --out FILE            append the anonymous records here as JSONL
+  --transcript FILE     append everything said here, tagged with the playbook
 
 Every unordered pair is played twice: once with the first variant on the wolf
 team, once with it in the village. Total games = pairs x 2 x --games.
@@ -74,7 +75,9 @@ async function main() {
 
   const config: GameConfig = recommendedConfig(players);
   const outFile = args.out ? String(args.out) : null;
+  const transcriptFile = args.transcript ? String(args.transcript) : null;
   if (outFile) await ensureDir(outFile);
+  if (transcriptFile) await ensureDir(transcriptFile);
 
   console.log(`Tournament: ${names.join(" vs ")}`);
   console.log(`${total} games of ${players} — ${perSide} per side, per pairing:`);
@@ -107,6 +110,16 @@ async function main() {
         });
         played.push(result);
         if (outFile) await appendFile(outFile, JSON.stringify(result.record) + "\n");
+        if (transcriptFile && result.transcript.length)
+          await appendFile(
+            transcriptFile,
+            result.transcript
+              .map(
+                (t) =>
+                  `[game ${done + 1} day ${t.round}] ${t.speaker} (${t.strategy}): ${t.text}`
+              )
+              .join("\n") + "\n"
+          );
         done++;
         console.log(
           `game ${done}/${total} (wolves ${wolfSide}): ${result.record.winner} won`
@@ -124,6 +137,7 @@ async function main() {
   console.log(`\nAPI: ${spend.calls} calls · ${cost}`);
   if (spend.leaks) console.log(`${spend.leaks} replies read as notes rather than speech.`);
   if (outFile) console.log(`Records appended to ${outFile}`);
+  if (transcriptFile) console.log(`Transcript appended to ${transcriptFile}`);
 }
 
 /** Win rates side by side, plus how much each variant actually bluffed. */

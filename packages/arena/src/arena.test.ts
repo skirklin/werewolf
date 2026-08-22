@@ -155,6 +155,26 @@ describe("the referee", () => {
     expect(record.seats.some((s) => !s.survived)).toBe(true);
   }, 60_000);
 
+  it("tells every seat its own role before play, even ones that die at once", async () => {
+    // Seat labels in the record come from the strategy, so a strategy that
+    // varies by role has to be settled before anyone can be killed.
+    class RoleWatcher extends RandomStrategy {
+      seen: string | null = null;
+      constructor() {
+        super(Math.random, "watcher");
+      }
+      observe(view: PlayerView) {
+        this.seen = view.you.roleId;
+      }
+    }
+    const watchers = Array.from({ length: 7 }, () => new RoleWatcher());
+    const { record } = await arena.play({ strategies: watchers, discussionRounds: 1 });
+
+    // Every seat learned its role, including whoever was eaten first.
+    expect(watchers.every((w) => w.seen !== null)).toBe(true);
+    expect(watchers.map((w) => w.seen).sort()).toEqual(record.seats.map((s) => s.dealt).sort());
+  }, 60_000);
+
   it("only records talk the town actually heard", async () => {
     const talkers = Array.from({ length: 5 }, (_, i) => new Talker(`line from seat ${i}`));
     const { record, transcript } = await arena.play({

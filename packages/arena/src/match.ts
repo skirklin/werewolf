@@ -146,6 +146,12 @@ export class Arena {
           break;
 
         case "roleReveal":
+          // Every seat sees its own role before anything happens, so a strategy
+          // that varies by role is settled even if it dies without acting.
+          for (const [i, client] of clients.entries()) {
+            await client.soft((v) => v.phase === "roleReveal" && !!v.you.roleId, 2000);
+            if (client.view) strategies[i].observe?.(client.view);
+          }
           host.send({ type: "startNight" });
           await host.waitFor((v) => v.phase !== "roleReveal", "nightfall");
           break;

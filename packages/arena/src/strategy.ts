@@ -15,6 +15,12 @@ export interface Strategy {
   vote(view: PlayerView): Promise<PlayerId | null>;
   /** A fallen Hunter's parting shot. */
   shoot(view: PlayerView): Promise<PlayerId>;
+  /**
+   * Handed this seat's own view once roles are dealt, before any decision.
+   * A strategy whose behaviour depends on its role settles it here — otherwise
+   * a seat that is killed before it ever acts would never learn what it was.
+   */
+  observe?(view: PlayerView): void;
   /** Called once when the game ends, so a strategy can release resources. */
   finish?(): Promise<void>;
 }

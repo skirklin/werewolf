@@ -137,14 +137,23 @@ export class LlmStrategy implements Strategy {
 
   // -- prompt building ------------------------------------------------------
 
+  /**
+   * Settle which playbook this seat plays, from its own role. Called at role
+   * reveal so that a seat killed before it ever speaks is still attributed
+   * correctly — without this, quiet early deaths all counted as the control.
+   */
+  observe(view: PlayerView): void {
+    if (this.resolved) return;
+    const team = view.you.roleId ? (ROLES[view.you.roleId]?.team ?? "village") : "village";
+    this.resolved =
+      typeof this.choose_playbook === "function"
+        ? this.choose_playbook(team, view.you.roleId)
+        : this.choose_playbook;
+  }
+
   private system(view: PlayerView): string {
     const role = view.you.roleId ? ROLES[view.you.roleId] : null;
-    // Settle the playbook now that this seat knows what it is.
-    if (!this.resolved)
-      this.resolved =
-        typeof this.choose_playbook === "function"
-          ? this.choose_playbook(role?.team ?? "village", view.you.roleId)
-          : this.choose_playbook;
+    this.observe(view);
     const mates = view.packmates.map((id) => nameOf(view, id));
     const lines = [
       RULES,
