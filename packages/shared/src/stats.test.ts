@@ -149,17 +149,18 @@ describe("stats", () => {
 
   it("separates days that achieved something from days that deadlocked", () => {
     const s = aggregate([
+      // Seat 0 is the werewolf in the default fixture; seat 1 is the seer.
       record({
         events: [
-          { type: "lynch", round: 1, seat: 0 },
+          { type: "lynch", round: 1, seat: 0 }, // hits a wolf
           { type: "voteTie", round: 2 },
           { type: "noDeath", round: 3, detail: "lynch" },
           { type: "noDeath", round: 3, detail: "wolves" }, // a quiet night, not a day
         ],
       }),
-      record({ events: [{ type: "lynch", round: 1, seat: 1 }] }),
+      record({ events: [{ type: "lynch", round: 1, seat: 1 }] }), // hits a villager
     ]);
-    expect(s.days).toEqual({ lynched: 2, tied: 2 });
+    expect(s.days).toEqual({ lynched: 2, tied: 2, wolvesLynched: 1 });
   });
 
   it("counts table sizes, averages and which house rules were on", () => {
