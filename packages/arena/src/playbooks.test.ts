@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { ROLES } from "@werewolf/shared";
-import { PLAYBOOKS, adviceFor, getPlaybook, SPECIALIST, BASELINE } from "./playbooks.js";
+import { PLAYBOOKS, adviceFor, getPlaybook, SPECIALIST, BASELINE, GUARDED } from "./playbooks.js";
 import { makeStrategy, parseLineup } from "./lineup.js";
 import { LlmStrategy, type LlmOptions } from "./strategies/llm.js";
 import { analyzeSpeech } from "./speech.js";
@@ -48,6 +48,20 @@ describe("playbooks", () => {
       expect(covered).toContain(id);
     // And nothing here names a role that doesn't exist.
     for (const id of covered) expect(ROLES[id]).toBeDefined();
+  });
+
+  it("keeps strategy out of the speaking instruction", () => {
+    // The speaking turn should say how to answer, not what to think. A warning
+    // that the wolves are listening belongs to a variant, because it changes
+    // play: it talked Seers into sitting on their reads.
+    for (const name of ["baseline", "specialist", "decisive"]) {
+      expect(PLAYBOOKS[name].speech).toBeTruthy();
+      expect(PLAYBOOKS[name].speech).not.toMatch(/werewolves|wolves are listening/i);
+    }
+    expect(GUARDED.speech).toMatch(/werewolves/i);
+    // And guarded differs from the control in that one respect only.
+    expect({ ...GUARDED, speech: BASELINE.speech, name: "baseline", about: BASELINE.about })
+      .toEqual(BASELINE);
   });
 
   it("refuses a playbook nobody defined", () => {

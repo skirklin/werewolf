@@ -62,10 +62,14 @@ export interface Stats {
   deaths: Record<string, number>;
   /**
    * What the town's votes actually achieved. A day that ends `tied` is a day
-   * the village spent and got nothing for — the clearest measure of whether a
-   * table can agree on anything.
+   * the village spent and got nothing for; `wolvesLynched` is how many of the
+   * lynches actually hit a wolf.
+   *
+   * That last number is the sharpest measure of whether discussion is doing
+   * anything: chance alone hits a wolf at roughly the wolf share of the table,
+   * so a town lynching at that rate has learned nothing from talking.
    */
-  days: { lynched: number; tied: number };
+  days: { lynched: number; tied: number; wolvesLynched: number };
   /** Nights a doctor/witch save actually cancelled a kill. */
   saves: number;
   /** Dead players dragged back by a Medium. */
@@ -108,7 +112,7 @@ export function aggregate(records: readonly GameRecord[]): Stats {
   const teamWins = new Map<Team, number>(TEAMS.map((t) => [t, 0]));
   const byPlayerCount: Record<string, number> = {};
   const deaths: Record<string, number> = {};
-  const days = { lynched: 0, tied: 0 };
+  const days = { lynched: 0, tied: 0, wolvesLynched: 0 };
   const roles = new Map<string, { dealt: number; games: number; wins: number; survived: number }>();
   const options = { peacefulFirstNight: 0, revealRoleOnDeath: 0, detailedSummary: 0 };
   let players = 0;
@@ -164,7 +168,13 @@ export function aggregate(records: readonly GameRecord[]): Stats {
       if (cause) deaths[cause] = (deaths[cause] ?? 0) + 1;
       if (event.type === "saved") saves++;
       if (event.type === "raised") raises++;
-      if (event.type === "lynch") days.lynched++;
+      if (event.type === "lynch") {
+        days.lynched++;
+        // Judge by the role held at the end: a converted seat really was a wolf
+        // when the town voted it out.
+        const seat = event.seat === undefined ? undefined : rec.seats[event.seat];
+        if (seat && ROLES[seat.final]?.team === "werewolf") days.wolvesLynched++;
+      }
       // A tie and a table that all abstained come out the same way: no lynch.
       if (event.type === "voteTie" || (event.type === "noDeath" && event.detail === "lynch"))
         days.tied++;

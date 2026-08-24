@@ -365,11 +365,8 @@ export class LlmStrategy implements Strategy {
   }
 
   private speechPrompt(view: PlayerView): string {
-    return (
-      `${this.situation(view)}\n\nIt is your turn to speak to the town. Everyone hears ` +
-      `this, including the werewolves. Say one or two sentences, in your own voice, as ` +
-      `${view.you.name} — just the words you would say out loud, nothing else.`
-    );
+    const instruction = this.playbook.speech ?? BASELINE.speech!;
+    return `${this.situation(view)}\n\nYou are ${view.you.name}. ${instruction}`;
   }
 
   async vote(view: PlayerView): Promise<PlayerId | null> {

@@ -51,6 +51,12 @@ export function report(records: readonly GameRecord[]): string {
       `Days: ${stats.days.lynched} ended in a lynch, ${stats.days.tied} in deadlock ` +
         `(${pct(stats.days.tied / days)} of days wasted)`
     );
+    if (stats.days.lynched)
+      lines.push(
+        `Lynch accuracy: ${stats.days.wolvesLynched}/${stats.days.lynched} hit a wolf ` +
+          `(${pct(stats.days.wolvesLynched / stats.days.lynched)}) — chance alone is about ` +
+          `the wolf share of the table`
+      );
   }
 
   const deaths = Object.entries(stats.deaths);

@@ -15,20 +15,31 @@ export interface Playbook {
   about: string;
   /** Advice for everyone, whatever they were dealt. */
   everyone?: string;
+  /**
+   * The instruction attached to a speaking turn. Kept here rather than
+   * hardcoded because changing it silently once already cost the village its
+   * ability to find wolves — see `guarded`.
+   */
+  speech?: string;
   /** Advice per roleId. Falls back to `village` / `werewolf` by team. */
   byRole?: Record<string, string>;
   village?: string;
   werewolf?: string;
 }
 
+/** Format-only speaking instruction: says how to answer, never what to think. */
+const PLAIN_SPEECH =
+  "It is your turn to speak to the town. Say one or two sentences, in your own " +
+  "voice. Give only the words you would say out loud — no notes, no narration.";
+
 /**
  * The original prompt, kept as the control so later variants have a fixed line
- * to beat. It says "blend in" to wolves and nothing about counter-claiming —
- * which is very likely why the first 30-game run produced zero bluffs.
+ * to beat. It says "blend in" to wolves and nothing about counter-claiming.
  */
 export const BASELINE: Playbook = {
   name: "baseline",
   about: "The original prompt: generic advice, no role-specific guidance.",
+  speech: PLAIN_SPEECH,
   everyone:
     "Be specific about who you suspect and why. Silence is suspicious, but so is talking too much.",
   werewolf:
@@ -45,6 +56,7 @@ export const BASELINE: Playbook = {
 export const SPECIALIST: Playbook = {
   name: "specialist",
   about: "Role-specific playbooks; wolves are told outright that bluffing is available.",
+  speech: PLAIN_SPEECH,
   everyone:
     "Talk like a person at a table, not an analyst. Commit to a name rather than describing " +
     "how you will decide. Watch who avoids committing.",
@@ -95,6 +107,7 @@ export const SPECIALIST: Playbook = {
 export const DECISIVE: Playbook = {
   name: "decisive",
   about: "Specialist advice plus heavy pressure to name a name and commit early.",
+  speech: PLAIN_SPEECH,
   everyone:
     "A day that ends in a tie is a day the wolves won for free. Name one specific player you " +
     "want voted out, in your first sentence, every single day. Never say you are 'still " +
@@ -105,8 +118,26 @@ export const DECISIVE: Playbook = {
   werewolf: SPECIALIST.werewolf,
 };
 
+/**
+ * Baseline, but with the speaking turn reminding the speaker that the wolves
+ * are listening. Added while fixing scratchpad leaks, without an A/B — and the
+ * village's lynch accuracy fell from 56% to about chance, because a Seer told
+ * its enemies are listening decides to sit on what it knows. Kept as a named
+ * variant so the cost of that warning stays measurable instead of hypothetical.
+ */
+export const GUARDED: Playbook = {
+  ...BASELINE,
+  name: "guarded",
+  about: "Baseline, but the speaking turn warns that the werewolves are listening.",
+  speech:
+    "It is your turn to speak to the town. Everyone hears this, including the " +
+    "werewolves. Say one or two sentences, in your own voice — just the words you " +
+    "would say out loud, nothing else.",
+};
+
 export const PLAYBOOKS: Record<string, Playbook> = {
   baseline: BASELINE,
+  guarded: GUARDED,
   specialist: SPECIALIST,
   decisive: DECISIVE,
 };
