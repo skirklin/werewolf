@@ -70,6 +70,18 @@ describe("what an agent is allowed to say out loud", () => {
     });
     expect(await s.speak(view)).toBeNull();
     expect(s.leaks).toBe(1);
+    // A silence costs the seat its turn, which is what makes it worth counting
+    // separately from a leak the retry rescued.
+    expect(s.silences).toBe(1);
+  });
+
+  it("does not count a rescued reply as a silence", async () => {
+    const s = new LlmStrategy({
+      client: stubClient("- notes\n- more notes", "Bailey is dodging questions."),
+    });
+    expect(await s.speak(view)).toBe("Bailey is dodging questions.");
+    expect(s.leaks).toBe(1);
+    expect(s.silences).toBe(0);
   });
 
   it("stays silent when both tries are scratchpad", async () => {

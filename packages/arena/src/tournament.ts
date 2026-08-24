@@ -145,7 +145,10 @@ async function main() {
   const spend = totalSpend(seats);
   const cost = spend.dollars === null ? "unpriced model" : `~$${spend.dollars.toFixed(2)}`;
   console.log(`\nAPI: ${spend.calls} calls · ${cost}`);
-  if (spend.leaks) console.log(`${spend.leaks} replies read as notes rather than speech.`);
+  if (spend.leaks)
+    console.log(
+      `${spend.leaks} replies read as notes; ${spend.silences} of those cost a seat its turn.`
+    );
   if (outFile) console.log(`Records appended to ${outFile}`);
   if (transcriptFile) console.log(`Transcript appended to ${transcriptFile}`);
 }

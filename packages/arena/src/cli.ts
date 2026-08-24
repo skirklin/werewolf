@@ -101,7 +101,7 @@ async function main() {
     console.log(
       `\nAPI: ${spend.calls} calls · ${fmt(spend.inputTokens)} in / ${fmt(spend.outputTokens)} out · ${cost}${perGame}` +
         (spend.failures ? `\n${spend.failures} calls fell back to a random move.` : "") +
-        (spend.leaks ? `\n${spend.leaks} replies read as notes rather than speech and were redone or dropped.` : "")
+        (spend.leaks ? `\n${spend.leaks} replies read as notes; ${spend.silences} of those cost a seat its turn.` : "")
     );
   }
 

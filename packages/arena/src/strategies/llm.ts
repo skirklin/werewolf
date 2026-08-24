@@ -26,18 +26,29 @@ export interface Spend {
   failures: number;
   /** Replies that read as notes rather than speech. */
   leaks: number;
+  /** Turns the guard ended in silence, costing that seat its say. */
+  silences: number;
   /** Null when any model in the run has no published price here. */
   dollars: number | null;
 }
 
 export function totalSpend(strategies: readonly LlmStrategy[]): Spend {
-  const spend: Spend = { calls: 0, inputTokens: 0, outputTokens: 0, failures: 0, leaks: 0, dollars: 0 };
+  const spend: Spend = {
+    calls: 0,
+    inputTokens: 0,
+    outputTokens: 0,
+    failures: 0,
+    leaks: 0,
+    silences: 0,
+    dollars: 0,
+  };
   for (const s of strategies) {
     spend.calls += s.calls;
     spend.inputTokens += s.inputTokens;
     spend.outputTokens += s.outputTokens;
     spend.failures += s.failures;
     spend.leaks += s.leaks;
+    spend.silences += s.silences;
     const price = PRICES[s.modelId];
     if (!price || spend.dollars === null) spend.dollars = null;
     else
@@ -108,6 +119,12 @@ export class LlmStrategy implements Strategy {
   failures = 0;
   /** Replies that read as notes rather than speech, and had to be redone or dropped. */
   leaks = 0;
+  /**
+   * Turns the guard ended in silence. Distinct from `leaks`: a leak that the
+   * retry rescued costs nothing, while a silence costs the seat its turn — and
+   * a silent village is a losing village, so this is the number to watch.
+   */
+  silences = 0;
 
   constructor(opts: LlmOptions = {}) {
     this.modelId = opts.model ?? DEFAULT_MODEL;
@@ -336,7 +353,10 @@ export class LlmStrategy implements Strategy {
         );
       }
       // Silence beats publishing a confession the player never meant to make.
-      if (!text.length || looksLikeNotes(text) || confesses(text)) return null;
+      if (!text.length || looksLikeNotes(text) || confesses(text)) {
+        this.silences++;
+        return null;
+      }
       return text.slice(0, 300);
     } catch (err) {
       this.note(err);
