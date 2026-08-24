@@ -13,7 +13,16 @@ export interface Playbook {
   name: string;
   /** One line describing what this variant is trying out. */
   about: string;
-  /** Advice for everyone, whatever they were dealt. */
+  /**
+   * What every player at the table knows. This must include how the other side
+   * behaves: at a real table, "wolves blend in and cast doubt on the innocent"
+   * is public knowledge, not a wolf secret.
+   *
+   * Scoping that line to wolves only — which seemed tidy — took away the
+   * villagers' guide to the opposition and dropped their lynch accuracy from
+   * twice chance to chance. Private tactics belong in `byRole`; knowledge of
+   * the game belongs here.
+   */
   everyone?: string;
   /**
    * The instruction attached to a speaking turn. Kept here rather than
@@ -41,9 +50,10 @@ export const BASELINE: Playbook = {
   about: "The original prompt: generic advice, no role-specific guidance.",
   speech: PLAIN_SPEECH,
   everyone:
-    "Be specific about who you suspect and why. Silence is suspicious, but so is talking too much.",
-  werewolf:
-    "You must blend in: sound like a villager, cast doubt on the innocent, and never reveal your packmates.",
+    "Werewolves blend in: they sound like villagers, cast doubt on the innocent, and never " +
+    "give up a packmate. Watch for it. Be specific about who you suspect and why. Silence is " +
+    "suspicious, but so is talking too much.",
+  werewolf: "Blend in, and never reveal your packmates.",
   village:
     "If you have information, think about whether sharing it helps the village more than it paints a target on your back.",
 };
@@ -58,8 +68,10 @@ export const SPECIALIST: Playbook = {
   about: "Role-specific playbooks; wolves are told outright that bluffing is available.",
   speech: PLAIN_SPEECH,
   everyone:
-    "Talk like a person at a table, not an analyst. Commit to a name rather than describing " +
-    "how you will decide. Watch who avoids committing.",
+    "Werewolves blend in: they sound like villagers, cast doubt on the innocent, and never " +
+    "give up a packmate. A wolf caught out may claim a power role it does not have, so weigh " +
+    "claims against behaviour rather than counting them. Talk like a person at a table, not " +
+    "an analyst. Commit to a name rather than describing how you will decide.",
   byRole: {
     werewolf:
       "You are lying for a living and you are good at it. Blend in: reason out loud like a " +
@@ -109,7 +121,8 @@ export const DECISIVE: Playbook = {
   about: "Specialist advice plus heavy pressure to name a name and commit early.",
   speech: PLAIN_SPEECH,
   everyone:
-    "A day that ends in a tie is a day the wolves won for free. Name one specific player you " +
+    (SPECIALIST.everyone ?? "") +
+    " A day that ends in a tie is a day the wolves won for free. Name one specific player you " +
     "want voted out, in your first sentence, every single day. Never say you are 'still " +
     "gathering information' — say a name. If someone else has made a case you cannot beat, " +
     "back it publicly rather than splitting the vote.",

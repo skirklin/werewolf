@@ -50,6 +50,16 @@ describe("playbooks", () => {
     for (const id of covered) expect(ROLES[id]).toBeDefined();
   });
 
+  it("tells every seat how the opposition behaves", () => {
+    // Public knowledge at a real table, and the villagers' only guide to what
+    // they are looking for. Scoping it to wolves cost the village its lynch
+    // accuracy, so every shipped playbook must state it to everyone.
+    for (const name of Object.keys(PLAYBOOKS)) {
+      const advice = adviceFor(PLAYBOOKS[name], "villager", "village");
+      expect(advice.toLowerCase()).toMatch(/werewolves blend in|sound like villagers/);
+    }
+  });
+
   it("keeps strategy out of the speaking instruction", () => {
     // The speaking turn should say how to answer, not what to think. A warning
     // that the wolves are listening belongs to a variant, because it changes
