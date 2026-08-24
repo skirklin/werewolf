@@ -385,7 +385,7 @@ export class LlmStrategy implements Strategy {
     const others = otherLiving(view);
     if (!others.length) return null;
     try {
-      return await this.choose(view, "Who do you vote to eliminate?", others);
+      return await this.choose(view, voteQuestion(view), others);
     } catch (err) {
       this.note(err);
       return this.fallback.vote(view);
@@ -408,6 +408,28 @@ export class LlmStrategy implements Strategy {
       err instanceof Anthropic.APIError ? `${err.status} ${err.message}` : String(err);
     console.warn(`  ${this.name}: falling back to a random move (${detail})`);
   }
+}
+
+/**
+ * The state of the vote as it stands, which the server has always sent and the
+ * prompt never mentioned. Voting blind is why a third of all days ended in a
+ * tie: nobody could see a majority forming, so nobody could join one.
+ */
+function voteQuestion(view: PlayerView): string {
+  const standing = Object.entries(view.voteTally)
+    .filter(([, n]) => n > 0)
+    .sort((a, b) => b[1] - a[1])
+    .map(([id, n]) => `${nameOf(view, id)} ${n}`)
+    .join(", ");
+  return [
+    standing ? `Votes so far — ${standing}.` : "Nobody has voted yet.",
+    view.votesRemaining > 0 ? `${view.votesRemaining} still to vote.` : "",
+    "A tie eliminates nobody, which hands the wolves a free night, so joining a" +
+      " majority you can live with beats splitting the vote.",
+    "Who do you vote to eliminate?",
+  ]
+    .filter(Boolean)
+    .join(" ");
 }
 
 /** One log entry as a short clause, or "" for the ones nobody needs to hear about. */

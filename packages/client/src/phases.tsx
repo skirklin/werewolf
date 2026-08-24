@@ -338,6 +338,34 @@ export function ChatPanel({ view, send }: { view: PlayerView; send: Send }) {
   );
 }
 
+/**
+ * Where the vote stands. The server has always sent this and nothing showed it,
+ * so nobody could see a majority forming — and a tie eliminates nobody, which
+ * is a wasted day for the town.
+ */
+function VoteTally({ view }: { view: PlayerView }) {
+  const standing = Object.entries(view.voteTally)
+    .filter(([, n]) => n > 0)
+    .sort((a, b) => b[1] - a[1]);
+  if (standing.length === 0) return null;
+  const most = standing[0][1];
+  const tied = standing.filter(([, n]) => n === most).length > 1;
+  return (
+    <div className="card tight stack">
+      <div className="spread">
+        <b>🗳️ Where the vote stands</b>
+        {tied && <span className="pill">tied — nobody goes</span>}
+      </div>
+      {standing.map(([id, n]) => (
+        <div key={id} className="spread small">
+          <span>{view.players.find((p) => p.id === id)?.name ?? "someone"}</span>
+          <b className="count">{n}</b>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 /** Voting UI for a living player. */
 export function VoteAction({ view, send }: { view: PlayerView; send: Send }) {
   const alive = view.players.filter((p) => p.alive && p.id !== view.you.id);
@@ -349,6 +377,7 @@ export function VoteAction({ view, send }: { view: PlayerView; send: Send }) {
         <h2>Vote</h2>
         <p className="muted">{already ? "Vote locked in." : "Who should the town eliminate?"}</p>
       </div>
+      <VoteTally view={view} />
       {already ? (
         <div className="card center">
           You voted:{" "}

@@ -20,6 +20,21 @@ function stubClient(...replies: string[]) {
   } as unknown as NonNullable<LlmOptions["client"]>;
 }
 
+/** Captures the prompts a strategy sends, so tests can assert on them. */
+function recordingClient(sink: string[], reply: string) {
+  return {
+    messages: {
+      create: async (req: { messages: { content: string }[] }) => {
+        sink.push(req.messages[0].content);
+        return {
+          content: [{ type: "text", text: reply }],
+          usage: { input_tokens: 5, output_tokens: 2, cache_read_input_tokens: 0 },
+        };
+      },
+    },
+  } as unknown as NonNullable<LlmOptions["client"]>;
+}
+
 const view = {
   round: 1,
   you: { id: "p0", name: "Alex", roleId: "werewolf", alive: true, isHost: true },
@@ -100,6 +115,40 @@ describe("what an agent is allowed to say out loud", () => {
     const s = new LlmStrategy({ client: stubClient("word ".repeat(200)) });
     const said = await s.speak(view);
     expect(said!.length).toBeLessThanOrEqual(MAX_CHAT_TEXT);
+  });
+});
+
+describe("what a voter is told", () => {
+  const voting = (tally: Record<string, number>, remaining: number) =>
+    ({
+      ...view,
+      phase: "dayVote",
+      voteTally: tally,
+      votesRemaining: remaining,
+      players: [
+        { id: "p0", name: "Alex", alive: true, isHost: true, connected: true, roleId: "werewolf" },
+        { id: "p1", name: "Bailey", alive: true, isHost: false, connected: true, roleId: null },
+        { id: "p2", name: "Casey", alive: true, isHost: false, connected: true, roleId: null },
+      ],
+    }) as unknown as PlayerView;
+
+  it("shows where the vote stands, so a majority can be joined", async () => {
+    const asked: string[] = [];
+    const s = new LlmStrategy({ client: recordingClient(asked, "2") });
+    await s.vote(voting({ p1: 2, p2: 1 }, 1));
+    const prompt = asked.join("\n");
+    expect(prompt).toContain("Bailey 2");
+    expect(prompt).toContain("Casey 1");
+    expect(prompt).toContain("1 still to vote");
+    // And why it matters: a split vote is a wasted day.
+    expect(prompt).toMatch(/tie eliminates nobody/i);
+  });
+
+  it("says plainly when nobody has voted yet", async () => {
+    const asked: string[] = [];
+    const s = new LlmStrategy({ client: recordingClient(asked, "1") });
+    await s.vote(voting({}, 3));
+    expect(asked.join("\n")).toContain("Nobody has voted yet");
   });
 });
 
