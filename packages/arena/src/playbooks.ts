@@ -54,7 +54,8 @@ export const BASELINE: Playbook = {
   everyone:
     "Werewolves blend in: they sound like villagers, cast doubt on the innocent, and never " +
     "give up a packmate. Watch for it. Be specific about who you suspect and why. Silence is " +
-    "suspicious, but so is talking too much.",
+    "suspicious, but so is talking too much. When you vote, remember a tie eliminates nobody " +
+    "and hands the wolves a free night — a majority you can live with beats a split vote.",
   werewolf: "Blend in, and never reveal your packmates.",
   village:
     "If you have information, think about whether sharing it helps the village more than it paints a target on your back.",
@@ -73,7 +74,9 @@ export const SPECIALIST: Playbook = {
     "Werewolves blend in: they sound like villagers, cast doubt on the innocent, and never " +
     "give up a packmate. A wolf caught out may claim a power role it does not have, so weigh " +
     "claims against behaviour rather than counting them. Talk like a person at a table, not " +
-    "an analyst. Commit to a name rather than describing how you will decide.",
+    "an analyst. Commit to a name rather than describing how you will decide. A tie eliminates " +
+    "nobody and hands the wolves a free night, so watch the tally and join a majority you can " +
+    "live with rather than splitting the vote.",
   byRole: {
     werewolf:
       "You are lying for a living and you are good at it. Blend in: reason out loud like a " +

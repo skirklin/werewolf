@@ -60,6 +60,14 @@ describe("playbooks", () => {
     }
   });
 
+  it("carries the advice about not splitting the vote", () => {
+    // This lived in the vote prompt, which is the wrong place: the prompt states
+    // what is true, the playbook says what to do about it.
+    for (const name of Object.keys(PLAYBOOKS)) {
+      expect(adviceFor(PLAYBOOKS[name], "villager", "village")).toMatch(/tie eliminates nobody/i);
+    }
+  });
+
   it("keeps strategy out of the speaking instruction", () => {
     // The speaking turn should say how to answer, not what to think. A warning
     // that the wolves are listening belongs to a variant, because it changes
@@ -129,7 +137,12 @@ describe("assigning playbooks by team", () => {
       winner: null,
       soloWinnerId: null,
       code: "T",
-      config: {},
+config: {
+        selection: { mode: "pool", pool: ["villager", "seer", "doctor"], werewolfRatio: 0.26 },
+        revealRoleOnDeath: false,
+        nightSummary: "discreet",
+        peacefulFirstNight: true,
+      },
     }) as unknown as PlayerView;
 
   const build = (roleId: string) => {

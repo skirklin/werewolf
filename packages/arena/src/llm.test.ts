@@ -20,6 +20,21 @@ function stubClient(...replies: string[]) {
   } as unknown as NonNullable<LlmOptions["client"]>;
 }
 
+/** Captures the system prompt a strategy sends. */
+function recordingSystem(sink: string[], reply: string) {
+  return {
+    messages: {
+      create: async (req: { system: { text: string }[] }) => {
+        sink.push(req.system.map((b) => b.text).join("\n"));
+        return {
+          content: [{ type: "text", text: reply }],
+          usage: { input_tokens: 5, output_tokens: 2, cache_read_input_tokens: 0 },
+        };
+      },
+    },
+  } as unknown as NonNullable<LlmOptions["client"]>;
+}
+
 /** Captures the prompts a strategy sends, so tests can assert on them. */
 function recordingClient(sink: string[], reply: string) {
   return {
@@ -56,7 +71,12 @@ const view = {
   winner: null,
   soloWinnerId: null,
   code: "TEST",
-  config: {} as PlayerView["config"],
+  config: {
+    selection: { mode: "pool", pool: ["villager", "seer", "doctor"], werewolfRatio: 0.26 },
+    revealRoleOnDeath: false,
+    nightSummary: "discreet",
+    peacefulFirstNight: true,
+  },
 } as unknown as PlayerView;
 
 describe("what an agent is allowed to say out loud", () => {
@@ -118,6 +138,80 @@ describe("what an agent is allowed to say out loud", () => {
   });
 });
 
+describe("what every agent is told about the game", () => {
+  it("states the table size, the wolf count and the roles in play", async () => {
+    const asked: string[] = [];
+    const s = new LlmStrategy({ client: recordingSystem(asked, "hello") });
+    await s.speak(view);
+    const system = asked.join("\n");
+    // Without the wolf count an agent cannot count the wolves down, which is
+    // the arithmetic the whole game turns on.
+    expect(system).toMatch(/2 players, 1 of them werewolves|players, \d+ of them werewolves/);
+    expect(system).toContain("Seer");
+    expect(system).toContain("Doctor");
+  });
+
+  it("passes on the house rules that change what a quiet night means", async () => {
+    const asked: string[] = [];
+    const s = new LlmStrategy({ client: recordingSystem(asked, "hello") });
+    await s.speak(view);
+    const system = asked.join("\n");
+    expect(system).toMatch(/do not kill on the first night/i);
+    expect(system).toMatch(/never revealed when a player dies/i);
+    expect(system).toMatch(/can hide a rescue/i);
+  });
+
+  it("survives a config it cannot describe rather than losing the turn", async () => {
+    const s = new LlmStrategy({ client: stubClient("Bailey is quiet.") });
+    const broken = { ...view, config: {} } as unknown as PlayerView;
+    expect(await s.speak(broken)).toBe("Bailey is quiet.");
+  });
+});
+
+describe("what a wolf is told at night", () => {
+  const wolfNight = (groupChoices?: Record<string, number>) =>
+    ({
+      ...view,
+      phase: "night",
+      players: [
+        { id: "p0", name: "Alex", alive: true, isHost: true, connected: true, roleId: "werewolf" },
+        { id: "p1", name: "Bailey", alive: true, isHost: false, connected: true, roleId: null },
+        { id: "p2", name: "Casey", alive: true, isHost: false, connected: true, roleId: null },
+      ],
+      nightPrompt: {
+        kind: "kill",
+        roleId: "werewolf",
+        targetIds: ["p1", "p2"],
+        canTargetSelf: false,
+        groupChoices,
+      },
+    }) as unknown as PlayerView;
+
+  it("shows the pack what it has already picked, so the kill can converge", async () => {
+    const asked: string[] = [];
+    const s = new LlmStrategy({ client: recordingClient(asked, "1") });
+    await s.night(wolfNight({ p2: 1 }));
+    // The pack kills by plurality and the server has always sent this tally;
+    // without it a two-wolf pack splits its own kill by accident.
+    expect(asked.join("\n")).toContain("Your pack has already picked: Casey");
+    expect(asked.join("\n")).toMatch(/most picks/i);
+  });
+
+  it("says when this wolf is choosing first", async () => {
+    const asked: string[] = [];
+    const s = new LlmStrategy({ client: recordingClient(asked, "1") });
+    await s.night(wolfNight({}));
+    expect(asked.join("\n")).toContain("You are first to choose");
+  });
+
+  it("says nothing about a pack for a lone night role", async () => {
+    const asked: string[] = [];
+    const s = new LlmStrategy({ client: recordingClient(asked, "1") });
+    await s.night(wolfNight(undefined));
+    expect(asked.join("\n")).not.toMatch(/your pack|first to choose/i);
+  });
+});
+
 describe("what a voter is told", () => {
   const voting = (tally: Record<string, number>, remaining: number) =>
     ({
@@ -140,8 +234,9 @@ describe("what a voter is told", () => {
     expect(prompt).toContain("Bailey 2");
     expect(prompt).toContain("Casey 1");
     expect(prompt).toContain("1 still to vote");
-    // And why it matters: a split vote is a wasted day.
-    expect(prompt).toMatch(/tie eliminates nobody/i);
+    // Facts only here. Why a split vote is bad is strategy, and strategy lives
+    // in the playbook so a variant can change it.
+    expect(prompt).not.toMatch(/tie eliminates nobody/i);
   });
 
   it("says plainly when nobody has voted yet", async () => {

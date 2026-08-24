@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import {
   MAX_CHAT_TEXT,
+  previewComposition,
   ROLES,
   type ClientMessage,
   type PlayerId,
@@ -196,6 +197,8 @@ export class LlmStrategy implements Strategy {
           ? "You win alone, on your own terms."
           : "You win when every werewolf is eliminated.",
       "",
+      setup(view),
+      "",
       adviceFor(this.playbook, view.you.roleId, role?.team ?? "village"),
     ];
     return lines.filter(Boolean).join("\n");
@@ -203,10 +206,16 @@ export class LlmStrategy implements Strategy {
 
   private situation(view: PlayerView): string {
     const alive = view.players.filter((p) => p.alive).map((p) => p.name);
-    const dead = view.players.filter((p) => !p.alive).map((p) => p.name);
+    // A dead player's role is filled in only when the table is allowed to know
+    // it, so passing it through leaks nothing and saves the agent guessing.
+    const dead = view.players
+      .filter((p) => !p.alive)
+      .map((p) => (p.roleId ? `${p.name} (was the ${ROLES[p.roleId]?.name ?? p.roleId})` : p.name));
+    const silenced = view.silencedIds.map((id) => nameOf(view, id));
     const parts = [
       `Day ${view.round}. Still alive: ${alive.join(", ")}.`,
       dead.length ? `Already out: ${dead.join(", ")}.` : "",
+      silenced.length ? `Silenced today and unable to vote: ${silenced.join(", ")}.` : "",
     ];
 
     if (view.myInspects.length) {
@@ -304,7 +313,8 @@ export class LlmStrategy implements Strategy {
       const picks: PlayerId[] = [];
       const remaining = pool.slice();
       for (let i = 0; i < Math.max(need, 1) && remaining.length; i++) {
-        const chosen = await this.choose(view, this.nightQuestion(prompt.kind, i), remaining);
+        const question = packSoFar(view) + this.nightQuestion(prompt.kind, i);
+        const chosen = await this.choose(view, question, remaining);
         picks.push(chosen);
         remaining.splice(remaining.indexOf(chosen), 1);
       }
@@ -411,6 +421,63 @@ export class LlmStrategy implements Strategy {
 }
 
 /**
+ * What every player knows before a word is said: the size of the table, how
+ * many wolves are in it, which roles can appear, and the house rules. Public
+ * knowledge at a real table — and without it an agent cannot count the wolves
+ * down, or tell a quiet night caused by a house rule from one caused by a
+ * doctor. It goes in the system prompt because it never changes during a game.
+ */
+function setup(view: PlayerView): string {
+  const total = view.players.length;
+  // Never let a prompt garnish break a turn: if the setup can't be described,
+  // the agent should still get its rules, role and situation.
+  let comp;
+  try {
+    comp = previewComposition(view.config, total);
+  } catch {
+    return "";
+  }
+  const parts = [
+    `The game: ${total} players, ${comp.werewolves} of them werewolves.`,
+  ];
+
+  const sel = view.config.selection;
+  if (sel.mode === "pool") {
+    const names = sel.pool.map((id) => ROLES[id]?.name ?? id).join(", ");
+    parts.push(`Everyone else is drawn from: ${names}.`);
+  } else {
+    const named = Object.entries(sel.roleCounts)
+      .filter(([, n]) => n > 0)
+      .map(([id, n]) => `${n} ${ROLES[id]?.name ?? id}`)
+      .join(", ");
+    if (named) parts.push(`Also in play: ${named}. The rest are ordinary Villagers.`);
+  }
+
+  if (view.config.peacefulFirstNight)
+    parts.push("House rule: the wolves do not kill on the first night, so a quiet first night means nothing.");
+  parts.push(
+    view.config.revealRoleOnDeath
+      ? "When a player dies, their role is announced."
+      : "Roles are never revealed when a player dies."
+  );
+  if (view.config.nightSummary === "discreet")
+    parts.push("A night where someone was attacked but saved is reported as a quiet night, so 'nobody died' can hide a rescue.");
+  return parts.join(" ");
+}
+
+/** What the rest of the pack has picked tonight, for a wolf deciding its own. */
+function packSoFar(view: PlayerView): string {
+  const choices = view.nightPrompt?.groupChoices;
+  if (!choices) return "";
+  const named = Object.entries(choices)
+    .filter(([, n]) => n > 0)
+    .map(([id, n]) => (n > 1 ? `${nameOf(view, id)} (${n})` : nameOf(view, id)));
+  return named.length
+    ? `Your pack has already picked: ${named.join(", ")}. The pack kills whoever gets the most picks. `
+    : "You are first to choose tonight. ";
+}
+
+/**
  * The state of the vote as it stands, which the server has always sent and the
  * prompt never mentioned. Voting blind is why a third of all days ended in a
  * tie: nobody could see a majority forming, so nobody could join one.
@@ -424,8 +491,7 @@ function voteQuestion(view: PlayerView): string {
   return [
     standing ? `Votes so far — ${standing}.` : "Nobody has voted yet.",
     view.votesRemaining > 0 ? `${view.votesRemaining} still to vote.` : "",
-    "A tie eliminates nobody, which hands the wolves a free night, so joining a" +
-      " majority you can live with beats splitting the vote.",
+    view.myVote !== undefined ? "You have already voted; this replaces it." : "",
     "Who do you vote to eliminate?",
   ]
     .filter(Boolean)
