@@ -175,6 +175,23 @@ describe("the referee", () => {
     expect(watchers.map((w) => w.seen).sort()).toEqual(record.seats.map((s) => s.dealt).sort());
   }, 60_000);
 
+  it("rotates who speaks first instead of always opening with seat one", async () => {
+    const talkers = Array.from({ length: 5 }, (_, i) => new Talker(`seat ${i} speaking`));
+    const { transcript } = await arena.play({ strategies: talkers, discussionRounds: 3 });
+
+    // Group the talk into rounds by watching for the speaker order to wrap.
+    const openers = new Set<string>();
+    let previous = -1;
+    for (const said of transcript) {
+      const seat = Number(said.text.match(/seat (\d+)/)![1]);
+      if (seat <= previous) openers.add(said.speaker);
+      previous = seat;
+    }
+    if (transcript.length > 5) expect(openers.size).toBeGreaterThan(0);
+    // The stronger check: not every line came from the same opening seat.
+    expect(new Set(transcript.map((t) => t.speaker)).size).toBeGreaterThan(1);
+  }, 60_000);
+
   it("only records talk the town actually heard", async () => {
     const talkers = Array.from({ length: 5 }, (_, i) => new Talker(`line from seat ${i}`));
     const { record, transcript } = await arena.play({

@@ -16,6 +16,14 @@ import { ACCUSE, CLAIM } from "./speech.js";
  * which is the one vantage point that gets to know everything.
  */
 
+/**
+ * A wolf line that gives its own side away: naming a packmate, or admitting to
+ * being a wolf. These are model formatting failures rather than play, but while
+ * they were going into the game they were free wins for the village — so it is
+ * worth asking how many of a run's village wins rested on one.
+ */
+const CONFESSION = /\b(my packmate|fellow (?:wolf|werewolf)|i(?:'m| am) (?:a|the) (?:wolf|werewolf)|we killed)\b/i;
+
 interface Line {
   game: number;
   day: number;
@@ -46,6 +54,8 @@ async function main() {
   let wolfClaims = 0;
   let villageClaims = 0;
   let deadLines = 0;
+  /** game number -> a wolf gave the pack away in it */
+  const confessed = new Set<number>();
 
   for (const line of lines) {
     const record = records[line.game - 1];
@@ -65,6 +75,7 @@ async function main() {
     const claims = CLAIM.test(line.text);
     const accuses = ACCUSE.test(line.text);
     if (!dead && wolf && accuses) wolfAccusations++;
+    if (!dead && wolf && CONFESSION.test(line.text)) confessed.add(line.game);
     if (!dead && claims) (wolf ? (wolfClaims += 1) : (villageClaims += 1));
 
     if (wolvesOnly && !wolf) continue;
@@ -82,6 +93,20 @@ async function main() {
   console.log(`  villagers claiming   ${villageClaims} (${pct(villageClaims, villageLines)} of village lines)`);
   if (deadLines)
     console.log(`  ${deadLines} lines from already-dead seats (a pre-fix transcript; the engine refused these)`);
+
+  // Did the village's wins come from its own play, or from wolves blurting?
+  const villageWins = (games: number[]) =>
+    games.filter((g) => records[g - 1]?.winner === "village").length;
+  const all = records.map((_, i) => i + 1);
+  const leaked = [...confessed].sort((a, b) => a - b);
+  const clean = all.filter((g) => !confessed.has(g));
+  console.log(
+    `\n  wolves gave themselves away in ${leaked.length}/${records.length} games` +
+      `\n    village won ${villageWins(leaked)}/${leaked.length} of those` +
+      ` (${pct(villageWins(leaked), leaked.length)})` +
+      `\n    village won ${villageWins(clean)}/${clean.length} of the rest` +
+      ` (${pct(villageWins(clean), clean.length)})`
+  );
 }
 
 /**

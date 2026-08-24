@@ -38,8 +38,10 @@ export interface Playbook {
 
 /** Format-only speaking instruction: says how to answer, never what to think. */
 const PLAIN_SPEECH =
-  "It is your turn to speak to the town. Say one or two sentences, in your own " +
-  "voice. Give only the words you would say out loud — no notes, no narration.";
+  "It is your turn to speak to the town. Say one or two short sentences and finish " +
+  "them — anything longer gets cut off, and a sentence that stops halfway reads to " +
+  "everyone else as if you are dodging. Give only the words you would say out loud: " +
+  "no notes, no narration.";
 
 /**
  * The original prompt, kept as the control so later variants have a fixed line

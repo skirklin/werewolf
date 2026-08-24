@@ -164,7 +164,10 @@ export class Arena {
         case "dayDiscussion": {
           say(`Day ${view.round}.`);
           for (let round = 0; round < rounds; round++) {
-            for (const client of clients) {
+            // Rotate who opens. Speaking first means having nothing to react to
+            // and speaking last means hearing everything, so a fixed order hands
+            // the same seat the same disadvantage in every game of a run.
+            for (const client of rotate(clients, view.round + round)) {
               const me = await current(client);
               if (!me) continue; // dead, or out of step — either way, not speaking
               const seat = clients.indexOf(client);
@@ -244,6 +247,12 @@ export class Arena {
     host.send({ type: "endNight" });
     await host.waitFor((v) => v.phase !== "night", "the night to end");
   }
+}
+
+/** The same seats, started from a different point in the circle. */
+function rotate<T>(items: readonly T[], by: number): T[] {
+  const offset = ((by % items.length) + items.length) % items.length;
+  return [...items.slice(offset), ...items.slice(0, offset)];
 }
 
 /**

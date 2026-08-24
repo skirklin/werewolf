@@ -1,5 +1,11 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { ROLES, type ClientMessage, type PlayerId, type PlayerView } from "@werewolf/shared";
+import {
+  MAX_CHAT_TEXT,
+  ROLES,
+  type ClientMessage,
+  type PlayerId,
+  type PlayerView,
+} from "@werewolf/shared";
 import { nameOf, nightMessage, otherLiving, picksNeeded, type Strategy } from "../strategy.js";
 import { RandomStrategy } from "./random.js";
 import { BASELINE, adviceFor, type Playbook } from "../playbooks.js";
@@ -73,6 +79,12 @@ export interface LlmOptions {
 
 /** Picks a playbook from the seat's own role. Never sees another seat's. */
 export type PlaybookChoice = (team: string, roleId: string | null) => Playbook;
+
+/**
+ * Room for a complete short turn. The engine caps a message at MAX_CHAT_TEXT
+ * characters, so this is sized to finish inside that rather than be chopped.
+ */
+const SPEECH_TOKENS = 90;
 
 /** How many messages of backchat to hand the model. Keeps input tokens bounded. */
 const CHAT_WINDOW = 30;
@@ -336,7 +348,7 @@ export class LlmStrategy implements Strategy {
 
   async speak(view: PlayerView): Promise<string | null> {
     try {
-      let text = clean(await this.ask(view, this.speechPrompt(view), 150));
+      let text = clean(await this.ask(view, this.speechPrompt(view), SPEECH_TOKENS));
       // A model that writes its notes into the dialogue field will happily
       // announce its own packmates. That's a formatting failure, not a play, so
       // give it one sharper nudge before giving up on the turn.
@@ -348,7 +360,7 @@ export class LlmStrategy implements Strategy {
             `${this.speechPrompt(view)}\n\nIMPORTANT: output ONLY the sentence you speak ` +
               `aloud, in quotes-free plain text. No notes, no lists, no reasoning, and ` +
               `nothing about your own role that you would not shout across the square.`,
-            150
+            SPEECH_TOKENS
           )
         );
       }
@@ -357,7 +369,7 @@ export class LlmStrategy implements Strategy {
         this.silences++;
         return null;
       }
-      return text.slice(0, 300);
+      return trimToSentence(text, MAX_CHAT_TEXT);
     } catch (err) {
       this.note(err);
       return null;
@@ -421,6 +433,29 @@ function summarize(entry: PlayerView["log"][number], view: PlayerView): string {
     default:
       return "";
   }
+}
+
+/**
+ * Cut over-long speech at a sentence boundary rather than mid-word.
+ *
+ * This matters more than it looks: the engine caps a message, and a hard slice
+ * left half the lines in a run ending mid-thought. Other agents read that as
+ * evasion and voted accordingly — "that's the second time they've dodged
+ * completing a thought under pressure" was said about a truncation.
+ */
+export function trimToSentence(text: string, limit: number): string {
+  if (text.length <= limit) return text;
+  const clipped = text.slice(0, limit);
+  const lastEnd = Math.max(
+    clipped.lastIndexOf(". "),
+    clipped.lastIndexOf("! "),
+    clipped.lastIndexOf("? ")
+  );
+  // Only honour a boundary that keeps most of the message; otherwise a single
+  // long sentence would be cut down to a fragment.
+  if (lastEnd > limit * 0.5) return clipped.slice(0, lastEnd + 1);
+  const lastSpace = clipped.lastIndexOf(" ");
+  return (lastSpace > limit * 0.5 ? clipped.slice(0, lastSpace) : clipped).trimEnd() + "…";
 }
 
 /** Strip surrounding quotes and whitespace a model likes to wrap speech in. */
