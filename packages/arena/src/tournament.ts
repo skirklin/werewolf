@@ -1,10 +1,11 @@
 import { appendFile, mkdir } from "node:fs/promises";
 import { dirname } from "node:path";
-import { aggregate, recommendedConfig, type GameConfig, type GameRecord } from "@werewolf/shared";
+import { aggregate, type GameRecord } from "@werewolf/shared";
 import { Arena, type Said } from "./match.js";
 import { LlmStrategy, totalSpend } from "./strategies/llm.js";
 import { getPlaybook, PLAYBOOKS } from "./playbooks.js";
 import { analyzeSpeech } from "./speech.js";
+import { tableConfig, describeTable } from "./table.js";
 
 /**
  * Play prompt variants against each other and rank them.
@@ -36,6 +37,8 @@ Options
   --model ID            model for every seat (default claude-haiku-4-5)
   --discussion N        times round the table before each vote (default 2)
   --lethal              let the wolves kill on night one (default: they do not)
+  --roles a,b,c         role pool to draw from (default villager,seer,doctor)
+  --ratio N             share of the table that is werewolf (default 0.26)
   --out FILE            append the anonymous records here as JSONL
   --transcript FILE     append everything said here, tagged with the playbook
 
@@ -77,10 +80,7 @@ async function main() {
   // Peaceful first night by default: with a lethal one, a seven-player village
   // must find a wolf on day one AND day two or lose, which floors the win rate
   // near zero and leaves prompt differences nowhere to show up.
-  const config: GameConfig = {
-    ...recommendedConfig(players),
-    peacefulFirstNight: !args.lethal,
-  };
+  const config = tableConfig({ ...args, peaceful: !args.lethal }, players);
   const outFile = args.out ? String(args.out) : null;
   const transcriptFile = args.transcript ? String(args.transcript) : null;
   if (outFile) await ensureDir(outFile);
@@ -93,6 +93,7 @@ async function main() {
   );
   for (const [wolves, village] of pairings)
     console.log(`  wolves ${wolves} vs village ${village}`);
+  console.log(describeTable(config, players));
   console.log("");
 
   const arena = await Arena.open();

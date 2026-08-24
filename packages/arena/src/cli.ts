@@ -1,10 +1,11 @@
 import { appendFile, mkdir } from "node:fs/promises";
 import { dirname } from "node:path";
-import { aggregate, recommendedConfig, type GameConfig, type GameRecord } from "@werewolf/shared";
+import { aggregate, type GameRecord } from "@werewolf/shared";
 import { Arena } from "./match.js";
 import { report, confidenceNote } from "./report.js";
 import { makeStrategy, parseLineup, STRATEGY_HELP } from "./lineup.js";
 import { LlmStrategy, totalSpend } from "./strategies/llm.js";
+import { tableConfig, describeTable } from "./table.js";
 
 const USAGE = `
 Agent-vs-agent Werewolf.
@@ -18,6 +19,8 @@ Options
   --playbook NAME      prompt variant for llm seats (default baseline)
   --discussion N       times round the table before each vote (default 2)
   --peaceful           no werewolf kill on the first night
+  --roles a,b,c        role pool to draw from (default villager,seer,doctor)
+  --ratio N            share of the table that is werewolf (default 0.26)
   --out FILE           append the anonymous game records here as JSONL
   --transcript FILE    write everything that was said here
   --quiet              only print the final table
@@ -41,14 +44,12 @@ async function main() {
   const playbook = args.playbook ? String(args.playbook) : undefined;
   const quiet = !!args.quiet;
 
-  const config: GameConfig = {
-    ...recommendedConfig(lineup.length),
-    peacefulFirstNight: !!args.peaceful,
-  };
+  const config = tableConfig(args, lineup.length);
 
   console.log(
     `Playing ${games} game${games === 1 ? "" : "s"} of ${lineup.length}: ${lineup.join(", ")}`
   );
+  console.log(describeTable(config, lineup.length));
   if (lineup.some((s) => s.startsWith("llm")))
     console.log("LLM seats will call the Anthropic API — this costs money.\n");
 
