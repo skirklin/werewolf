@@ -94,11 +94,39 @@ Strategies:
   random legal move rather than killing the run.
 
 Results print as a table — win rates per strategy, split by the side each seat
-drew, plus the usual per-role numbers. `--out FILE` appends the anonymous
-records, `--transcript FILE` saves everything that was said. Arena games are
-tagged `agent` and never mix into the house numbers; conversely the transcript
-is kept *out* of the game record, because words are the one thing players write
-themselves.
+drew, plus per-role numbers, how often the town's lynch actually hit a wolf, and
+how many days deadlocked. `--out FILE` appends the anonymous records,
+`--transcript FILE` saves everything that was said, and `--roles a,b,c` /
+`--ratio N` set what gets dealt (the default pool is fixed at seven seats, and
+the runner says so). Arena games are tagged `agent` and never mix into the house
+numbers; the transcript is kept *out* of the game record, because words are the
+one thing players write themselves.
+
+Two more entry points: `npm run arena:analyze -- records.jsonl` re-prints the
+table from saved records, and `npm run arena:annotate -- records.jsonl
+transcript.txt` joins talk back to roles so you can ask who was bluffing.
+
+### What it has found
+
+At five seats with one wolf and a peaceful first night, over 40 agent games
+against an 80-game random control:
+
+| | random | agents |
+|---|---|---|
+| Village win rate | 34% | **55%** (p = 0.03) |
+| Lynch accuracy | 25% | 37% |
+| Days deadlocked | 33% | 21% |
+
+Getting there was mostly a matter of giving agents information the server had
+been sending all along and the prompt ignored — the wolf count and house rules,
+the running vote tally, the pack's own night picks. Before that audit the agents
+were statistically indistinguishable from random, and a village that cannot see
+a majority forming ties a third of its days away.
+
+Two cautions if you extend this. The default role pool is fixed, so every game
+deals the same four roles unless you pass `--roles`; and win rate is a noisy
+measure at these sample sizes — lynch accuracy counts every vote and is the
+better signal for whether discussion is doing anything.
 
 ## Stats
 
