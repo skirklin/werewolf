@@ -160,12 +160,16 @@ function grid(cells: Cell[]): string {
   }
 
   lines.push("");
-  lines.push("Lynch accuracy (chance ≈ wolves ÷ others) and wasted days");
+  // The analytic figure is day-one only. As villagers die the wolf share of the
+  // survivors rises, so later lynches are likelier to land by luck alone — which
+  // is why a random table can measure above this line without any skill at all.
+  // For judging a strategy, compare against a measured random run, not this.
+  lines.push("Lynch accuracy vs day-one chance (wolves ÷ others), and wasted days");
   for (const c of cells) {
     const chance = c.wolves / (c.players - 1);
     lines.push(
       `  ${c.players}p/${c.wolves}w  lynches hit a wolf ${pct(c.wolfLynches / Math.max(c.lynches, 1))}` +
-        ` (chance ${pct(chance)}) · ${pct(c.deadlocks / Math.max(c.lynches + c.deadlocks, 1))} of days deadlocked`
+        ` (day-one chance ${pct(chance)}) · ${pct(c.deadlocks / Math.max(c.lynches + c.deadlocks, 1))} of days deadlocked`
     );
   }
   return lines.join("\n");
