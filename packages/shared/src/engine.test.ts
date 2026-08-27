@@ -647,3 +647,25 @@ describe("the town square", () => {
     expect(rematch.chat).toEqual([]);
   });
 });
+
+describe("choosing a wolf count", () => {
+  it("treats wolves/players as a request for exactly that many wolves", () => {
+    // The arena sweep leans on this: it varies the wolf count by setting the
+    // ratio to wolves/players, which must not drift under rounding.
+    for (let players = 3; players <= 20; players++) {
+      const most = Math.floor((players - 1) / 2);
+      for (let wolves = 1; wolves <= most; wolves++) {
+        expect(werewolfCountFor(players, wolves / players)).toBe(wolves);
+      }
+    }
+  });
+
+  it("never lets the wolves start at or past parity, whatever is asked for", () => {
+    for (let players = 3; players <= 20; players++) {
+      for (const ratio of [0.5, 0.9, 1, 5]) {
+        expect(werewolfCountFor(players, ratio) * 2).toBeLessThan(players);
+      }
+      expect(werewolfCountFor(players, 0.001)).toBe(1); // and always at least one
+    }
+  });
+});
