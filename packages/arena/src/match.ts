@@ -232,8 +232,18 @@ export class Arena {
       if (host.view?.phase !== "night") return;
       const pending = clients.filter((c) => c.view?.nightPrompt);
       if (!pending.length) {
-        if (!(await host.soft((v) => v.phase !== "night", 200))) continue;
-        return;
+        // Nothing to do *yet*: roles that wait on others (the Witch needs the
+        // wolves, the Medium a death) surface a beat later. Wake on whichever
+        // comes first — a prompt appearing or the night ending — rather than
+        // waiting out a fixed delay for a condition that may never come true
+        // during it. Polling the wrong condition here made a rich role pool
+        // seven times slower to simulate than a plain one.
+        await Promise.race([
+          ...clients.map((c) => c.soft((v) => !!v.nightPrompt, 250)),
+          host.soft((v) => v.phase !== "night", 250),
+        ]);
+        if (host.view?.phase !== "night") return;
+        continue;
       }
       await Promise.all(
         pending.map(async (client) => {
