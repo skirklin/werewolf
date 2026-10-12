@@ -16,7 +16,7 @@
     "build": "npm -w @werewolf/client run build",
     "start": "npm -w @werewolf/server run start",
     "test": "npm run test --workspaces --if-present",
-    "typecheck": "tsc -b --pretty",
+    "typecheck": "tsc -p packages/shared --noEmit && tsc -p packages/server --noEmit && tsc -p packages/client --noEmit && tsc -p packages/arena --noEmit",
     "arena": "npm -w @werewolf/arena run arena --",
     "arena:analyze": "npm -w @werewolf/arena run analyze --",
     "arena:annotate": "npm -w @werewolf/arena run annotate --",

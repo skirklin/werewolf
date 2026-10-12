@@ -1,0 +1,83 @@
+# Typecheck, test and build on every push and pull request.
+#
+# No secrets are used here, so this workflow is safe to run against pull
+# requests from forks. Deployment lives in a separate workflow precisely so
+# that the one with credentials never runs on untrusted code.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A new push to the same branch supersedes an in-flight run.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Typecheck, test, build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # Matches the Dockerfile, so CI cannot pass on a version production
+          # does not run.
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Typecheck every workspace
+        run: npm run typecheck
+
+      - name: Test
+        # The arena's tests stand up a real server and real WebSocket clients
+        # but never call an API: the LLM strategy is exercised against a stub,
+        # so no key is needed and nothing here costs money.
+        run: npm test
+
+      - name: Build the client
+        run: npm run build
+
+  image:
+    name: Docker image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build the production image
+        # Build only — no registry credentials, so this is safe on forks. It
+        # exists because the image can break while the workspace builds fine:
+        # adding the arena workspace broke `npm ci` inside the Dockerfile,
+        # which nothing but an image build would have caught.
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          load: true
+          tags: werewolf:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Check the server actually starts and serves
+        run: |
+          docker run -d --name ww -p 3000:3000 werewolf:ci
+          for i in $(seq 1 30); do
+            if curl -fsS localhost:3000/api/health > /dev/null; then
+              echo "health OK"
+              curl -fsS localhost:3000/api/stats > /dev/null && echo "stats OK"
+              curl -fsS -o /dev/null -w 'client: %{http_code}\n' localhost:3000/
+              docker rm -f ww > /dev/null
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "server never became healthy; logs follow:"
+          docker logs ww
+          exit 1
