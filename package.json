@@ -7,7 +7,8 @@
     "packages/shared",
     "packages/server",
     "packages/client",
-    "packages/arena"
+    "packages/arena",
+    "packages/deaddrop"
   ],
   "scripts": {
     "dev": "concurrently -n server,client -c blue,magenta \"npm:dev:server\" \"npm:dev:client\"",
@@ -16,12 +17,13 @@
     "build": "npm -w @werewolf/client run build",
     "start": "npm -w @werewolf/server run start",
     "test": "npm run test --workspaces --if-present",
-    "typecheck": "tsc -p packages/shared --noEmit && tsc -p packages/server --noEmit && tsc -p packages/client --noEmit && tsc -p packages/arena --noEmit",
+    "typecheck": "tsc -p packages/shared --noEmit && tsc -p packages/server --noEmit && tsc -p packages/client --noEmit && tsc -p packages/arena --noEmit && tsc -p packages/deaddrop --noEmit",
     "arena": "npm -w @werewolf/arena run arena --",
     "arena:analyze": "npm -w @werewolf/arena run analyze --",
     "arena:annotate": "npm -w @werewolf/arena run annotate --",
     "arena:tournament": "npm -w @werewolf/arena run tournament --",
-    "arena:sweep": "npm -w @werewolf/arena run sweep --"
+    "arena:sweep": "npm -w @werewolf/arena run sweep --",
+    "deaddrop": "npm -w @werewolf/deaddrop run cli --"
   },
   "devDependencies": {
     "concurrently": "^9.1.0",

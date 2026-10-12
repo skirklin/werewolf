@@ -13,6 +13,7 @@ COPY packages/shared/package.json packages/shared/
 COPY packages/server/package.json packages/server/
 COPY packages/client/package.json packages/client/
 COPY packages/arena/package.json packages/arena/
+COPY packages/deaddrop/package.json packages/deaddrop/
 RUN npm ci
 
 # Build the client into packages/client/dist (served by the server).

@@ -23,6 +23,9 @@ tests, and it's yours to change.
   pass-the-device play, so the two modes can never disagree on the rules.
 - **`packages/arena`** — agent-vs-agent play over the real WebSocket protocol,
   for measuring how strategies perform. See below.
+- **`packages/deaddrop`** — engine for a second, in-progress game: a spy
+  deduction game with generated, solver-verified scenarios. No UI yet; see
+  [its design notes](packages/deaddrop/DESIGN.md).
 
 ## Play modes
 
