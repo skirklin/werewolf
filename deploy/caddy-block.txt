@@ -1,6 +1,8 @@
-Add this site block to the Caddyfile ConfigMap in homelab/infra/k8s/caddy.yaml
-(alongside the other app blocks), then redeploy Caddy. WebSockets work with no
-extra directives — Caddy's reverse_proxy forwards Upgrade/Connection headers.
+Add this site block to your Caddyfile (alongside your other apps), then
+redeploy Caddy. WebSockets work with no extra directives — Caddy's
+reverse_proxy forwards the Upgrade/Connection headers for you.
+
+Replace the host with your own domain.
 
 werewolf.example.com {
     reverse_proxy werewolf.homelab.svc.cluster.local:3000

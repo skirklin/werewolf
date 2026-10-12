@@ -5,3 +5,6 @@ dist/
 *.log
 .env
 .vite/
+
+# Your own host names for deploy.sh — never committed.
+deploy/local.env
