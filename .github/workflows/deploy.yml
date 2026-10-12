@@ -10,13 +10,14 @@
 #   * It targets the `production` environment, which requires a human to
 #     approve each run. Secrets are scoped to that environment.
 #
+# The image goes to GHCR, authenticated with the run's own GITHUB_TOKEN, so
+# there is no registry credential to store or to share with a laptop.
+#
 # Required secrets (on the `production` environment):
 #   SSH_PRIVATE_KEY     deploy key for the cluster node
 #   SSH_KNOWN_HOSTS     output of `ssh-keyscan <host>`, so the host is verified
 #   HOMELAB_VPS         ssh target, e.g. user@host
-#   HOMELAB_REGISTRY    registry hostname
-#   REGISTRY_USERNAME   registry login
-#   REGISTRY_PASSWORD   registry password or token
+#   SITE_URL            optional; polled for health after the rollout
 name: Deploy
 
 on:
@@ -36,6 +37,9 @@ jobs:
   deploy:
     name: Roll out to production
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
     # A manual run is explicit consent; an automatic one requires CI to have passed.
     if: >-
       github.event_name == 'workflow_dispatch' ||
@@ -53,9 +57,10 @@ jobs:
 
       - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
-          registry: ${{ secrets.HOMELAB_REGISTRY }}
-          username: ${{ secrets.REGISTRY_USERNAME }}
-          password: ${{ secrets.REGISTRY_PASSWORD }}
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          # Issued per run and scoped to this repository's packages.
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
@@ -64,9 +69,10 @@ jobs:
           push: true
           # Two tags: `latest` for anything that follows it, and the commit sha
           # so a rollout names the exact build and can be rolled back to one.
+          # `github.repository` keeps the owner out of the file.
           tags: |
-            ${{ secrets.HOMELAB_REGISTRY }}/homelab/werewolf:latest
-            ${{ secrets.HOMELAB_REGISTRY }}/homelab/werewolf:sha-${{ github.event.workflow_run.head_sha || github.sha }}
+            ghcr.io/${{ github.repository }}:latest
+            ghcr.io/${{ github.repository }}:sha-${{ github.event.workflow_run.head_sha || github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -82,7 +88,7 @@ jobs:
       - name: Apply the manifest and roll out
         env:
           VPS: ${{ secrets.HOMELAB_VPS }}
-          SHA: sha-${{ github.event.workflow_run.head_sha || github.sha }}
+          IMAGE: ghcr.io/${{ github.repository }}:sha-${{ github.event.workflow_run.head_sha || github.sha }}
         run: |
           set -euo pipefail
           SSH="ssh -i ~/.ssh/id_deploy -o IdentitiesOnly=yes"
@@ -92,8 +98,7 @@ jobs:
           $SSH "$VPS" "
             set -eu
             kubectl apply -f /tmp/werewolf.yaml
-            kubectl set image -n homelab deployment/werewolf \
-              werewolf=localhost:30500/homelab/werewolf:$SHA
+            kubectl set image -n homelab deployment/werewolf werewolf=$IMAGE
             kubectl rollout status -n homelab deployment/werewolf --timeout=180s
           "
 

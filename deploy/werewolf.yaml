@@ -37,7 +37,12 @@ spec:
     spec:
       containers:
         - name: werewolf
-          image: localhost:30500/homelab/werewolf:latest
+          # Published by the Deploy workflow to GHCR. A rollout pins this to a
+          # commit-sha tag (`kubectl set image`), so what is running is always
+          # traceable to a commit and `kubectl rollout undo` goes back to one.
+          # Forks: change the owner, and make the package public or add an
+          # imagePullSecret.
+          image: ghcr.io/skirklin/werewolf:latest
           imagePullPolicy: Always
           ports:
             - containerPort: 3000

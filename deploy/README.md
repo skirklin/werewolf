@@ -6,12 +6,21 @@ Werewolf runs as one container: it builds the client and serves it plus the
 WebSocket API on port 3000. (Caddy proxies WebSockets transparently — no extra
 config needed.)
 
-Nothing here hardcodes a host name. Point it at your own infrastructure with:
+**Normally you do not run any of this by hand.** Pushing to `main` runs CI, and
+a green CI triggers the Deploy workflow, which builds the image, publishes it to
+GHCR and rolls out over SSH. The script here is the fallback for when GitHub is
+not an option.
 
-| Variable | What it is | Example |
+Images live at `ghcr.io/<owner>/werewolf`, tagged `latest` and `sha-<commit>`.
+A rollout pins the deployment to the sha tag, so what is running always traces
+back to a commit and `kubectl rollout undo` goes back to one.
+
+Point the script at your own infrastructure with:
+
+| Variable | What it is | Default |
 | --- | --- | --- |
-| `HOMELAB_VPS` | ssh target for the cluster node | `user@host` |
-| `HOMELAB_REGISTRY` | registry hostname | `registry.example.com` |
+| `HOMELAB_VPS` | ssh target for the cluster node | required |
+| `WEREWOLF_IMAGE` | image repository | `ghcr.io/skirklin/werewolf` |
 
 Set them in your environment, or keep them in **`deploy/local.env`** — which is
 gitignored, so your host names stay out of the repo:
@@ -19,7 +28,6 @@ gitignored, so your host names stay out of the repo:
 ```bash
 # deploy/local.env
 HOMELAB_VPS=user@host
-HOMELAB_REGISTRY=registry.example.com
 ```
 
 ## Files here
@@ -38,14 +46,20 @@ HOMELAB_REGISTRY=registry.example.com
    Let's Encrypt (via Caddy) needs it resolving before it can issue a
    certificate.
 
-2. **Caddy route** — add the block from `caddy-block.txt` to your Caddyfile
+2. **GitHub secrets** — the Deploy workflow needs `SSH_PRIVATE_KEY`,
+   `SSH_KNOWN_HOSTS` (from `ssh-keyscan`) and `HOMELAB_VPS` on a `production`
+   environment, plus an optional `SITE_URL` to health-check after rollout.
+
+3. **Caddy route** — add the block from `caddy-block.txt` to your Caddyfile
    ConfigMap, then redeploy Caddy (`kubectl apply -f <your caddy.yaml> &&
    kubectl rollout restart -n homelab deployment/caddy`).
 
-3. **Registry auth** — `docker login $HOMELAB_REGISTRY` once, with whatever
-   credential your registry uses.
+4. **Registry** — the workflow authenticates to GHCR with the run's own
+   `GITHUB_TOKEN`, so there is nothing to configure. The package must be
+   **public**, or the cluster needs an `imagePullSecret`. To push by hand
+   instead, `docker login ghcr.io` with a token carrying `write:packages`.
 
-4. **Namespace** — the manifest assumes a `homelab` namespace exists.
+5. **Namespace** — the manifest assumes a `homelab` namespace exists.
 
 ## Deploy
 

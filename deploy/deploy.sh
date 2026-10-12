@@ -5,13 +5,19 @@
 # restarts the deployment. Run from the repo root on a machine that has your
 # cluster's SSH key loaded and is logged in to the registry.
 #
-# Point it at your own infrastructure with two variables:
+# Normally you do not run this: pushing to main deploys via the Deploy
+# workflow, which builds the same image and rolls out the same way. Keep this
+# for when GitHub is not an option.
+#
+# Point it at your own infrastructure with:
 #
 #   HOMELAB_VPS       ssh target for the cluster node, e.g. user@host
-#   HOMELAB_REGISTRY  registry hostname, e.g. registry.example.com
+#   WEREWOLF_IMAGE    image repository (default: ghcr.io/skirklin/werewolf)
 #
 # Set them in the environment, or keep them in deploy/local.env, which is
 # gitignored precisely so a public checkout never carries anyone's host names.
+# Pushing to GHCR by hand needs `docker login ghcr.io` with a token that has
+# write:packages — `gh auth token` works if your gh login has that scope.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
@@ -19,17 +25,21 @@ HERE="$(cd "$(dirname "$0")/.." && pwd)"
 [ -f "$HERE/deploy/local.env" ] && . "$HERE/deploy/local.env"
 
 VPS="${HOMELAB_VPS:?set HOMELAB_VPS (e.g. user@host), or put it in deploy/local.env}"
-REGISTRY="${HOMELAB_REGISTRY:?set HOMELAB_REGISTRY (e.g. registry.example.com), or put it in deploy/local.env}"
-IMAGE="$REGISTRY/homelab/werewolf:latest"
+REPO="${WEREWOLF_IMAGE:-ghcr.io/skirklin/werewolf}"
+# Tag by commit as well as latest, so a manual deploy is as traceable as a
+# workflow one and can be rolled back the same way.
+TAG="sha-$(git rev-parse HEAD)"
+IMAGE="$REPO:$TAG"
 
 echo "==> Building $IMAGE"
-docker build -t "$IMAGE" "$HERE"
+docker build -t "$IMAGE" -t "$REPO:latest" "$HERE"
 
-echo "==> Pushing to registry (needs: docker login $REGISTRY)"
+echo "==> Pushing to ${REPO%%/*} (needs: docker login ${REPO%%/*})"
 docker push "$IMAGE"
+docker push "$REPO:latest"
 
 echo "==> Applying manifest on $VPS"
 scp "$HERE/deploy/werewolf.yaml" "$VPS:/tmp/werewolf.yaml"
-ssh "$VPS" "kubectl apply -f /tmp/werewolf.yaml && kubectl rollout restart -n homelab deployment/werewolf && kubectl rollout status -n homelab deployment/werewolf --timeout=120s"
+ssh "$VPS" "kubectl apply -f /tmp/werewolf.yaml && kubectl set image -n homelab deployment/werewolf werewolf=$IMAGE && kubectl rollout status -n homelab deployment/werewolf --timeout=180s"
 
 echo "==> Done. Ensure a Caddy site block + DNS A record exist (see deploy/README.md)."
