@@ -49,6 +49,10 @@ HOMELAB_VPS=user@host
 2. **GitHub secrets** — the Deploy workflow needs `SSH_PRIVATE_KEY`,
    `SSH_KNOWN_HOSTS` (from `ssh-keyscan`) and `HOMELAB_VPS` on a `production`
    environment, plus an optional `SITE_URL` to health-check after rollout.
+   Leave `production` without required reviewers but limit its deployment
+   branches to `main`. Create a second, secretless `production-approval`
+   environment with required reviewers: deploys started by anyone but the
+   repository owner wait on it, while the owner's own pushes deploy directly.
 
 3. **Caddy route** — add the block from `caddy-block.txt` to your Caddyfile
    ConfigMap, then redeploy Caddy (`kubectl apply -f <your caddy.yaml> &&
