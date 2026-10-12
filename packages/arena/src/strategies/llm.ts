@@ -3,10 +3,10 @@ import {
   MAX_CHAT_TEXT,
   previewComposition,
   ROLES,
-  type ClientMessage,
+  type WerewolfAction,
   type PlayerId,
   type PlayerView,
-} from "@werewolf/shared";
+} from "@party/werewolf";
 import { nameOf, nightMessage, otherLiving, picksNeeded, type Strategy } from "../strategy.js";
 import { RandomStrategy } from "./random.js";
 import { BASELINE, adviceFor, type Playbook } from "../playbooks.js";
@@ -290,7 +290,7 @@ export class LlmStrategy implements Strategy {
 
   // -- the Strategy surface -------------------------------------------------
 
-  async night(view: PlayerView): Promise<ClientMessage> {
+  async night(view: PlayerView): Promise<WerewolfAction> {
     const prompt = view.nightPrompt!;
     try {
       const need = picksNeeded(prompt.kind);

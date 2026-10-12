@@ -1,5 +1,5 @@
 import { readFile } from "node:fs/promises";
-import { aggregate, parseGameRecord, type GameRecord } from "@werewolf/shared";
+import { aggregate, parseGameRecord, type GameRecord } from "@party/werewolf";
 import { report, confidenceNote } from "./report.js";
 
 /**

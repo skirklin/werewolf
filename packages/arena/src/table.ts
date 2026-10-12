@@ -6,7 +6,7 @@ import {
   validateConfig,
   werewolfCountFor,
   type GameConfig,
-} from "@werewolf/shared";
+} from "@party/werewolf";
 
 /**
  * What's actually on the table.

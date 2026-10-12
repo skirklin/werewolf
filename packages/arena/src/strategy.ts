@@ -1,4 +1,4 @@
-import type { ClientMessage, NightPrompt, PlayerId, PlayerView } from "@werewolf/shared";
+import type { WerewolfAction, NightPrompt, PlayerId, PlayerView } from "@party/werewolf";
 
 /**
  * A way of playing. Every method receives only this seat's redacted view, which
@@ -8,7 +8,7 @@ import type { ClientMessage, NightPrompt, PlayerId, PlayerView } from "@werewolf
 export interface Strategy {
   readonly name: string;
   /** Choose tonight's action. The prompt in the view says what's being asked. */
-  night(view: PlayerView): Promise<ClientMessage>;
+  night(view: PlayerView): Promise<WerewolfAction>;
   /** Say something to the town, or null to keep quiet this turn. */
   speak(view: PlayerView): Promise<string | null>;
   /** Who to vote out. Null abstains. */
@@ -41,7 +41,7 @@ export function nightMessage(
   prompt: NightPrompt,
   picks: PlayerId[],
   save = false
-): ClientMessage {
+): WerewolfAction {
   switch (prompt.kind) {
     case "witch":
       return { type: "witchAction", save, poisonTargetId: picks[0] ?? null };

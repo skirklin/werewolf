@@ -9,11 +9,12 @@ WORKDIR /app
 # `npm ci` refuses the install — including arena, which never runs in
 # production but is part of the lockfile.
 COPY package.json package-lock.json ./
-COPY packages/shared/package.json packages/shared/
+COPY packages/core/package.json packages/core/
 COPY packages/server/package.json packages/server/
 COPY packages/client/package.json packages/client/
 COPY packages/arena/package.json packages/arena/
-COPY packages/deaddrop/package.json packages/deaddrop/
+COPY games/werewolf/package.json games/werewolf/
+COPY games/deaddrop/package.json games/deaddrop/
 RUN npm ci
 
 # Build the client into packages/client/dist (served by the server).

@@ -1,37 +1,65 @@
 import { useEffect, useState } from "react";
-import { Home } from "./Home.js";
-import { OnlineApp } from "./OnlineApp.js";
-import { LocalApp } from "./LocalApp.js";
-import { StatsPage } from "./Stats.js";
+import { Picker } from "./shell/Picker.js";
+import { Online } from "./shell/Online.js";
+import { hasSavedRoom } from "./shell/net.js";
+import { gameById } from "./games/index.js";
 
-type Mode = "home" | "online" | "local" | "stats";
+/**
+ * Where we are, read from the address bar so pages can be linked, reloaded
+ * and navigated with the back button:
+ *   /                 the game picker
+ *   /<game>           a game's home   (/werewolf)
+ *   /<game>/<sub>     a page of it    (/werewolf/stats, /werewolf/online)
+ *   ?room=CODE        an invite, which goes straight to joining
+ */
+type Route = { kind: "picker" } | { kind: "game"; game: string; sub: string } | { kind: "join" };
+
+function readRoute(): Route {
+  if (new URLSearchParams(location.search).has("room") || hasSavedRoom()) return { kind: "join" };
+  const [first, sub = ""] = location.pathname.split("/").filter(Boolean);
+  // Before there was more than one game, the stats page lived at /stats.
+  if (first === "stats") return { kind: "game", game: "werewolf", sub: "stats" };
+  if (first && gameById(first)) return { kind: "game", game: first, sub };
+  return { kind: "picker" };
+}
+
+function pathOf(route: Route): string {
+  if (route.kind === "game") return `/${route.game}${route.sub ? `/${route.sub}` : ""}`;
+  return "/";
+}
 
 export function App() {
-  // Jump straight into online play from a shared invite link (?room=CODE) or
-  // when we have saved credentials to resume; /stats opens the house numbers.
-  const [mode, setMode] = useState<Mode>(() => {
-    if (location.pathname === "/stats") return "stats";
-    const hasInvite = new URLSearchParams(location.search).has("room");
-    return hasInvite || localStorage.getItem("werewolf.creds") ? "online" : "home";
-  });
+  const [route, setRoute] = useState<Route>(readRoute);
 
-  // Keep /stats in the address bar so it can be linked and reloaded.
-  const go = (next: Mode) => {
-    const path = next === "stats" ? "/stats" : "/";
-    if (location.pathname !== path) history.pushState(null, "", path + location.search);
-    setMode(next);
+  const go = (next: Route) => {
+    const path = pathOf(next);
+    // Leaving a room drops any invite from the address bar along with it.
+    if (location.pathname !== path || location.search) history.pushState(null, "", path);
+    setRoute(next);
   };
 
   // ...and follow the back button rather than stranding the reader on a page
   // the address bar says they've left.
   useEffect(() => {
-    const onPop = () => setMode(location.pathname === "/stats" ? "stats" : "home");
+    const onPop = () => setRoute(readRoute());
     addEventListener("popstate", onPop);
     return () => removeEventListener("popstate", onPop);
   }, []);
 
-  if (mode === "online") return <OnlineApp onExit={() => go("home")} />;
-  if (mode === "local") return <LocalApp onExit={() => go("home")} />;
-  if (mode === "stats") return <StatsPage onExit={() => go("home")} />;
-  return <Home onPick={go} />;
+  const home = (gameId?: string) =>
+    go(gameId && gameById(gameId) ? { kind: "game", game: gameId, sub: "" } : { kind: "picker" });
+
+  if (route.kind === "join") return <Online onExit={home} />;
+  if (route.kind === "game") {
+    const game = gameById(route.game)!;
+    if (route.sub === "online") return <Online game={game} onExit={home} />;
+    return (
+      <game.Home
+        sub={route.sub}
+        navigate={(sub) => go({ kind: "game", game: game.id, sub })}
+        onBack={() => go({ kind: "picker" })}
+      />
+    );
+  }
+  return <Picker onPick={(id) => go({ kind: "game", game: id, sub: "" })} />;
 }

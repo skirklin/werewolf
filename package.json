@@ -4,26 +4,27 @@
   "private": true,
   "type": "module",
   "workspaces": [
-    "packages/shared",
+    "packages/core",
     "packages/server",
     "packages/client",
     "packages/arena",
-    "packages/deaddrop"
+    "games/werewolf",
+    "games/deaddrop"
   ],
   "scripts": {
     "dev": "concurrently -n server,client -c blue,magenta \"npm:dev:server\" \"npm:dev:client\"",
-    "dev:server": "npm -w @werewolf/server run dev",
-    "dev:client": "npm -w @werewolf/client run dev",
-    "build": "npm -w @werewolf/client run build",
-    "start": "npm -w @werewolf/server run start",
+    "dev:server": "npm -w @party/server run dev",
+    "dev:client": "npm -w @party/client run dev",
+    "build": "npm -w @party/client run build",
+    "start": "npm -w @party/server run start",
     "test": "npm run test --workspaces --if-present",
-    "typecheck": "tsc -p packages/shared --noEmit && tsc -p packages/server --noEmit && tsc -p packages/client --noEmit && tsc -p packages/arena --noEmit && tsc -p packages/deaddrop --noEmit",
-    "arena": "npm -w @werewolf/arena run arena --",
-    "arena:analyze": "npm -w @werewolf/arena run analyze --",
-    "arena:annotate": "npm -w @werewolf/arena run annotate --",
-    "arena:tournament": "npm -w @werewolf/arena run tournament --",
-    "arena:sweep": "npm -w @werewolf/arena run sweep --",
-    "deaddrop": "npm -w @werewolf/deaddrop run cli --"
+    "typecheck": "tsc -p packages/core --noEmit && tsc -p games/werewolf --noEmit && tsc -p games/deaddrop --noEmit && tsc -p packages/server --noEmit && tsc -p packages/client --noEmit && tsc -p packages/arena --noEmit",
+    "arena": "npm -w @party/arena run arena --",
+    "arena:analyze": "npm -w @party/arena run analyze --",
+    "arena:annotate": "npm -w @party/arena run annotate --",
+    "arena:tournament": "npm -w @party/arena run tournament --",
+    "arena:sweep": "npm -w @party/arena run sweep --",
+    "deaddrop": "npm -w @party/deaddrop run cli --"
   },
   "devDependencies": {
     "concurrently": "^9.1.0",

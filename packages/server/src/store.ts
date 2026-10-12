@@ -1,6 +1,6 @@
 import { appendFile, mkdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { parseGameRecord, type GameRecord } from "@werewolf/shared";
+import { parseGameRecord, type GameRecord } from "@party/werewolf";
 
 /**
  * Append-only storage for finished games: one JSON record per line. Records are

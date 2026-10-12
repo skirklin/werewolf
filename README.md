@@ -12,20 +12,36 @@ tests, and it's yours to change.
 
 ## How it's built
 
-- **`packages/shared`** — a pure, framework-free game engine (roles, night/day
-  resolution, win conditions, fair seeded role dealing) plus per-player view
-  redaction. This is the single source of truth for the rules and is fully
-  unit-tested.
-- **`packages/server`** — Fastify + WebSocket. Runs the engine authoritatively
-  for multi-device play and sends each phone only its **own redacted view**, so
-  no client can see another player's role.
-- **`packages/client`** — React + Vite. The same engine runs in the browser for
+The repo is a small platform for phone-browser party games, with Werewolf as
+the first game and room for more.
+
+- **`packages/core`** — the contract between the platform and a game
+  (`GameModule`: start, act, view, isOver), the wire protocol, and a seeded RNG.
+- **`packages/server`** — Fastify + WebSocket. Owns rooms for every game: codes,
+  roster, host, reconnects, the lobby, and dealing again afterwards. It runs
+  each game's module authoritatively and sends each phone only its **own
+  redacted view**, so no client can see another player's secrets.
+- **`packages/client`** — React + Vite. A shared shell (game picker, join,
+  lobby, invite) plus each game's own screens under `src/games/<game>/`.
+- **`packages/arena`** — Werewolf agent-vs-agent play over the real WebSocket
+  protocol, for measuring how strategies perform. See below.
+- **`games/werewolf`** — a pure, framework-free Werewolf engine (roles,
+  night/day resolution, win conditions, fair seeded role dealing) plus
+  per-player view redaction. This is the single source of truth for the rules
+  and is fully unit-tested. The same engine runs in the browser for
   pass-the-device play, so the two modes can never disagree on the rules.
-- **`packages/arena`** — agent-vs-agent play over the real WebSocket protocol,
-  for measuring how strategies perform. See below.
-- **`packages/deaddrop`** — engine for a second, in-progress game: a spy
-  deduction game with generated, solver-verified scenarios. No UI yet; see
-  [its design notes](packages/deaddrop/DESIGN.md).
+- **`games/deaddrop`** — a second, in-progress game: spy deduction with
+  generated, solver-verified scenarios. The server can host it; its screens
+  aren't built yet. See [its design notes](games/deaddrop/DESIGN.md).
+
+### Adding a game
+
+1. Write the rules as a package under `games/` and export a `GameModule` from
+   `@party/core`. Keep `act` pure and treat its `action` as untrusted.
+2. Add the module to `GAMES` in `packages/server/src/server.ts`.
+3. Add a `ClientGame` (home screen, lobby settings, in-game table) under
+   `packages/client/src/games/` and list it in `games/index.ts`.
+4. Add the new package's manifest to the `Dockerfile` and the root workspaces.
 
 ## Play modes
 
@@ -41,7 +57,7 @@ tests, and it's yours to change.
 ## Roles
 
 Villager, Werewolf, Seer, Doctor to start. The role registry
-(`packages/shared/src/roles.ts`) is designed so adding a role that reuses an
+(`games/werewolf/src/roles.ts`) is designed so adding a role that reuses an
 existing night action (kill / protect / inspect) is data-only.
 
 ## Role selection

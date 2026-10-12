@@ -1,4 +1,4 @@
-import type { ClientMessage, PlayerId, PlayerView } from "@werewolf/shared";
+import type { WerewolfAction, PlayerId, PlayerView } from "@party/werewolf";
 import { nameOf, nightMessage, otherLiving, picksNeeded, type Strategy } from "../strategy.js";
 
 /**
@@ -20,7 +20,7 @@ export class RandomStrategy implements Strategy {
     return items[Math.floor(this.rng() * items.length)];
   }
 
-  async night(view: PlayerView): Promise<ClientMessage> {
+  async night(view: PlayerView): Promise<WerewolfAction> {
     const prompt = view.nightPrompt!;
     const pool = prompt.targetIds.slice();
     const picks: PlayerId[] = [];

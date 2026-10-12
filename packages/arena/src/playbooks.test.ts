@@ -1,10 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { ROLES } from "@werewolf/shared";
+import { ROLES } from "@party/werewolf";
 import { PLAYBOOKS, adviceFor, getPlaybook, SPECIALIST, BASELINE, GUARDED } from "./playbooks.js";
 import { makeStrategy, parseLineup } from "./lineup.js";
 import { LlmStrategy, type LlmOptions } from "./strategies/llm.js";
 import { analyzeSpeech } from "./speech.js";
-import type { GameRecord, PlayerView } from "@werewolf/shared";
+import type { GameRecord, PlayerView } from "@party/werewolf";
 
 /** A stand-in API client, so none of these tests cost anything. */
 function stubClient(reply: string) {
