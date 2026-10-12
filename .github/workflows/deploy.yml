@@ -7,8 +7,16 @@
 #     request from a fork, and always uses the workflow file from the default
 #     branch — so a PR cannot edit this file into something that deploys.
 #   * It runs only when CI succeeded on main, so nothing untested ships.
-#   * It targets the `production` environment, which requires a human to
-#     approve each run. Secrets are scoped to that environment.
+#   * A run started by anyone other than the repository owner must first be
+#     approved on the `production-approval` environment. The owner's own
+#     pushes (and manual runs) skip that gate and deploy straight away.
+#     Secrets live only on the `production` environment, which the deploy job
+#     reaches only once the gate has passed or been legitimately skipped.
+#
+# Environment settings this relies on:
+#   production-approval  required reviewers; no secrets
+#   production           no required reviewers; deployment branches limited
+#                        to `main`; holds the secrets below
 #
 # The image goes to GHCR, authenticated with the run's own GITHUB_TOKEN, so
 # there is no registry credential to store or to share with a laptop.
@@ -33,17 +41,44 @@ concurrency:
   group: deploy-production
   cancel-in-progress: false
 
+# Who started this deploy: the pusher whose commit CI ran on, or whoever
+# dispatched it by hand.
+env:
+  TRIGGERED_BY: ${{ github.event.workflow_run.triggering_actor.login || github.actor }}
+
 jobs:
+  approval:
+    name: Await approval
+    runs-on: ubuntu-latest
+    permissions: {}
+    # Only someone other than the owner needs a human to sign off.
+    if: >-
+      (github.event_name == 'workflow_dispatch' ||
+       github.event.workflow_run.conclusion == 'success') &&
+      (github.event.workflow_run.triggering_actor.login || github.actor) != github.repository_owner
+    environment: production-approval
+    steps:
+      - run: echo "Deploy started by $TRIGGERED_BY approved."
+
   deploy:
     name: Roll out to production
+    needs: approval
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
-    # A manual run is explicit consent; an automatic one requires CI to have passed.
+    # A manual run is explicit consent; an automatic one requires CI to have
+    # passed. Then either the approval gate passed, or it was skipped because
+    # the owner started this run. `always()` lets the job run when the gate
+    # was skipped; the conditions after it keep a failed or rejected gate,
+    # or a cancelled run, from deploying.
     if: >-
-      github.event_name == 'workflow_dispatch' ||
-      github.event.workflow_run.conclusion == 'success'
+      always() && !cancelled() &&
+      (github.event_name == 'workflow_dispatch' ||
+       github.event.workflow_run.conclusion == 'success') &&
+      (needs.approval.result == 'success' ||
+       (needs.approval.result == 'skipped' &&
+        (github.event.workflow_run.triggering_actor.login || github.actor) == github.repository_owner))
     environment:
       name: production
       url: https://werewolf.example.com
