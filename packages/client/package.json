@@ -1,5 +1,5 @@
 {
-  "name": "@werewolf/client",
+  "name": "@party/client",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -9,7 +9,9 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@werewolf/shared": "*",
+    "@party/core": "*",
+    "@party/deaddrop": "*",
+    "@party/werewolf": "*",
     "qrcode": "^1.5.4",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"

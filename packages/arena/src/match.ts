@@ -1,11 +1,11 @@
 import type { FastifyInstance } from "fastify";
-import { createApp } from "@werewolf/server";
+import { createApp } from "@party/server";
 import {
   recommendedConfig,
   type GameConfig,
   type GameRecord,
   type PlayerId,
-} from "@werewolf/shared";
+} from "@party/werewolf";
 import { ArenaClient } from "./client.js";
 import type { Strategy } from "./strategy.js";
 
@@ -82,7 +82,7 @@ export class Arena {
         else await client.joinRoom(clients[0].code, name);
         clients.push(client);
       }
-      await clients[0].waitFor((v) => v.players.length === strategies.length, "a full lobby");
+      await clients[0].waitForPlayers(strategies.length);
 
       await this.referee({ clients, strategies, config, rounds, say, transcript });
     } finally {
@@ -132,6 +132,7 @@ export class Arena {
       return view?.you.alive ? view : null;
     };
 
+    await host.startGame(config);
     for (let step = 0; step < MAX_STEPS; step++) {
       const view = await host.waitFor(() => true, "the first view");
       if (view.phase === "gameOver") {
@@ -140,11 +141,6 @@ export class Arena {
       }
 
       switch (view.phase) {
-        case "lobby":
-          host.send({ type: "startGame", config });
-          await host.waitFor((v) => v.phase !== "lobby", "the deal");
-          break;
-
         case "roleReveal":
           // Every seat sees its own role before anything happens, so a strategy
           // that varies by role is settled even if it dies without acting.

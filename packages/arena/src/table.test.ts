@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { previewComposition } from "@werewolf/shared";
+import { previewComposition } from "@party/werewolf";
 import { tableConfig, describeTable } from "./table.js";
 
 describe("the table", () => {

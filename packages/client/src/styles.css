@@ -195,3 +195,44 @@ label.field { display: flex; flex-direction: column; gap: 6px; }
 .chat { display: flex; flex-direction: column; gap: 6px; max-height: 240px; overflow-y: auto; }
 .chat .said { font-size: 0.9rem; padding: 6px 10px; background: var(--bg-2); border-radius: 8px; overflow-wrap: anywhere; }
 .chat .said b { color: var(--accent-2); }
+
+/* ---- Chip pickers (Dead Drop subjects, accusations) ---- */
+.group-label { font-weight: 700; letter-spacing: 0.5px; margin: 4px 0 6px; }
+.choices { display: flex; flex-wrap: wrap; gap: 6px; }
+.choice {
+  min-height: 40px; padding: 0 12px; border-radius: 999px;
+  background: var(--panel); font-size: 0.92rem;
+}
+.choice.selected { background: var(--panel-2); border-color: var(--accent-2); color: var(--accent-2); font-weight: 700; }
+.choice.ruled-out { text-decoration: line-through; color: var(--muted); }
+
+/* ---- Tabs ---- */
+.tabs { display: flex; gap: 6px; position: sticky; top: 0; z-index: 5; padding: 8px 0; background: var(--bg); }
+.tabs > button { flex: 1; min-height: 42px; font-size: 0.95rem; }
+.tabs > button.on { background: var(--panel-2); border-color: var(--accent-2); color: var(--accent-2); font-weight: 700; }
+
+/* ---- Dead Drop: notebook ---- */
+.clue { font-size: 0.95rem; padding: 10px 12px; background: var(--bg-2); border-radius: 10px; border: 1px solid transparent; }
+.clue.new { border-color: var(--accent); }
+.clue .src { display: block; font-size: 0.75rem; color: var(--muted); margin-top: 4px; }
+.clue.pickable { text-align: left; min-height: 0; width: 100%; border: 2px solid var(--line); }
+.clue.pickable.selected { border-color: var(--accent-2); background: var(--panel-2); }
+.grid-cells { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; }
+.cell {
+  display: flex; justify-content: space-between; align-items: center; gap: 8px;
+  min-height: 44px; padding: 6px 10px; border-radius: 10px; text-align: left;
+  background: var(--panel); font-size: 0.9rem;
+}
+.cell .mark { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 0.8rem; white-space: nowrap; }
+.cell.out { opacity: 0.5; }
+.cell.out .name { text-decoration: line-through; }
+.cell.sure { border-color: var(--good); }
+.cell.sure .mark { color: var(--good); font-weight: 700; }
+.why { font-size: 0.85rem; color: var(--muted); padding: 8px 10px; border-left: 2px solid var(--accent); }
+.seats { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; }
+.seat {
+  flex: 0 0 auto; display: flex; align-items: center; gap: 6px;
+  padding: 6px 10px; border-radius: 999px; background: var(--panel); border: 1px solid var(--line); font-size: 0.85rem;
+}
+.seat.active { border-color: var(--accent-2); color: var(--accent-2); font-weight: 700; }
+.seat.out { opacity: 0.5; text-decoration: line-through; }

@@ -1,5 +1,5 @@
 {
-  "name": "@werewolf/server",
+  "name": "@party/server",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -16,7 +16,9 @@
   "dependencies": {
     "@fastify/static": "^8.0.3",
     "@fastify/websocket": "^11.0.1",
-    "@werewolf/shared": "*",
+    "@party/core": "*",
+    "@party/deaddrop": "*",
+    "@party/werewolf": "*",
     "fastify": "^5.2.0"
   },
   "devDependencies": {

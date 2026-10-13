@@ -1,4 +1,4 @@
-import { ROLES, type GameRecord } from "@werewolf/shared";
+import { ROLES, type GameRecord } from "@party/werewolf";
 import { SEAT_NAMES } from "./match.js";
 import type { Said } from "./match.js";
 

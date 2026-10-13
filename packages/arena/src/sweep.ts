@@ -7,7 +7,7 @@ import {
   DEFAULT_WEREWOLF_RATIO,
   type GameConfig,
   type GameRecord,
-} from "@werewolf/shared";
+} from "@party/werewolf";
 import { Arena } from "./match.js";
 import { makeStrategy } from "./lineup.js";
 import { LlmStrategy, totalSpend } from "./strategies/llm.js";

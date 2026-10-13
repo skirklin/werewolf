@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach } from "vitest";
 import type { FastifyInstance } from "fastify";
-import { GAME_RECORD_VERSION, type GameRecord, type Stats } from "@werewolf/shared";
+import { GAME_RECORD_VERSION, type GameRecord, type Stats } from "@party/werewolf";
 import { createApp } from "./server.js";
 
 /**

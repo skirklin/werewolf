@@ -1,6 +1,6 @@
 import { appendFile, mkdir } from "node:fs/promises";
 import { dirname } from "node:path";
-import { aggregate, type GameRecord } from "@werewolf/shared";
+import { aggregate, type GameRecord } from "@party/werewolf";
 import { Arena } from "./match.js";
 import { report, confidenceNote } from "./report.js";
 import { makeStrategy, parseLineup, STRATEGY_HELP } from "./lineup.js";

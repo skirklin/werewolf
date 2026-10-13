@@ -1,5 +1,5 @@
 // Smoke-test the live WebSocket endpoint end-to-end: connect, create a room,
-// and confirm we get a `joined` + a lobby `view` back. Usage:
+// and confirm we get a `joined` + the room's lobby back. Usage:
 //   node deploy/smoke-ws.mjs wss://werewolf.example.com/ws
 import { WebSocket } from "ws";
 
@@ -11,14 +11,15 @@ const timer = setTimeout(() => {
 }, 15000);
 
 let gotJoined = false;
-let gotView = false;
-ws.on("open", () => ws.send(JSON.stringify({ type: "createRoom", name: "Smoke" })));
+let gotRoom = false;
+ws.on("open", () => ws.send(JSON.stringify({ type: "createRoom", game: "werewolf", name: "Smoke" })));
 ws.on("error", (e) => { console.error("WS error:", e.message); process.exit(1); });
 ws.on("message", (raw) => {
   const msg = JSON.parse(raw.toString());
   if (msg.type === "joined") { gotJoined = true; console.log(`joined room ${msg.code}`); }
-  if (msg.type === "view") { gotView = true; console.log(`view: phase=${msg.view.phase}, players=${msg.view.players.length}`); }
-  if (gotJoined && gotView) {
+  if (msg.type === "room") { gotRoom = true; console.log(`room: ${msg.room.game}, phase=${msg.room.phase}, players=${msg.room.players.length}`); }
+  if (msg.type === "error") { console.error("server error:", msg.message); process.exit(1); }
+  if (gotJoined && gotRoom) {
     console.log("WS OK ✅");
     clearTimeout(timer);
     ws.close();

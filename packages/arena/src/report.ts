@@ -1,4 +1,4 @@
-import { aggregate, type GameRecord, type Stats } from "@werewolf/shared";
+import { aggregate, type GameRecord, type Stats } from "@party/werewolf";
 
 /**
  * Turn a run's records into something readable in a terminal. The numbers all

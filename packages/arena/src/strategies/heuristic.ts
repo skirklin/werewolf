@@ -1,4 +1,4 @@
-import { ROLES, type ClientMessage, type PlayerId, type PlayerView } from "@werewolf/shared";
+import { ROLES, type WerewolfAction, type PlayerId, type PlayerView } from "@party/werewolf";
 import { nameOf, nightMessage, otherLiving, picksNeeded, type Strategy } from "../strategy.js";
 
 /**
@@ -47,7 +47,7 @@ export class HeuristicStrategy implements Strategy {
     return !!view.you.roleId && ROLES[view.you.roleId]?.team === "werewolf";
   }
 
-  async night(view: PlayerView): Promise<ClientMessage> {
+  async night(view: PlayerView): Promise<WerewolfAction> {
     const prompt = view.nightPrompt!;
     const pack = new Set(view.packmates);
     const wolves = this.knownWolves(view);

@@ -7,7 +7,7 @@ const HOST = process.env.HOST ?? "0.0.0.0";
 const app = await createApp();
 await app.listen({ port: PORT, host: HOST });
 
-console.log(`\n  🐺  Werewolf server running\n`);
+console.log(`\n  🎲  Game server running\n`);
 for (const url of lanUrls(PORT)) console.log(`      ${url}`);
 console.log(`\n  Share a LAN URL with players on the same WiFi.\n`);
 

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { MAX_CHAT_TEXT, type PlayerView } from "@werewolf/shared";
+import { MAX_CHAT_TEXT, type PlayerView } from "@party/werewolf";
 import { LlmStrategy, trimToSentence, type LlmOptions } from "./strategies/llm.js";
 
 /**

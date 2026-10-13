@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtemp, rm, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { GAME_RECORD_VERSION, type GameRecord } from "@werewolf/shared";
+import { GAME_RECORD_VERSION, type GameRecord } from "@party/werewolf";
 import { GameStore } from "./store.js";
 
 function record(patch: Partial<GameRecord> = {}): GameRecord {

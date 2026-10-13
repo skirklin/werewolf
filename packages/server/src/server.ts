@@ -4,15 +4,14 @@ import { existsSync } from "node:fs";
 import Fastify, { type FastifyInstance } from "fastify";
 import websocket from "@fastify/websocket";
 import fastifyStatic from "@fastify/static";
-import {
-  EngineError,
-  aggregate,
-  parseGameRecord,
-  type ClientMessage,
-  type ServerMessage,
-} from "@werewolf/shared";
-import { RoomManager, type Client, type GameFinishedHook } from "./rooms.js";
+import { GameError, type ClientMessage, type ServerMessage } from "@party/core";
+import { aggregate, parseGameRecord, werewolfModule, type GameRecord } from "@party/werewolf";
+import { deaddropModule } from "@party/deaddrop";
+import { RoomManager, type Client } from "./rooms.js";
 import { GameStore } from "./store.js";
+
+/** Every game this server can host. */
+export const GAMES = [werewolfModule, deaddropModule];
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const clientDist = join(__dirname, "../../client/dist");
@@ -26,10 +25,11 @@ export interface AppOptions {
    */
   dataDir?: string | null;
   /**
-   * Notified as each game ends, alongside the store. The arena uses this to
-   * label seats with the strategy that played them.
+   * Notified as each Werewolf game ends, alongside the store, with the player
+   * ids in seat order. The arena uses this to label seats with the strategy
+   * that played them.
    */
-  onGameFinished?: GameFinishedHook;
+  onGameFinished?: (record: GameRecord, playerIds: string[]) => void;
 }
 
 /** Biggest game record we'll accept from a client, in bytes. */
@@ -43,8 +43,10 @@ export async function createApp(opts: AppOptions = {}): Promise<FastifyInstance>
   const store = await GameStore.open(
     opts.dataDir === undefined ? process.env.WEREWOLF_DATA_DIR : opts.dataDir
   );
-  const manager = new RoomManager((record, playerIds) => {
-    const stamped = { ...record, finishedAt: stamp() };
+  // Only Werewolf keeps stats so far; the store and the stats API are its.
+  const manager = new RoomManager(GAMES, (game, record, playerIds) => {
+    if (game.id !== werewolfModule.id || !record) return;
+    const stamped = { ...(record as GameRecord), finishedAt: stamp() };
     store.add(stamped);
     opts.onGameFinished?.(stamped, playerIds);
   });
@@ -60,7 +62,11 @@ export async function createApp(opts: AppOptions = {}): Promise<FastifyInstance>
 
   app.get("/api/health", async () => ({ ok: true }));
 
-  // ---- Anonymous game stats (public: the records hold nobody's name) ----
+  app.get("/api/catalog", async () =>
+    GAMES.map((g) => ({ id: g.id, name: g.name, minPlayers: g.minPlayers, maxPlayers: g.maxPlayers }))
+  );
+
+  // ---- Anonymous Werewolf stats (public: the records hold nobody's name) ----
 
   /**
    * `?mode=` picks the population: people (the default — arena games would
@@ -117,14 +123,15 @@ export async function createApp(opts: AppOptions = {}): Promise<FastifyInstance>
         } catch {
           return fail("Malformed message.");
         }
+        if (!msg || typeof msg !== "object") return fail("Malformed message.");
         try {
           switch (msg.type) {
             case "createRoom": {
-              const room = manager.create();
+              const room = manager.create(msg.game);
               const { playerId: pid, token } = room.addPlayer(msg.name, client);
               roomCode = room.code;
               playerId = pid;
-              client.send({ type: "joined", playerId: pid, token, code: room.code });
+              client.send({ type: "joined", playerId: pid, token, code: room.code, game: room.game.id });
               break;
             }
             case "joinRoom": {
@@ -133,7 +140,7 @@ export async function createApp(opts: AppOptions = {}): Promise<FastifyInstance>
               const { playerId: pid, token } = room.addPlayer(msg.name, client);
               roomCode = room.code;
               playerId = pid;
-              client.send({ type: "joined", playerId: pid, token, code: room.code });
+              client.send({ type: "joined", playerId: pid, token, code: room.code, game: room.game.id });
               break;
             }
             case "rejoin": {
@@ -142,7 +149,13 @@ export async function createApp(opts: AppOptions = {}): Promise<FastifyInstance>
                 return fail("Could not rejoin — game may have ended.");
               roomCode = room.code;
               playerId = msg.playerId;
-              client.send({ type: "joined", playerId: msg.playerId, token: msg.token, code: room.code });
+              client.send({
+                type: "joined",
+                playerId: msg.playerId,
+                token: msg.token,
+                code: room.code,
+                game: room.game.id,
+              });
               break;
             }
             default: {
@@ -153,7 +166,7 @@ export async function createApp(opts: AppOptions = {}): Promise<FastifyInstance>
             }
           }
         } catch (err) {
-          if (err instanceof EngineError) fail(err.message);
+          if (err instanceof GameError) fail(err.message);
           else {
             fail("Something went wrong.");
             console.error(err);

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { ROLES, type ClientMessage, type PlayerId, type PlayerView } from "@werewolf/shared";
+import { ROLES, type WerewolfAction, type PlayerId, type PlayerView } from "@party/werewolf";
 import { Arena } from "./match.js";
 import { RandomStrategy } from "./strategies/random.js";
 import { makeStrategy, parseLineup } from "./lineup.js";
@@ -17,7 +17,7 @@ class Spy implements Strategy {
     this.seen.push(view);
     return view;
   }
-  night(v: PlayerView): Promise<ClientMessage> {
+  night(v: PlayerView): Promise<WerewolfAction> {
     return this.inner.night(this.watch(v));
   }
   speak(v: PlayerView): Promise<string | null> {

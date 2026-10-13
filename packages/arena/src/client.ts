@@ -1,5 +1,8 @@
 import { WebSocket } from "ws";
-import type { ClientMessage, PlayerView, ServerMessage } from "@werewolf/shared";
+import type { ClientMessage, RoomInfo, ServerMessage as AnyServerMessage } from "@party/core";
+import type { GameConfig, PlayerView, WerewolfAction } from "@party/werewolf";
+
+type ServerMessage = AnyServerMessage<PlayerView>;
 
 /**
  * One agent's connection to the game.
@@ -11,6 +14,7 @@ import type { ClientMessage, PlayerView, ServerMessage } from "@werewolf/shared"
  */
 export class ArenaClient {
   private latest: PlayerView | null = null;
+  private room: RoomInfo | null = null;
   private waiters: (() => void)[] = [];
   /** Server-side complaints (illegal move, wrong phase). Handy when debugging a strategy. */
   readonly errors: string[] = [];
@@ -31,6 +35,7 @@ export class ArenaClient {
 
   private receive(msg: ServerMessage) {
     if (msg.type === "view") this.latest = msg.view;
+    else if (msg.type === "room") this.room = msg.room;
     else if (msg.type === "joined") {
       this.playerId = msg.playerId;
       this.code = msg.code;
@@ -38,8 +43,19 @@ export class ArenaClient {
     for (const wake of this.waiters.splice(0)) wake();
   }
 
-  send(msg: ClientMessage) {
+  private raw(msg: ClientMessage) {
     if (this.ws.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify(msg));
+  }
+
+  /** Make a move in the game. */
+  send(action: WerewolfAction) {
+    this.raw({ type: "act", action });
+  }
+
+  /** Deal the game (host only), and wait for this seat's first view of it. */
+  async startGame(config: GameConfig): Promise<PlayerView> {
+    this.raw({ type: "startGame", config });
+    return this.waitFor(() => true, "the deal");
   }
 
   /** The last view the server sent, or null before the first one arrives. */
@@ -48,14 +64,19 @@ export class ArenaClient {
   }
 
   async createRoom(name: string): Promise<string> {
-    this.send({ type: "createRoom", name });
+    this.raw({ type: "createRoom", game: "werewolf", name });
     await this.until(() => (this.playerId ? true : undefined));
     return this.code;
   }
 
   async joinRoom(code: string, name: string): Promise<void> {
-    this.send({ type: "joinRoom", code, name });
+    this.raw({ type: "joinRoom", code, name });
     await this.until(() => (this.playerId ? true : undefined));
+  }
+
+  /** Wait until the room has this many players in it. */
+  waitForPlayers(n: number): Promise<RoomInfo> {
+    return this.until(() => (this.room && this.room.players.length === n ? this.room : undefined), "a full lobby");
   }
 
   /** Wait for a view that satisfies `pred`. Throws rather than hang forever. */
