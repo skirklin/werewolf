@@ -1,18 +1,25 @@
 import type { Dossier, Subject } from "@party/deaddrop";
 import { subjectGroups } from "./text.js";
 
-const same = (a: Subject | null, b: Subject) => !!a && a.kind === b.kind && a.id === b.id;
+const same = (a: Subject, b: Subject) => a.kind === b.kind && a.id === b.id;
 
-/** Every askable subject as grouped chips. */
+/**
+ * Every askable subject as grouped chips; pick up to `max`. Tapping a chosen
+ * one drops it, and a pick past the limit replaces the oldest.
+ */
 export function SubjectPicker({
   dossier,
   value,
   onChange,
+  max = 2,
 }: {
   dossier: Dossier;
-  value: Subject | null;
-  onChange: (s: Subject) => void;
+  value: Subject[];
+  onChange: (s: Subject[]) => void;
+  max?: number;
 }) {
+  const toggle = (s: Subject) =>
+    onChange(value.some((v) => same(v, s)) ? value.filter((v) => !same(v, s)) : [...value, s].slice(-max));
   return (
     <div className="stack" style={{ gap: 8 }}>
       {subjectGroups(dossier).map((g) => (
@@ -22,8 +29,8 @@ export function SubjectPicker({
             {g.subjects.map(({ subject, label }) => (
               <button
                 key={`${subject.kind}:${subject.id}`}
-                className={`choice ${same(value, subject) ? "selected" : ""}`}
-                onClick={() => onChange(subject)}
+                className={`choice ${value.some((v) => same(v, subject)) ? "selected" : ""}`}
+                onClick={() => toggle(subject)}
               >
                 {label}
               </button>

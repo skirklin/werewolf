@@ -1,9 +1,7 @@
 import { useState } from "react";
 import {
   answerText,
-  categoryOf,
   clueText,
-  subjectText,
   type Action,
   type Answer,
   type PlayerView,
@@ -14,7 +12,7 @@ import { Notebook } from "./Notebook.js";
 import { Dossier } from "./Dossier.js";
 import { SubjectPicker, ChoiceRow } from "./pickers.js";
 import { useAnalysis } from "./solver.js";
-import { cap, logText, nameOf, CATEGORY_LABEL } from "./text.js";
+import { cap, cards, logText, nameOf, pts, subjectsText } from "./text.js";
 
 type Act = (a: Action) => void;
 type Tab = "notebook" | "dossier" | "log";
@@ -47,18 +45,22 @@ function Seats({ view }: { view: PlayerView }) {
   return (
     <div className="stack" style={{ gap: 6 }}>
       <div className="seats">
-        {view.players.map((p, i) => (
-          <span key={p.id} className={`seat ${i === active ? "active" : ""} ${p.out ? "out" : ""}`}>
-            {i === active ? "▶" : "🕴️"} {p.id === view.you.id ? "You" : p.name}
-            <span className="muted">· {p.knownCount}</span>
-          </span>
-        ))}
+        {view.players.map((p, i) => {
+          // While the table offers, show who's still thinking.
+          const mark = i === active ? "▶" : view.moved ? (view.moved[i] ? "✓" : "…") : "🕴️";
+          return (
+            <span key={p.id} className={`seat ${i === active ? "active" : ""} ${p.out ? "out" : ""}`}>
+              {mark} {p.id === view.you.id ? "You" : p.name}
+              <span className="muted">· 🂠{p.handSize}</span>
+            </span>
+          );
+        })}
       </div>
-      {view.mode === "coop" && view.turnLimit !== null && (
-        <span className="muted small">
-          Co-op · turn {Math.min(view.turnsTaken + 1, view.turnLimit)} of {view.turnLimit}
-        </span>
-      )}
+      <span className="muted small">
+        Round {view.round} · {cards(view.deckLeft)} in the deck
+        {view.mode === "coop" && view.turnLimit !== null &&
+          ` · co-op turn ${Math.min(view.turnsTaken + 1, view.turnLimit)} of ${view.turnLimit}`}
+      </span>
     </div>
   );
 }
@@ -79,27 +81,27 @@ function ActionPanel({
   const phase = view.phase;
   const me = view.you.seat;
   if (phase.kind === "over") return <GameOver view={view} isHost={isHost} playAgain={playAgain} onExit={onExit} />;
-  if (view.mustGive) return <GivePanel view={view} act={act} />;
+  if (view.canOffer) return <OfferPanel view={view} act={act} />;
+  if (view.choices) return <ChoosePanel view={view} act={act} />;
+  if (view.mustDiscard !== null) return <DiscardPanel view={view} act={act} />;
   if (phase.kind === "turn" && phase.active === me) return <MyTurn view={view} act={act} />;
-  if (phase.kind === "counter" && phase.by === me)
-    return (
-      <div className="card stack">
-        <LastNews view={view} />
-        <b>Your turn to ask {nameOf(view, view.players[phase.active].id)} something back</b>
-        <AskForm view={view} act={act} fixedTarget={view.players[phase.active].id} />
-        <button className="ghost full" onClick={() => act({ type: "decline" })}>
-          Don&apos;t ask anything
-        </button>
-      </div>
-    );
 
   const name = (i: number) => cap(nameOf(view, view.players[i].id));
-  const waiting =
-    phase.kind === "turn"
-      ? `${name(phase.active)} is deciding what to do.`
-      : phase.kind === "answer"
-        ? `${name(phase.from)} is choosing a clue for ${nameOf(view, view.players[phase.to].id)}.`
-        : `${name(phase.by)} may ask ${nameOf(view, view.players[phase.active].id)} something back.`;
+  let waiting: string;
+  if (phase.kind === "turn") waiting = `${name(phase.active)} is deciding what to do.`;
+  else if (phase.kind === "discard") {
+    const left = view.moved!.filter((o) => !o).length;
+    waiting = `End of round ${view.round}. Waiting for ${left} more to discard.`;
+  } else if (phase.kind === "offers") {
+    const left = view.moved!.filter((o) => !o).length;
+    const mine = view.yours;
+    waiting =
+      (phase.active === me
+        ? "Waiting for the table's offers"
+        : mine
+          ? `You offered ${mine.length ? `${pts(mine.reduce((n, id) => n + clueOf(view, id).points, 0))} on ${cards(mine.length)}` : "nothing"}. Waiting for the others`
+          : "Waiting for offers") + ` (${left} still thinking).`;
+  } else waiting = `${name(phase.active)} is choosing which offers to take.`;
   return (
     <div className="card stack">
       <LastNews view={view} />
@@ -108,28 +110,37 @@ function ActionPanel({
   );
 }
 
-/** The latest public event, and, if it was a clue handed to me, what it says. */
+const clueOf = (view: PlayerView, id: number) => view.you.known.find((c) => c.id === id)!;
+
+/** The latest public event, and the clues it brought me, if any. */
 function LastNews({ view }: { view: PlayerView }) {
   const { solver } = useAnalysis(view);
   const last = view.log[view.log.length - 1];
   if (!last) return <p className="muted small" style={{ margin: 0 }}>The reception is under way. Nobody has asked anything yet.</p>;
-  const mine = last.t === "gave" && last.to === view.you.id;
-  const clue = mine ? view.you.known[view.you.known.length - 1] : null;
+  // Clues that reached me on the turn that just ended.
+  const fresh = view.you.known.filter((c) => {
+    const src = view.you.sources[c.id];
+    if (!src) return false;
+    if (last.t === "round") return src.via === "draw" && src.round === last.round;
+    return (last.t === "deal" || last.t === "noDeal") && src.via !== "draw" && src.turn === view.turnsTaken - 1;
+  });
   let narrowed: string | null = null;
-  if (clue && view.assist !== "notes") {
-    const before = solver.remaining(view.you.known.slice(0, -1));
+  if (fresh.length && view.assist !== "notes") {
+    const ids = new Set(fresh.map((c) => c.id));
+    const before = solver.remaining(view.you.known.filter((c) => !ids.has(c.id)));
     const after = solver.remaining(view.you.known);
-    narrowed = before === after ? "It didn't narrow anything down." : `It ruled out ${before - after} of ${before} answers.`;
+    narrowed = before === after ? "They didn't narrow anything down." : `They ruled out ${before - after} of ${before} answers.`;
   }
   return (
     <div className="stack" style={{ gap: 6 }}>
       <span className="muted small">{logText(view, last)}</span>
-      {clue && (
-        <div className="clue new">
-          {clueText(view.dossier, clue)}
-          {narrowed && <span className="src">{narrowed}</span>}
+      {fresh.map((c) => (
+        <div key={c.id} className="clue new">
+          {clueText(view.dossier, c)}
+          <span className="pts">{c.points}</span>
         </div>
-      )}
+      ))}
+      {narrowed && <span className="muted small">{narrowed}</span>}
     </div>
   );
 }
@@ -142,7 +153,7 @@ function MyTurn({ view, act }: { view: PlayerView; act: Act }) {
       <b>Your turn</b>
       <div className="btn-row">
         <button className={mode === "ask" ? "primary" : ""} onClick={() => setMode("ask")}>
-          🗣️ Ask
+          🗣️ Ask the table
         </button>
         <button className={mode === "accuse" ? "primary" : ""} onClick={() => setMode("accuse")}>
           ☝️ Accuse
@@ -153,68 +164,172 @@ function MyTurn({ view, act }: { view: PlayerView; act: Act }) {
   );
 }
 
-function AskForm({ view, act, fixedTarget }: { view: PlayerView; act: Act; fixedTarget?: string }) {
-  const others = view.players.filter((p) => p.id !== view.you.id);
-  const [target, setTarget] = useState<string | null>(fixedTarget ?? (others.length === 1 ? others[0].id : null));
-  const [subject, setSubject] = useState<Subject | null>(null);
+function AskForm({ view, act }: { view: PlayerView; act: Act }) {
+  const [subjects, setSubjects] = useState<Subject[]>([]);
+  const ready = subjects.length === 2;
   return (
     <div className="stack">
-      {!fixedTarget && (
-        <ChoiceRow<string>
-          label="Ask whom"
-          options={others.map((p) => ({ id: p.id, label: p.name + (p.out ? " (out)" : "") }))}
-          value={target}
-          onChange={setTarget}
-        />
-      )}
-      <SubjectPicker dossier={view.dossier} value={subject} onChange={setSubject} />
-      {subject && (
-        <p className="muted small" style={{ margin: 0 }}>
-          If they have nothing new on {subjectText(view.dossier, subject)}, they must give you something about{" "}
-          {CATEGORY_LABEL[categoryOf(subject)]} instead.
-        </p>
-      )}
+      <p className="muted small" style={{ margin: 0 }}>
+        Pick two subjects. Everyone else may offer you clues about either one, and you pay back whatever you accept
+        with at least as many points.
+      </p>
+      <SubjectPicker dossier={view.dossier} value={subjects} onChange={setSubjects} />
       <button
         className="primary full lg"
-        disabled={!target || !subject}
-        onClick={() => target && subject && act({ type: "ask", target, subject })}
+        disabled={!ready}
+        onClick={() => ready && act({ type: "ask", subjects: [subjects[0], subjects[1]] })}
       >
-        {target && subject
-          ? `Ask ${nameOf(view, target)} about ${subjectText(view.dossier, subject)}`
-          : "Pick someone and a subject"}
+        {ready ? `Ask about ${subjectsText(view.dossier, subjects)}` : `Pick ${2 - subjects.length} more`}
       </button>
     </div>
   );
 }
 
-function GivePanel({ view, act }: { view: PlayerView; act: Act }) {
-  const phase = view.phase as Extract<PlayerView["phase"], { kind: "answer" }>;
-  const { ids, fallback } = view.mustGive!;
-  const [pick, setPick] = useState<number | null>(ids.length === 1 ? ids[0] : null);
-  const asker = nameOf(view, view.players[phase.to].id);
-  const about = subjectText(view.dossier, phase.subject);
+/** Someone asked the table: choose what, if anything, to offer them. */
+function OfferPanel({ view, act }: { view: PlayerView; act: Act }) {
+  const phase = view.phase as Extract<PlayerView["phase"], { kind: "offers" }>;
+  const [picked, setPicked] = useState<number[]>([]);
+  const asker = nameOf(view, view.players[phase.active].id);
+  const total = picked.reduce((n, id) => n + clueOf(view, id).points, 0);
+  const toggle = (id: number) => setPicked((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
   return (
     <div className="card stack">
+      <LastNews view={view} />
       <b>
-        {cap(asker)} asked you about {about}
+        {cap(asker)} asks about {subjectsText(view.dossier, phase.subjects)}
       </b>
       <p className="muted small" style={{ margin: 0 }}>
-        {fallback
-          ? `You've nothing new for them on ${about}, so you must give something about ${
-              CATEGORY_LABEL[categoryOf(phase.subject)]
-            }. Everyone will see that you did.`
-          : "Choose which clue to hand over. They keep it; so do you."}
+        Offer any of these cards from your hand. The table only sees the total points and number of cards. If {asker}{" "}
+        takes them, the cards go to {asker}, who pays you back with at least as many points.
       </p>
-      {ids.map((id) => {
-        const clue = view.you.known.find((c) => c.id === id)!;
+      {view.canOffer!.map((id) => (
+        <button key={id} className={`clue pickable ${picked.includes(id) ? "selected" : ""}`} onClick={() => toggle(id)}>
+          <span className="row">
+            <span>{clueText(view.dossier, clueOf(view, id))}</span>
+            <span className="pts">{clueOf(view, id).points}</span>
+          </span>
+        </button>
+      ))}
+      <div className="btn-row">
+        <button onClick={() => act({ type: "offer", clueIds: [] })}>Offer nothing</button>
+        <button className="primary" disabled={!picked.length} onClick={() => act({ type: "offer", clueIds: picked })}>
+          {picked.length ? `Offer ${pts(total)}` : "Pick clues to offer"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** The asker's choice: which offers to take, and what to pay each back with. */
+function ChoosePanel({ view, act }: { view: PlayerView; act: Act }) {
+  const choices = view.choices!;
+  const [pay, setPay] = useState<Record<string, number[]>>({});
+  const [taking, setTaking] = useState<Record<string, boolean>>({});
+  const points = (list: number[]) => list.reduce((n, id) => n + clueOf(view, id).points, 0);
+  const paid = (from: string) => points(pay[from] ?? []);
+  // A card can only pay one person.
+  const spentElsewhere = (from: string) =>
+    new Set(Object.entries(pay).flatMap(([k, v]) => (k !== from && taking[k] ? v : [])));
+  const deals = choices.filter((c) => taking[c.from]).map((c) => ({ from: c.from, payback: pay[c.from] ?? [] }));
+  const short = choices.filter((c) => taking[c.from] && paid(c.from) < c.points);
+  const togglePay = (from: string, id: number) =>
+    setPay((p) => {
+      const cur = p[from] ?? [];
+      return { ...p, [from]: cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id] };
+    });
+  const handPoints = points(view.you.hand);
+
+  return (
+    <div className="card stack">
+      <LastNews view={view} />
+      <b>Choose which offers to take</b>
+      <p className="muted small" style={{ margin: 0 }}>
+        You see the cards once you take an offer. Pay each one back from your hand with at least as many points;
+        fewer cards is fine. A card they've seen before still counts, if you're feeling mean.
+      </p>
+      {choices.map((c) => {
+        const name = nameOf(view, c.from);
+        const on = !!taking[c.from];
+        const elsewhere = spentElsewhere(c.from);
+        const canAfford = handPoints >= c.points;
         return (
-          <button key={id} className={`clue pickable ${pick === id ? "selected" : ""}`} onClick={() => setPick(id)}>
-            {clueText(view.dossier, clue)}
-          </button>
+          <div key={c.from} className="stack" style={{ gap: 6 }}>
+            <button
+              className={`clue pickable ${on ? "selected" : ""}`}
+              disabled={!canAfford}
+              onClick={() => setTaking((t) => ({ ...t, [c.from]: !on }))}
+            >
+              <span className="row">
+                <span>
+                  <b>{cap(name)}</b> offers {pts(c.points)} on {cards(c.cards)}
+                  {!canAfford && <span className="src">Your hand isn't worth that much.</span>}
+                </span>
+                <span>{on ? "✓ Taking" : "Take"}</span>
+              </span>
+            </button>
+            {on && (
+              <div className="stack" style={{ gap: 6, paddingLeft: 12 }}>
+                <span className="muted small">
+                  Pay {name} back: {paid(c.from)} of {c.points} points chosen
+                </span>
+                {view.you.hand
+                  .filter((id) => !elsewhere.has(id))
+                  .map((id) => (
+                    <button
+                      key={id}
+                      className={`clue pickable ${(pay[c.from] ?? []).includes(id) ? "selected" : ""}`}
+                      onClick={() => togglePay(c.from, id)}
+                    >
+                      <span className="row">
+                        <span>{clueText(view.dossier, clueOf(view, id))}</span>
+                        <span className="pts">{clueOf(view, id).points}</span>
+                      </span>
+                    </button>
+                  ))}
+              </div>
+            )}
+          </div>
         );
       })}
-      <button className="primary full lg" disabled={pick === null} onClick={() => pick !== null && act({ type: "give", clueId: pick })}>
-        Hand it over
+      <button className="primary full lg" disabled={short.length > 0} onClick={() => act({ type: "accept", deals })}>
+        {short.length
+          ? `Pay ${nameOf(view, short[0].from)} at least ${pts(short[0].points)}`
+          : deals.length
+            ? `Trade with ${deals.map((d) => nameOf(view, d.from)).join(" and ")}`
+            : "Take nothing"}
+      </button>
+    </div>
+  );
+}
+
+/** End of a round: choose which half of your hand goes back under the deck. */
+function DiscardPanel({ view, act }: { view: PlayerView; act: Act }) {
+  const need = view.mustDiscard!;
+  const [picked, setPicked] = useState<number[]>([]);
+  const toggle = (id: number) =>
+    setPicked((p) => (p.includes(id) ? p.filter((x) => x !== id) : p.length < need ? [...p, id] : p));
+  return (
+    <div className="card stack">
+      <LastNews view={view} />
+      <b>End of round {view.round}: discard {cards(need)}</b>
+      <p className="muted small" style={{ margin: 0 }}>
+        Your notebook keeps everything you've seen; this only decides what you can still trade. Discards go under the
+        deck, and you'll draw the same number of fresh cards.
+      </p>
+      {view.you.hand.map((id) => (
+        <button key={id} className={`clue pickable ${picked.includes(id) ? "selected" : ""}`} onClick={() => toggle(id)}>
+          <span className="row">
+            <span>{clueText(view.dossier, clueOf(view, id))}</span>
+            <span className="pts">{clueOf(view, id).points}</span>
+          </span>
+        </button>
+      ))}
+      <button
+        className="primary full lg"
+        disabled={picked.length !== need}
+        onClick={() => act({ type: "discard", clueIds: picked })}
+      >
+        {picked.length === need ? `Discard ${cards(need)}` : `Pick ${need - picked.length} more`}
       </button>
     </div>
   );

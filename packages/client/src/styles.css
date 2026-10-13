@@ -236,3 +236,5 @@ label.field { display: flex; flex-direction: column; gap: 6px; }
 }
 .seat.active { border-color: var(--accent-2); color: var(--accent-2); font-weight: 700; }
 .seat.out { opacity: 0.5; text-decoration: line-through; }
+.pts { display: inline-block; min-width: 22px; padding: 1px 6px; margin-left: 6px; border-radius: 999px; background: var(--panel-2); color: var(--moon); font-size: 0.75rem; font-weight: 700; text-align: center; vertical-align: middle; }
+.clue.pickable .row, .offer-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; }

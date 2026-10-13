@@ -124,7 +124,10 @@ export type ClueBody =
   /** "X is not the mole." */
   | { kind: "notAgent"; agent: AgentId };
 
-export type Clue = ClueBody & { id: number };
+/** Printed on every clue: how much it cuts on its own. 3 cuts broadly; 1 is narrow. */
+export type Points = 1 | 2 | 3;
+
+export type Clue = ClueBody & { id: number; points: Points };
 
 /** Something a player can ask another player about. */
 export type Subject =
@@ -146,4 +149,6 @@ export interface Scenario {
   publicClues: number[];
   /** hands[seat] = clue ids that seat starts with (excluding public ones). */
   hands: number[][];
+  /** The draw pile, top first: replacements dealt at the end of each round. */
+  deck: number[];
 }

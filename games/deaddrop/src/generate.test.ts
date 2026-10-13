@@ -69,8 +69,9 @@ describe("generateScenario", () => {
         const all = solver.analyze(s.clues);
         expect(all.solved && sameAnswer(all.solved, s.secret.answer)).toBe(true);
 
-        // Every clue is dealt exactly once.
-        const dealt = [...s.publicClues, ...s.hands.flat()].sort((x, y) => x - y);
+        // Every clue is dealt exactly once: public, in a hand, or in the deck.
+        expect(s.deck.length).toBeGreaterThan(0);
+        const dealt = [...s.publicClues, ...s.hands.flat(), ...s.deck].sort((x, y) => x - y);
         expect(dealt).toEqual(s.clues.map((c) => c.id));
 
         // Nobody can solve it alone, and at four or more nobody can in pairs.

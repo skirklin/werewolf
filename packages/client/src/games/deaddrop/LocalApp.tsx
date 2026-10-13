@@ -10,7 +10,7 @@ import {
   makeRng,
   projectView,
   reduce,
-  whoActs,
+  whoMustAct,
   type Action,
   type Assist,
   type GameConfig,
@@ -184,24 +184,27 @@ function Practice({ setup, onQuit }: { setup: Setup; onQuit: () => void }) {
     return () => clearTimeout(t);
   }, [state, setup]);
 
-  const actor = state ? whoActs(state) : null;
-  const botTurn = actor !== null && setup.seats[actor].bot;
+  // Several seats can owe a move at once (offers, discards).
+  const owed = state ? whoMustAct(state) : [];
+  const bot = owed.find((i) => setup.seats[i].bot);
+  const people = owed.filter((i) => !setup.seats[i].bot);
 
   // Bots take their moves on a timer, one at a time.
   useEffect(() => {
-    if (!state || !botTurn || actor === null) return;
+    if (!state || bot === undefined) return;
     const t = setTimeout(() => {
-      const id = state.players[actor].id;
+      const id = state.players[bot].id;
       const move = botMove(projectView(state, id), solverFor(state.scenario.dossier), rng.current);
       if (move) setState(reduce(state, id, move));
     }, BOT_DELAY_MS);
     return () => clearTimeout(t);
-  }, [state, botTurn, actor]);
+  }, [state, bot]);
 
-  // When the move passes to a different person, the device goes to them.
+  // When a person who owes a move isn't holding the device, it goes to them.
+  const nextPerson = people.includes(viewer) ? viewer : people[0];
   useEffect(() => {
-    if (actor !== null && !setup.seats[actor].bot && actor !== viewer) setViewer(actor);
-  }, [actor, viewer, setup]);
+    if (nextPerson !== undefined && nextPerson !== viewer) setViewer(nextPerson);
+  }, [nextPerson, viewer]);
 
   const room = useMemo<RoomInfo>(
     () => ({

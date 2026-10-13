@@ -53,31 +53,35 @@ function Rules({ onBack }: { onBack: () => void }) {
           and requirement. The umbrella only works outdoors; the hatband needs a hat. Each hour a guest stays put or
           walks next door, and the mole had to pass the device&apos;s hiding place first.
         </p>
-        <h3>What only you know</h3>
+        <h3>Your hand</h3>
         <p className="muted">
-          A hand of clues. Nobody&apos;s hand solves the case alone. Together they always point to exactly one
-          answer.
+          You're dealt a hand of clue cards, each worth 1 to 3 points: 3 for clues that cut broadly ("the handoff
+          happened somewhere outdoors"), 1 for narrow ones ("Dr. Moreau was in the Study at 9pm"). Nobody&apos;s hand
+          solves the case alone. Everything together always points to exactly one answer.
         </p>
         <h3>On your turn</h3>
         <p className="muted">
-          <b>Ask</b> someone about a subject: a suspect, a look, a room, a room feature, an hour or a device. They
-          must hand you a clue about it you don&apos;t already have, and they choose which. If they have nothing on
-          that exact subject, they must give you something from the same category (people, places, times or
-          devices), and everyone sees that they did.
+          <b>Ask the table</b> about two subjects: suspects, looks, rooms, room features, hours or devices. Everyone
+          else may offer you cards from their hand about either one, or nothing. You only see how many points and
+          cards each person offers, and nobody sees which subject they&apos;re about.
         </p>
         <p className="muted">
-          Or <b>accuse</b>: name all four. Everyone can see who asked whom about what, so your questions show what
-          you&apos;re missing.
+          Take any offers you like. The cards come to you, and you pay each person back with cards from your hand
+          worth at least as many points; fewer cards is fine. A card they&apos;ve already seen still counts, if
+          you&apos;re feeling mean.
+        </p>
+        <p className="muted">
+          Or <b>accuse</b>: name all four.
+        </p>
+        <h3>Rounds</h3>
+        <p className="muted">
+          Once everyone has had a turn, everyone discards half their hand and draws fresh cards. Discards go under the
+          deck. Your notebook keeps everything you&apos;ve ever seen, so a discard only changes what you can trade.
         </p>
         <h3>Competitive</h3>
-        <p className="muted">
-          Whoever answers you may ask you something back. The first correct accusation wins. A wrong one puts you
-          out, but you still answer questions.
-        </p>
+        <p className="muted">The first correct accusation wins. A wrong one puts you out, but you still offer and trade.</p>
         <h3>Co-op</h3>
-        <p className="muted">
-          No asking back. The table shares a turn limit and one accusation.
-        </p>
+        <p className="muted">The table shares a turn limit and one accusation.</p>
         <h3>The notebook</h3>
         <p className="muted">
           Clues are filed for you. The host picks how much more the app helps: just the notes, a count of the answers
