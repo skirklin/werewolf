@@ -116,6 +116,15 @@ export interface GiveOptions {
   fallback: boolean;
 }
 
+/** The seat whose move it is (asking, answering or asking back), or null once it's over. */
+export function whoActs(state: GameState): number | null {
+  const p = state.phase;
+  if (p.kind === "turn") return p.active;
+  if (p.kind === "answer") return p.from;
+  if (p.kind === "counter") return p.by;
+  return null;
+}
+
 /** Clues `from` could hand `to` when asked about `subject`. */
 export function eligibleClues(state: GameState, from: number, to: number, subject: Subject): GiveOptions {
   const theirs = new Set(state.players[to].known);
