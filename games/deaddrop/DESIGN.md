@@ -7,8 +7,9 @@ device** they used, **where** and **when** the handoff happened.
 
 This package is the engine: content, scenario generator, solver, turn rules
 and a baseline bot, exported to the platform as `deaddropModule`. The screens
-live in `packages/client/src/games/deaddrop/`; play it from the game picker,
-each player on their own phone.
+live in `packages/client/src/games/deaddrop/`. Play it from the game picker,
+each player on their own phone, or practise on one device: a solo game
+against bots, or pass-the-device when more than one seat is a person.
 
 ```bash
 npm run deaddrop -- --seed 7 --players 4               # print a scenario, its hands and the solution
@@ -128,8 +129,9 @@ played.
 
 ## Open questions / next steps
 
-- **Pass-the-device**: not built yet. Turns suit it, since the device goes to
-  whoever must answer, but every hand-off needs a privacy screen.
+- **Practice mode** is meant for testing more than for real games: the bots
+  are the baseline ones (random questions, accuse only when certain), and
+  "Peek" shows the answer. Smarter bots would make solo games a fairer test.
 - Generation runs on the server's event loop (up to about 0.8 s at six
   players). That's fine for a household; move it to a worker if it ever isn't.
 - **Smarter bots** to tune the co-op limit and hand sizes: for example, a bot

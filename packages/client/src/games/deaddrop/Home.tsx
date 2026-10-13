@@ -1,7 +1,9 @@
 import type { HomeProps } from "../../shell/game.js";
+import { DeadDropLocal } from "./LocalApp.js";
 
 export function DeadDropHome({ sub, navigate, onBack }: HomeProps) {
   if (sub === "rules") return <Rules onBack={() => navigate("")} />;
+  if (sub === "practice") return <DeadDropLocal onExit={() => navigate("")} />;
   return (
     <div className="app">
       <div className="spread">
@@ -18,6 +20,10 @@ export function DeadDropHome({ sub, navigate, onBack }: HomeProps) {
         <button className="primary full lg" onClick={() => navigate("online")}>
           📱 Play together
           <div className="small" style={{ fontWeight: 400, opacity: 0.8 }}>Everyone on their own phone · 2–6 players</div>
+        </button>
+        <button className="full lg" onClick={() => navigate("practice")}>
+          🤖 Practice on one device
+          <div className="small muted" style={{ fontWeight: 400 }}>Solo against bots, or pass the device</div>
         </button>
         <button className="ghost full" onClick={() => navigate("rules")}>
           📖 How to play

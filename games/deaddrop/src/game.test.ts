@@ -1,6 +1,15 @@
 import { describe, it, expect } from "vitest";
 import { generateScenario } from "./generate.js";
-import { createGame, eligibleClues, projectView, provenance, reduce, GameError, type GameState } from "./game.js";
+import {
+  createGame,
+  eligibleClues,
+  projectView,
+  provenance,
+  reduce,
+  whoActs,
+  GameError,
+  type GameState,
+} from "./game.js";
 import { isAbout, allSubjects, categoryOf, isInCategory } from "./clues.js";
 import { simulateGame } from "./simulate.js";
 import type { Answer, Subject } from "./types.js";
@@ -156,6 +165,22 @@ describe("views", () => {
     expect(JSON.stringify(v)).not.toContain("schedule");
     const over = reduce(g, "a", { type: "accuse", answer: scenario.secret.answer });
     expect(projectView(over, "b").answer).toEqual(scenario.secret.answer);
+  });
+});
+
+describe("whoActs", () => {
+  it("follows the move from asker to answerer, back for the counter, then on", () => {
+    let g = createGame(scenario, seats, { mode: "competitive" });
+    expect(whoActs(g)).toBe(0);
+    const { hit } = subjects(g, 1, 0);
+    g = reduce(g, "a", { type: "ask", target: "b", subject: hit });
+    expect(whoActs(g)).toBe(1); // Ben answers
+    g = reduce(g, "b", { type: "give", clueId: projectView(g, "b").mustGive!.ids[0] });
+    expect(whoActs(g)).toBe(1); // Ben may ask back
+    g = reduce(g, "b", { type: "decline" });
+    expect(whoActs(g)).toBe(1); // Ben's own turn
+    g = reduce(g, "b", { type: "accuse", answer: scenario.secret.answer });
+    expect(whoActs(g)).toBeNull();
   });
 });
 
