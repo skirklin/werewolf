@@ -30,9 +30,9 @@ the first game and room for more.
   per-player view redaction. This is the single source of truth for the rules
   and is fully unit-tested. The same engine runs in the browser for
   pass-the-device play, so the two modes can never disagree on the rules.
-- **`games/deaddrop`** — a second, in-progress game: spy deduction with
-  generated, solver-verified scenarios. The server can host it; its screens
-  aren't built yet. See [its design notes](games/deaddrop/DESIGN.md).
+- **`games/deaddrop`** — a second game, still being tuned: spy deduction with
+  generated, solver-verified scenarios, played each on your own phone. See
+  [its design notes](games/deaddrop/DESIGN.md).
 
 ### Adding a game
 

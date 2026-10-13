@@ -22,7 +22,13 @@ export const deaddropModule: GameModule<GameConfig, GameState, PlayerView> = {
     if (c.mode !== "competitive" && c.mode !== "coop") throw new GameError("Pick competitive or co-op.");
     if (c.turnLimit !== undefined && !(Number.isInteger(c.turnLimit) && c.turnLimit >= 1 && c.turnLimit <= 500))
       throw new GameError("The turn limit should be a whole number of turns.");
-    return { mode: c.mode, ...(c.turnLimit !== undefined && c.mode === "coop" ? { turnLimit: c.turnLimit } : {}) };
+    if (c.assist !== undefined && !["notes", "gauge", "grid"].includes(c.assist))
+      throw new GameError("Unknown level of notebook help.");
+    return {
+      mode: c.mode,
+      assist: c.assist ?? "grid",
+      ...(c.turnLimit !== undefined && c.mode === "coop" ? { turnLimit: c.turnLimit } : {}),
+    };
   },
 
   start(seats, config, { seed }) {

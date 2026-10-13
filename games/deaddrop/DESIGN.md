@@ -6,8 +6,9 @@ The players trade intelligence to work out **who** the mole was, **what
 device** they used, **where** and **when** the handoff happened.
 
 This package is the engine: content, scenario generator, solver, turn rules
-and a baseline bot, exported to the platform as `deaddropModule`. The server
-can host it; the screens are not built yet.
+and a baseline bot, exported to the platform as `deaddropModule`. The screens
+live in `packages/client/src/games/deaddrop/`; play it from the game picker,
+each player on their own phone.
 
 ```bash
 npm run deaddrop -- --seed 7 --players 4               # print a scenario, its hands and the solution
@@ -82,10 +83,13 @@ bitsets. It gives:
 - **`valueOf`**: how much a clue would tell someone, in bits. This can show
   how lopsided a trade was.
 
-The plan is for the UI to offer this at different levels as a house setting:
-- notebook only;
-- a "N possibilities left" gauge;
-- a full auto-filled grid with explanations.
+The host picks how much of this the app shows, as a house rule
+(`GameConfig.assist`):
+- `notes`: clues are filed and players cross things off by hand;
+- `gauge`: also "N possible answers left", but not which;
+- `grid` (default): the auto-filled grid. Tap a crossed-off value to see the
+  clues that rule it out, and the accusation form comes prefilled once one
+  answer remains.
 
 ## Turns
 
@@ -124,9 +128,8 @@ played.
 
 ## Open questions / next steps
 
-- **UI**: the client screens. The main one is a clue notebook with the
-  auto-filled grid. Pass-the-device works naturally with turns, since the
-  device goes to whoever must answer.
+- **Pass-the-device**: not built yet. Turns suit it, since the device goes to
+  whoever must answer, but every hand-off needs a privacy screen.
 - Generation runs on the server's event loop (up to about 0.8 s at six
   players). That's fine for a household; move it to a worker if it ever isn't.
 - **Smarter bots** to tune the co-op limit and hand sizes: for example, a bot

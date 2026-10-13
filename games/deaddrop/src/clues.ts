@@ -1,4 +1,4 @@
-import type { Clue, ClueBody, Dossier, Secret, Subject } from "./types.js";
+import type { Answer, Clue, ClueBody, Dossier, Requirement, Secret, Subject } from "./types.js";
 import type { Space } from "./space.js";
 
 /** Is a clue consistent with candidate `i`? */
@@ -191,4 +191,22 @@ export function trueClues(d: Dossier, secret: Secret): ClueBody[] {
 
 export function withIds(bodies: ClueBody[]): Clue[] {
   return bodies.map((b, id) => ({ ...b, id }));
+}
+
+/** A device's requirement, as the dossier states it. */
+export function requirementText(d: Dossier, r: Requirement): string {
+  if (r.kind === "feature") {
+    const f = d.features.find((x) => x.id === r.feature)!;
+    return `The handoff must be somewhere ${r.is ? f.phrase : f.negPhrase}.`;
+  }
+  if (r.kind === "hours") return `The handoff must be between ${d.hours[r.from]} and ${d.hours[r.to]}.`;
+  const t = d.traits.find((x) => x.id === r.trait)!;
+  const values = r.values.map((v) => t.values.find((x) => x.id === v)!.label.toLowerCase());
+  return `The courier's ${t.label.toLowerCase()} must be ${values.join(" or ")}.`;
+}
+
+/** "Dr. Moreau, with the umbrella, on the Terrace, at 9pm." */
+export function answerText(d: Dossier, a: Answer): string {
+  const room = d.rooms[a.room];
+  return `${d.agents[a.agent].name}, with the ${d.devices[a.device].name.toLowerCase()}, ${room.preposition} the ${room.name}, at ${d.hours[a.hour]}`;
 }

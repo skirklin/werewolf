@@ -21,10 +21,21 @@ import { sameAnswer } from "./solver.js";
 
 export type Mode = "competitive" | "coop";
 
+/**
+ * How much of the deduction the app does for players. A house rule, so the
+ * host picks it and everyone plays with the same help:
+ *  - notes: clues are filed; players cross things off themselves.
+ *  - gauge: also shows how many answers remain, but not which.
+ *  - grid:  the full auto-filled grid, with reasons for every cross.
+ */
+export type Assist = "notes" | "gauge" | "grid";
+
 export interface GameConfig {
   mode: Mode;
   /** Co-op only: turns the table has before the handler gets away. */
   turnLimit?: number;
+  /** Defaults to "grid". */
+  assist?: Assist;
 }
 
 /**
@@ -263,6 +274,7 @@ export interface PlayerView {
   log: LogEntry[];
   turnsTaken: number;
   turnLimit: number | null;
+  assist: Assist;
   answer: Answer | null;
 }
 
@@ -283,6 +295,32 @@ export function projectView(state: GameState, playerId: string): PlayerView {
     log: state.log,
     turnsTaken: state.turnsTaken,
     turnLimit: state.config.turnLimit ?? null,
+    assist: state.config.assist ?? "grid",
     answer: phase.kind === "over" ? state.scenario.secret.answer : null,
   };
+}
+
+export interface Provenance {
+  source: "public" | "hand" | "received";
+  /** For received clues: the trade it came from. */
+  from?: Extract<LogEntry, { t: "gave" }>;
+}
+
+/**
+ * Where each of a player's clues came from. Clues they were handed arrive in
+ * the same order as the public "gave … to them" entries, so the log can be
+ * matched up without the server ever saying which clue changed hands.
+ */
+export function provenance(view: PlayerView): Map<number, Provenance> {
+  const out = new Map<number, Provenance>();
+  const gifts = view.log.filter(
+    (e): e is Extract<LogEntry, { t: "gave" }> => e.t === "gave" && e.to === view.you.id
+  );
+  const dealt = view.you.known.length - gifts.length;
+  const pub = new Set(view.publicClues);
+  view.you.known.forEach((c, i) => {
+    if (i >= dealt) out.set(c.id, { source: "received", from: gifts[i - dealt] });
+    else out.set(c.id, { source: pub.has(c.id) ? "public" : "hand" });
+  });
+  return out;
 }

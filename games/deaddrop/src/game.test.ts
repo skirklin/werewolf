@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { generateScenario } from "./generate.js";
-import { createGame, eligibleClues, projectView, reduce, GameError, type GameState } from "./game.js";
+import { createGame, eligibleClues, projectView, provenance, reduce, GameError, type GameState } from "./game.js";
 import { isAbout, allSubjects, categoryOf, isInCategory } from "./clues.js";
 import { simulateGame } from "./simulate.js";
 import type { Answer, Subject } from "./types.js";
@@ -156,6 +156,20 @@ describe("views", () => {
     expect(JSON.stringify(v)).not.toContain("schedule");
     const over = reduce(g, "a", { type: "accuse", answer: scenario.secret.answer });
     expect(projectView(over, "b").answer).toEqual(scenario.secret.answer);
+  });
+});
+
+describe("provenance", () => {
+  it("labels public, dealt and received clues, matching gifts to the log in order", () => {
+    let g = createGame(scenario, seats, { mode: "competitive" });
+    const { hit } = subjects(g, 1, 0);
+    g = reduce(g, "a", { type: "ask", target: "b", subject: hit });
+    const given = projectView(g, "b").mustGive!.ids[0];
+    g = reduce(g, "b", { type: "give", clueId: given });
+    const where = provenance(projectView(g, "a"));
+    for (const id of scenario.publicClues) expect(where.get(id)!.source).toBe("public");
+    for (const id of scenario.hands[0]) expect(where.get(id)!.source).toBe("hand");
+    expect(where.get(given)).toMatchObject({ source: "received", from: { from: "b", subject: hit } });
   });
 });
 

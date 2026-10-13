@@ -1,10 +1,9 @@
 import { parseArgs } from "node:util";
 import { generateScenario } from "./generate.js";
 import { Solver } from "./solver.js";
-import { clueText } from "./clues.js";
+import { answerText, clueText, requirementText } from "./clues.js";
 import { simulateGame } from "./simulate.js";
 import type { Mode } from "./game.js";
-import type { Requirement, Dossier } from "./types.js";
 
 /**
  * Print a scenario, or simulate bot games, so the content and the dealing
@@ -62,7 +61,7 @@ if (values.sim) {
     );
   console.log("\nDEVICES");
   for (const x of d.devices)
-    console.log(`  ${x.name.padEnd(26)} hidden in the ${d.rooms[x.location].name}; ${describe(d, x.requirement)}`);
+    console.log(`  ${x.name.padEnd(26)} hidden in the ${d.rooms[x.location].name}. ${requirementText(d, x.requirement)}`);
 
   console.log(`\nBefore any clues: ${solver.remaining([])} possible answers.`);
   console.log(`\nPUBLIC (${left(s.publicClues)} answers left)`);
@@ -72,19 +71,6 @@ if (values.sim) {
     for (const id of hand) console.log(`  ${clueText(d, clue(id))}`);
   });
   const all = s.clues.map((c) => c.id);
-  const a = s.secret.answer;
   console.log(`\nEverything together: ${left(all)} answer(s).`);
-  console.log(
-    `SOLUTION: ${d.agents[a.agent].name}, ${d.devices[a.device].name.toLowerCase()}, the ${d.rooms[a.room].name}, ${d.hours[a.hour]}`
-  );
-}
-
-function describe(d: Dossier, r: Requirement): string {
-  if (r.kind === "feature") {
-    const f = d.features.find((x) => x.id === r.feature)!;
-    return `handoff must be ${r.is ? f.phrase : f.negPhrase}`;
-  }
-  if (r.kind === "hours") return `handoff between ${d.hours[r.from]} and ${d.hours[r.to]}`;
-  const t = d.traits.find((x) => x.id === r.trait)!;
-  return `courier's ${t.label.toLowerCase()}: ${r.values.map((v) => t.values.find((x) => x.id === v)!.label).join(" or ")}`;
+  console.log(`SOLUTION: ${answerText(d, s.secret.answer)}`);
 }
