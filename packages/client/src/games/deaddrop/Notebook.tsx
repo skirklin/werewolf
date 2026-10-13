@@ -1,15 +1,7 @@
 import { useEffect, useState } from "react";
-import {
-  answerText,
-  categoryOf,
-  clueText,
-  provenance,
-  subjectText,
-  type Dimension,
-  type PlayerView,
-} from "@party/deaddrop";
+import { answerText, clueText, type Dimension, type PlayerView } from "@party/deaddrop";
 import { useAnalysis } from "./solver.js";
-import { nameOf, CATEGORY_LABEL } from "./text.js";
+import { nameOf, subjectsText } from "./text.js";
 
 const SECTIONS: { dim: Dimension; label: string }[] = [
   { dim: "agent", label: "🕴️ Suspects" },
@@ -139,28 +131,32 @@ export function Notebook({ view, roomCode }: { view: PlayerView; roomCode: strin
 
 function ClueList({ view }: { view: PlayerView }) {
   const d = view.dossier;
-  const where = provenance(view);
+  const pub = new Set(view.publicClues);
   const known = [...view.you.known].reverse(); // newest first
-  const newest = view.you.known[view.you.known.length - 1];
+  const hand = new Set(view.you.hand);
   return (
     <div className="stack" style={{ gap: 6 }}>
       <div className="muted small group-label">🗂️ Your intelligence ({known.length})</div>
       {known.map((c) => {
-        const p = where.get(c.id)!;
-        const src =
-          p.source === "public"
+        const src = view.you.sources[c.id];
+        const origin = !src
+          ? pub.has(c.id)
             ? "Everyone has this"
-            : p.source === "hand"
-              ? "Your own"
-              : p.from!.fallback
-                ? `From ${nameOf(view, p.from!.from)} (nothing on ${subjectText(d, p.from!.subject)}, so ${
-                    CATEGORY_LABEL[categoryOf(p.from!.subject)]
-                  })`
-                : `From ${nameOf(view, p.from!.from)}, asked about ${subjectText(d, p.from!.subject)}`;
+            : "Dealt to you"
+          : src.via === "draw"
+            ? `Drawn after round ${src.round}`
+            : src.via === "offer"
+              ? `Offered by ${nameOf(view, src.from)} when you asked about ${subjectsText(d, src.subjects)}`
+              : `Paid back by ${nameOf(view, src.from)} when they asked about ${subjectsText(d, src.subjects)}`;
+        const where = pub.has(c.id) ? origin : `${origin} · ${hand.has(c.id) ? "in your hand" : "no longer in hand"}`;
         return (
-          <div key={c.id} className={`clue ${p.source === "received" && c === newest ? "new" : ""}`}>
+          <div
+            key={c.id}
+            className={`clue ${src && (src.via === "draw" ? src.round === view.round - 1 : src.turn === view.turnsTaken - 1) ? "new" : ""}`}
+          >
             {clueText(d, c)}
-            <span className="src">{src}</span>
+            <span className="pts">{c.points}</span>
+            <span className="src">{where}</span>
           </div>
         );
       })}

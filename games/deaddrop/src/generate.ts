@@ -18,6 +18,8 @@ export interface GenerateOptions {
   devices?: number;
   /** A single hand (plus the public clues) must leave at least this many answers. */
   minAloneAnswers?: number;
+  /** Size of the draw pile, in starting hands' worth of cards. */
+  deckHands?: number;
 }
 
 export const MIN_PLAYERS = 2;
@@ -54,6 +56,9 @@ function attemptScenario(opts: GenerateOptions, rng: Rng): Scenario | null {
   const handSize = opts.handSize ?? defaultHandSize(players);
   const publicCount = opts.publicClues ?? 2;
   const minAlone = opts.minAloneAnswers ?? 4;
+  // Each round everyone swaps half their hand for fresh cards, so a deck twice
+  // the size of the starting hands lasts about four rounds.
+  const deckSize = players * handSize * (opts.deckHands ?? 2);
 
   const dossier = buildDossier(rng, opts.agents ?? 8, opts.devices ?? 6);
   const solver = new Solver(dossier);
@@ -100,10 +105,13 @@ function attemptScenario(opts: GenerateOptions, rng: Rng): Scenario | null {
     if (space.countAnswers(intersect(space.base, rest)) === 1) chosen.splice(chosen.indexOf(c), 1);
   }
 
-  const total = players * handSize + publicCount;
+  const dealtSize = players * handSize + publicCount;
+  const total = dealtSize + deckSize;
   if (chosen.length > total) return null;
   // Pad with further true clues. They can't break uniqueness; they do give
-  // players overlapping, partly redundant intel, which makes trades a gamble.
+  // players overlapping, partly redundant intel, which makes trades a gamble,
+  // and they mean a clue discarded out of circulation is rarely the only way
+  // to learn what it said.
   for (const c of order) {
     if (chosen.length >= total) break;
     if (!chosen.includes(c)) chosen.push(c);
@@ -124,9 +132,14 @@ function attemptScenario(opts: GenerateOptions, rng: Rng): Scenario | null {
     const bits = alone.map((n) => Math.log2(space.countAnswers(pubSet) / n));
     if (Math.max(...bits) > 2 * Math.min(...bits)) continue;
     if (players >= 4 && !pairsNeedHelp(space, pubSet, hands)) continue;
+    // The starting hands alone mustn't already settle it: the deck should matter.
+    if (space.countAnswers(intersect(pubSet, hands.flat())) < 2) continue;
 
     // Ids are assigned after shuffling so they say nothing about the clue.
-    const clues = withIds(dealt.map((c) => c.body));
+    const clues = withIds(
+      dealt.map((c) => c.body),
+      dealt.map((c) => Math.log2(baseAnswers / space.countAnswers(c.mask)))
+    );
     return {
       seed: Math.floor(rng() * 2 ** 31),
       dossier,
@@ -136,6 +149,7 @@ function attemptScenario(opts: GenerateOptions, rng: Rng): Scenario | null {
       hands: hands.map((_, p) =>
         clues.slice(publicCount + p * handSize, publicCount + (p + 1) * handSize).map((c) => c.id)
       ),
+      deck: clues.slice(dealtSize).map((c) => c.id),
     };
   }
   return null;

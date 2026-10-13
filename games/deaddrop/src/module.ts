@@ -36,12 +36,8 @@ export const deaddropModule: GameModule<GameConfig, GameState, PlayerView> = {
     return createGame(scenario, seats, config);
   },
 
-  act(state, seatId, raw) {
-    const action = raw as Action;
-    if (!action || !["ask", "give", "decline", "accuse"].includes(action.type))
-      throw new GameError("Unsupported action.");
-    return reduce(state, seatId, action);
-  },
+  // The engine checks every move itself, unknown ones included.
+  act: (state, seatId, raw) => reduce(state, seatId, raw as Action),
 
   view: (state, seatId) => projectView(state, seatId),
 

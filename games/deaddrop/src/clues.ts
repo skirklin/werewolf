@@ -1,4 +1,4 @@
-import type { Answer, Clue, ClueBody, Dossier, Requirement, Secret, Subject } from "./types.js";
+import type { Answer, Clue, ClueBody, Dossier, Points, Requirement, Secret, Subject } from "./types.js";
 import type { Space } from "./space.js";
 
 /** Is a clue consistent with candidate `i`? */
@@ -101,20 +101,6 @@ export function isAbout(clue: ClueBody, subject: Subject): boolean {
   return clueSubjects(clue).some((s) => sameSubject(s, subject));
 }
 
-/** Broad groups of subjects, used when nobody holds anything on the exact one. */
-export type Category = "people" | "places" | "times" | "devices";
-
-export function categoryOf(s: Subject): Category {
-  if (s.kind === "agent" || s.kind === "trait") return "people";
-  if (s.kind === "room" || s.kind === "feature") return "places";
-  if (s.kind === "hour") return "times";
-  return "devices";
-}
-
-export function isInCategory(clue: ClueBody, category: Category): boolean {
-  return clueSubjects(clue).some((s) => categoryOf(s) === category);
-}
-
 export function subjectText(d: Dossier, s: Subject): string {
   switch (s.kind) {
     case "agent":
@@ -189,8 +175,18 @@ export function trueClues(d: Dossier, secret: Secret): ClueBody[] {
   return out;
 }
 
-export function withIds(bodies: ClueBody[]): Clue[] {
-  return bodies.map((b, id) => ({ ...b, id }));
+/**
+ * Number the clues and price them. A clue's points come from how much it cuts
+ * on its own (`bits`, measured against the dossier), split into thirds within
+ * the case so every game has a spread of 1s, 2s and 3s.
+ */
+export function withIds(bodies: ClueBody[], bits: number[]): Clue[] {
+  const order = bits.map((b, i) => ({ b, i })).sort((x, y) => x.b - y.b || x.i - y.i);
+  const points = new Array<Points>(bodies.length);
+  order.forEach(({ i }, rank) => {
+    points[i] = rank < bodies.length / 3 ? 1 : rank < (2 * bodies.length) / 3 ? 2 : 3;
+  });
+  return bodies.map((b, id) => ({ ...b, id, points: points[id] }));
 }
 
 /** A device's requirement, as the dossier states it. */

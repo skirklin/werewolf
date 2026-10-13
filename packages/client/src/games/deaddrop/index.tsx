@@ -31,7 +31,7 @@ function Settings({ config, players, onChange }: LobbySettingsProps<GameConfig>)
       </div>
       <p className="muted small" style={{ margin: 0 }}>
         {config.mode === "competitive"
-          ? "First correct accusation wins. Whoever answers you may ask you something back."
+          ? "First correct accusation wins. A wrong one puts you out of the running."
           : "Everyone wins or loses together, with one accusation and a turn limit."}
       </p>
       {config.mode === "coop" && (

@@ -92,40 +92,76 @@ The host picks how much of this the app shows, as a house rule
   clues that rule it out, and the accusation form comes prefilled once one
   answer remains.
 
+## Cards, hands and rounds
+
+Clues are cards worth **1, 2 or 3 points**, printed on them. Points come from
+how much a clue cuts on its own, measured against the dossier, and are split
+into thirds within each case so every game has a spread. "The handoff
+happened somewhere outdoors" is a 3; "Dr. Moreau was in the Study at 9pm" is
+a 1.
+
+Your **hand** is what you can trade. Your **notebook** remembers every clue
+you've ever seen, so trading or discarding a card doesn't make you forget
+it.
+
+The generator deals two public clues, a starting hand each, and a **deck**
+twice the size of the starting hands. All of it together names exactly one
+answer; the starting hands together must not.
+
+A **round** is one turn for each player still in the running. At the end of
+it everyone discards half their hand (rounded down), at the same time, and
+draws the same number from the deck. New intelligence keeps arriving while
+old cards stay in circulation.
+
+**Discards go under the deck**, reshuffled. If they left play instead, a clue
+discarded before anyone else had seen it would be gone for good, and the
+case could become unsolvable for everyone. Simulations hit exactly that:
+about a third of co-op games with no turn limit never got solved.
+
 ## Turns
 
-On your turn you either **ask** or **accuse**.
+On your turn you either **ask the table** or **accuse**.
 
-- **Ask** a player about a subject: a suspect, room, hour, device, trait or
-  feature. They must hand you a clue about it that you don't already have, and
-  they choose which. If they hold nothing on that exact subject, they must give
-  something from the same *category* (people, places, times, devices), and the
-  table sees that they did. If they hold nothing at all, that's public too, and
-  your turn ends.
-- **Competitive**: whoever gave you something may then ask you something back.
-  First correct accusation wins. A wrong accusation puts you out of the running,
-  but you still answer questions.
-- **Co-op**: no asking back. The table shares a turn limit and one accusation.
+1. Name **two subjects**: a suspect, look (trait), room, room feature, hour or
+   device. Two subjects also hides which one a card is about.
+2. Everyone else, at the same time, offers any cards from their hand about
+   either subject, or nothing. The table sees only "Ivo offers 4 points on 2
+   cards", never the subjects or contents.
+3. The asker takes any offers they like, seeing the cards only once taken.
+   Each taken offer is paid back with cards from the asker's hand worth **at
+   least as many points**; fewer cards is fine, only the total counts. A card
+   the other player has already seen still counts, if mean. Payback comes from
+   the hand held before the trade, and each card pays one person.
 
-Who asked whom about what is public, so a question tells everyone what you are
-missing.
+- **Competitive**: first correct accusation wins. A wrong one puts you out of
+  the running, but you still offer, trade and discard.
+- **Co-op**: the same trading, with a shared turn limit and one accusation.
 
-### Why the category fallback
+Who asked about what, and the size of every offer and payback, is public.
 
-Without it, bots asking about random subjects needed about 40–60 turns each:
-there are 35 subjects and only about 5 clues per hand, so most questions came
-back empty. With it, bot games take about 9–13 turns each and every game ends
-in a correct solve:
+### Game length
 
-| players | competitive, median total turns | co-op, median total turns |
+Baseline bots (random open subjects, accuse only when certain; rivals get one
+cheap card, teammates everything; discard the cheapest cards), median turns
+across 30 games:
+
+| players | competitive | co-op |
 |---|---|---|
-| 3 | 26 | 28 |
-| 4 | 46 | 50 |
-| 5 | 63 | 68 |
+| 3 | 26 (≈9 each) | 24 (≈8 each) |
+| 4 | 39 (≈10 each) | 38 (≈9.5 each) |
+| 5 | 42 (≈8.5 each) | 44 (≈9 each) |
 
-The bots ask at random, so people who think about who to ask should be quicker.
-The co-op turn limit (`players × 5`) is a provisional guess until humans have
-played.
+The co-op limit (`players × 8`) is set so these bots win a little under half
+their games. People choosing their subjects should do better. It's still a
+guess until humans have played.
+
+### History
+
+The first version had you ask one player about one subject, and they had to
+answer. That needed a category fallback ("nothing on the Garden, so something
+about places") because most questions came back empty. Asking the whole table
+about two subjects, with voluntary offers and paybacks, replaced it; it's
+closer to Awkward Guests and makes offering a decision.
 
 ## Open questions / next steps
 
@@ -136,7 +172,5 @@ played.
   players). That's fine for a household; move it to a worker if it ever isn't.
 - **Smarter bots** to tune the co-op limit and hand sizes: for example, a bot
   that tracks who answered what and asks about the subjects of its own clues.
-- **Trade fairness**: should the giver have to match the value of what they
-  received (Awkward Guests' point values, computed honestly by `valueOf`)?
 - **More content**: further house maps, a train or a casino, and more devices.
   Hidden traits or unreliable witnesses only once the base game is fun.
