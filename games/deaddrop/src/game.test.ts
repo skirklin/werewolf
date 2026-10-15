@@ -69,7 +69,7 @@ function passTurn(g: GameState): GameState {
   return g;
 }
 
-const wrongAnswer = (a: Answer): Answer => ({ ...a, hour: (a.hour + 1) % scenario.dossier.hours.length });
+const wrongAnswer = (a: Answer): Answer => ({ ...a, device: (a.device + 1) % scenario.dossier.devices.length });
 
 describe("dealing", () => {
   it("gives everyone a hand, puts the rest in the deck, and everyone knows the public clues", () => {
@@ -282,7 +282,7 @@ describe("accusations", () => {
 
   it("rejects an accusation that names nothing real", () => {
     const g = createGame(scenario, seats, { mode: "competitive" });
-    expect(() => reduce(g, "a", { type: "accuse", answer: { agent: 99, device: 0, room: 0, hour: 0 } })).toThrow(
+    expect(() => reduce(g, "a", { type: "accuse", answer: { agent: 99, device: 0, room: 0 } })).toThrow(
       GameError
     );
   });

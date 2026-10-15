@@ -1,92 +1,91 @@
 import type { Answer, Dossier, Requirement, RoomId } from "./types.js";
 
+/** Every guest visits between this many rooms over the evening. */
+export const MIN_VISITS = 2;
+export const MAX_VISITS = 4;
+
 /**
  * The space of possible worlds, small enough to list in full.
  *
- * A candidate is a mole, a device, an hour, and the mole's whole route through
- * the house (one room per hour, moving only between adjacent rooms). The
- * handoff room is wherever that route has the mole at the handoff hour. The
- * dossier's rules — each device's requirement, and that the mole must have
- * passed the device's hiding place by the handoff — are applied up front, so
- * every candidate here is already consistent with the dossier.
+ * A candidate is a mole, a device, the handoff room, and the set of rooms the
+ * mole visited during the evening. The dossier's rules are applied up front:
+ * the handoff happened in a room the mole visited, the mole visited the room
+ * the device was hidden in, and the device's requirement holds. So every
+ * candidate here is already consistent with the dossier.
  *
- * Keeping the route in the candidate is what lets "X was in the Study at 9pm"
- * say something about where X could have been at 10pm. With six rooms and four
- * hours this is a few tens of thousands of candidates, so the solver is exact
- * filtering over bitsets rather than anything clever.
+ * Keeping the visits in the candidate is what lets "X never set foot in the
+ * Garden" rule out devices hidden there, and handoffs there, if X is the mole.
+ * With six rooms that's about fourteen thousand candidates, so the solver is
+ * exact filtering over bitsets rather than anything clever.
  */
 export class Space {
-  readonly paths: RoomId[][];
+  /** Every possible set of visited rooms, as sorted room lists. */
+  readonly visitSets: RoomId[][];
   readonly size: number;
   readonly agent: Uint8Array;
   readonly device: Uint8Array;
-  readonly hour: Uint8Array;
-  readonly path: Uint16Array;
-  /** Index of the candidate's (agent, device, room, hour) answer. */
+  readonly room: Uint8Array;
+  readonly visits: Uint16Array;
+  /** Index of the candidate's (agent, device, room) answer. */
   readonly answerKey: Uint16Array;
   readonly answerSpace: number;
   /** Candidates consistent with the dossier alone. */
   readonly base: Bitset;
 
   constructor(readonly dossier: Dossier) {
-    const { agents, devices, rooms, hours } = dossier;
-    this.paths = enumeratePaths(dossier);
-    this.answerSpace = agents.length * devices.length * rooms.length * hours.length;
+    const { agents, devices, rooms } = dossier;
+    this.visitSets = enumerateVisitSets(rooms.length);
+    this.answerSpace = agents.length * devices.length * rooms.length;
 
     const ag: number[] = [];
     const dv: number[] = [];
-    const hr: number[] = [];
-    const pt: number[] = [];
+    const rm: number[] = [];
+    const vs: number[] = [];
     for (let a = 0; a < agents.length; a++)
       for (let d = 0; d < devices.length; d++)
-        for (let h = 0; h < hours.length; h++)
-          for (let p = 0; p < this.paths.length; p++) {
+        for (let r = 0; r < rooms.length; r++)
+          for (let v = 0; v < this.visitSets.length; v++) {
             ag.push(a);
             dv.push(d);
-            hr.push(h);
-            pt.push(p);
+            rm.push(r);
+            vs.push(v);
           }
     this.size = ag.length;
     this.agent = Uint8Array.from(ag);
     this.device = Uint8Array.from(dv);
-    this.hour = Uint8Array.from(hr);
-    this.path = Uint16Array.from(pt);
+    this.room = Uint8Array.from(rm);
+    this.visits = Uint16Array.from(vs);
     this.answerKey = new Uint16Array(this.size);
     for (let i = 0; i < this.size; i++) this.answerKey[i] = this.keyOf(this.answerAt(i));
 
     this.base = this.mask((i) => {
       const dev = devices[this.device[i]];
-      const route = this.paths[this.path[i]];
-      const h = this.hour[i];
-      if (!meets(dossier, dev.requirement, this.agent[i], route[h], h)) return false;
-      // The mole had to collect the device on the way.
-      for (let t = 0; t <= h; t++) if (route[t] === dev.location) return true;
-      return false;
+      const seen = this.visitSets[this.visits[i]];
+      const room = this.room[i];
+      return (
+        seen.includes(room) &&
+        seen.includes(dev.location) && // the mole had to collect the device
+        meets(dossier, dev.requirement, this.agent[i], room)
+      );
     }, true);
   }
 
-  roomAt(i: number): RoomId {
-    return this.paths[this.path[i]][this.hour[i]];
-  }
-
   answerAt(i: number): Answer {
-    return { agent: this.agent[i], device: this.device[i], room: this.roomAt(i), hour: this.hour[i] };
+    return { agent: this.agent[i], device: this.device[i], room: this.room[i] };
   }
 
   keyOf(a: Answer): number {
-    const { devices, rooms, hours } = this.dossier;
-    return ((a.agent * devices.length + a.device) * rooms.length + a.room) * hours.length + a.hour;
+    const { devices, rooms } = this.dossier;
+    return (a.agent * devices.length + a.device) * rooms.length + a.room;
   }
 
   answerOfKey(key: number): Answer {
-    const { devices, rooms, hours } = this.dossier;
-    const hour = key % hours.length;
-    key = (key - hour) / hours.length;
+    const { devices, rooms } = this.dossier;
     const room = key % rooms.length;
     key = (key - room) / rooms.length;
     const device = key % devices.length;
     const agent = (key - device) / devices.length;
-    return { agent, device, room, hour };
+    return { agent, device, room };
   }
 
   /** The candidates (within the dossier's rules) for which `pred` holds. */
@@ -128,30 +127,25 @@ export class Space {
   }
 }
 
-/** Does a handoff by `agent` in `room` at `hour` satisfy a requirement? */
-export function meets(d: Dossier, req: Requirement, agent: number, room: RoomId, hour: number): boolean {
+/** Does a handoff by `agent` in `room` satisfy a requirement? */
+export function meets(d: Dossier, req: Requirement, agent: number, room: RoomId): boolean {
   switch (req.kind) {
     case "feature":
       return d.rooms[room].features.includes(req.feature) === req.is;
     case "trait":
       return req.values.includes(d.agents[agent].traits[req.trait]);
-    case "hours":
-      return hour >= req.from && hour <= req.to;
   }
 }
 
-/** Every route through the house: one room per hour, staying or stepping to a neighbour. */
-export function enumeratePaths(d: Dossier): RoomId[][] {
-  let paths: RoomId[][] = d.rooms.map((r) => [r.id]);
-  for (let h = 1; h < d.hours.length; h++) {
-    const next: RoomId[][] = [];
-    for (const p of paths) {
-      const here = p[p.length - 1];
-      for (const r of [here, ...d.rooms[here].adjacent]) next.push([...p, r]);
-    }
-    paths = next;
+/** Every set of between MIN_VISITS and MAX_VISITS rooms, each as a sorted list. */
+export function enumerateVisitSets(rooms: number): RoomId[][] {
+  const out: RoomId[][] = [];
+  for (let mask = 0; mask < 1 << rooms; mask++) {
+    const set: RoomId[] = [];
+    for (let r = 0; r < rooms; r++) if (mask & (1 << r)) set.push(r);
+    if (set.length >= MIN_VISITS && set.length <= MAX_VISITS) out.push(set);
   }
-  return paths;
+  return out;
 }
 
 /** A fixed-size set of candidate indices. */

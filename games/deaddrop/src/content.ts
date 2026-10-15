@@ -8,8 +8,6 @@ import type { FeatureDef, Requirement, TraitDef } from "./types.js";
 
 export const TITLE = "The Embassy Reception";
 
-export const HOURS = ["8pm", "9pm", "10pm", "11pm"];
-
 export const TRAITS: TraitDef[] = [
   {
     id: "headwear",
@@ -72,14 +70,14 @@ export const FEATURES: FeatureDef[] = [
   { id: "seating", label: "Seating", phrase: "with seating", negPhrase: "without seating" },
 ];
 
-/** The house. Adjacency is symmetric; the generator checks that it is. */
-export const ROOMS: { name: string; preposition?: string; features: string[]; adjacent: string[] }[] = [
-  { name: "Ballroom", features: ["crowded"], adjacent: ["Bar", "Library", "Terrace"] },
-  { name: "Bar", features: ["crowded", "seating"], adjacent: ["Ballroom", "Terrace"] },
-  { name: "Library", features: ["quiet", "seating"], adjacent: ["Ballroom", "Study"] },
-  { name: "Study", features: ["quiet", "dark"], adjacent: ["Library", "Garden"] },
-  { name: "Terrace", preposition: "on", features: ["outdoors", "seating"], adjacent: ["Ballroom", "Bar", "Garden"] },
-  { name: "Garden", features: ["outdoors", "quiet", "dark"], adjacent: ["Terrace", "Study"] },
+/** The house. */
+export const ROOMS: { name: string; preposition?: string; features: string[] }[] = [
+  { name: "Ballroom", features: ["crowded"] },
+  { name: "Bar", features: ["crowded", "seating"] },
+  { name: "Library", features: ["quiet", "seating"] },
+  { name: "Study", features: ["quiet", "dark"] },
+  { name: "Terrace", preposition: "on", features: ["outdoors", "seating"] },
+  { name: "Garden", features: ["outdoors", "quiet", "dark"] },
 ];
 
 export interface DeviceTemplate {
@@ -113,16 +111,6 @@ export const DEVICES: DeviceTemplate[] = [
     name: "Lipstick camera",
     requirement: { kind: "feature", feature: "dark", is: false },
     blurb: "Useless without good light.",
-  },
-  {
-    name: "Cigar case",
-    requirement: { kind: "hours", from: 2, to: 3 },
-    blurb: "Cigars only came out after dinner, at 10pm.",
-  },
-  {
-    name: "Fountain-pen transmitter",
-    requirement: { kind: "hours", from: 0, to: 1 },
-    blurb: "Its battery was flat by 10pm.",
   },
   {
     name: "Glove lining",

@@ -1,5 +1,5 @@
 import type { Agent, ClueBody, Device, Dossier, Room, Scenario, Secret } from "./types.js";
-import { AGENT_NAMES, DEVICES, FEATURES, HOURS, ROOMS, TITLE, TRAITS, type DeviceTemplate } from "./content.js";
+import { AGENT_NAMES, DEVICES, FEATURES, ROOMS, TITLE, TRAITS, type DeviceTemplate } from "./content.js";
 import { makeRng, pick, shuffle, type Rng } from "./rng.js";
 import { trueClues, withIds } from "./clues.js";
 import { Solver } from "./solver.js";
@@ -65,7 +65,7 @@ function attemptScenario(opts: GenerateOptions, rng: Rng): Scenario | null {
   const space = solver.space;
 
   // Pick the mole first so every suspect is equally likely, then one of the
-  // routes, devices and hours that would have let them do it.
+  // devices, rooms and evenings that would have let them do it.
   const mole = Math.floor(rng() * dossier.agents.length);
   const options: number[] = [];
   space.base.forEach((i) => {
@@ -73,11 +73,10 @@ function attemptScenario(opts: GenerateOptions, rng: Rng): Scenario | null {
   });
   if (!options.length) return null;
   const truth = pick(options, rng);
-  const route = space.paths[space.path[truth]];
-  const schedule = dossier.agents.map((a) =>
-    a.id === mole ? route : space.paths[Math.floor(rng() * space.paths.length)]
+  const visits = dossier.agents.map((a) =>
+    a.id === mole ? space.visitSets[space.visits[truth]] : pick(space.visitSets, rng)
   );
-  const secret: Secret = { answer: space.answerAt(truth), schedule };
+  const secret: Secret = { answer: space.answerAt(truth), visits };
 
   // Measure every true statement against the dossier; keep the informative ones.
   const baseAnswers = space.countAnswers(space.base);
@@ -172,20 +171,19 @@ function intersect(start: Bitset, clues: { mask: Bitset }[]): Bitset {
   return s;
 }
 
-type WeightKey = ClueBody["kind"] | "atTrue";
+type WeightKey = ClueBody["kind"] | "visitedTrue";
 
 function weightKey(c: ClueBody): WeightKey {
-  return c.kind === "at" && c.is ? "atTrue" : c.kind;
+  return c.kind === "visited" && c.is ? "visitedTrue" : c.kind;
 }
 
 /** How readily each kind of clue is drawn into play. */
 const KIND_WEIGHT: Record<WeightKey, number> = {
-  atTrue: 4,
-  at: 0.6,
+  visitedTrue: 4,
+  visited: 2,
   never: 4,
   moleTrait: 3,
   handoffFeature: 2,
-  handoffHour: 1.5,
   notRoom: 1,
   notDevice: 1,
   notAgent: 0.4,
@@ -206,7 +204,6 @@ export function buildDossier(rng: Rng, agentCount: number, deviceCount: number):
     name: r.name,
     preposition: r.preposition ?? "in",
     features: r.features,
-    adjacent: r.adjacent.map((n) => ROOMS.findIndex((x) => x.name === n)),
   }));
 
   for (let tries = 0; ; tries++) {
@@ -230,7 +227,7 @@ export function buildDossier(rng: Rng, agentCount: number, deviceCount: number):
       blurb: t.blurb,
       location: spots[id % spots.length].id,
     }));
-    return { title: TITLE, traits: TRAITS, features: FEATURES, agents, rooms, devices, hours: HOURS };
+    return { title: TITLE, traits: TRAITS, features: FEATURES, agents, rooms, devices };
   }
 }
 
@@ -251,12 +248,9 @@ function castAgents(rng: Rng, n: number): Agent[] {
   }
 }
 
-/** A mix of devices: some tied to the room, one to the clock, some to the courier. */
+/** A mix of devices: half tied to the room, half to the courier. */
 function chooseDevices(rng: Rng, n: number): DeviceTemplate[] {
   const byKind = (k: string) => shuffle(DEVICES.filter((d) => d.requirement.kind === k), rng);
-  const hours = byKind("hours").slice(0, 1);
-  const feature = byKind("feature");
-  const trait = byKind("trait");
-  const nFeature = Math.ceil((n - hours.length) / 2);
-  return shuffle([...hours, ...feature.slice(0, nFeature), ...trait.slice(0, n - hours.length - nFeature)], rng);
+  const nFeature = Math.ceil(n / 2);
+  return shuffle([...byKind("feature").slice(0, nFeature), ...byKind("trait").slice(0, n - nFeature)], rng);
 }

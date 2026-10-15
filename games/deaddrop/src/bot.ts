@@ -76,7 +76,6 @@ function openSubjects(view: PlayerView, solver: Solver, rng: Rng): [Subject, Sub
     if (s.kind === "agent") return m.agent[s.id] > 0 && m.agent.filter((x) => x > 0).length > 1;
     if (s.kind === "device") return m.device[s.id] > 0 && m.device.filter((x) => x > 0).length > 1;
     if (s.kind === "room") return m.room[s.id] > 0 && m.room.filter((x) => x > 0).length > 1;
-    if (s.kind === "hour") return m.hour[s.id] > 0 && m.hour.filter((x) => x > 0).length > 1;
     return true;
   });
   const pool = open.length >= 2 ? open : allSubjects(view.dossier);

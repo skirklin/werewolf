@@ -40,26 +40,6 @@ export function logText(view: PlayerView, e: LogEntry): string {
   }
 }
 
-export interface SubjectGroup {
-  label: string;
-  subjects: { subject: Subject; label: string }[];
-}
-
-/** Every askable subject, grouped the way the picker shows them. */
-export function subjectGroups(d: Dossier): SubjectGroup[] {
-  return [
-    { label: "Suspects", subjects: d.agents.map((a) => ({ subject: { kind: "agent", id: a.id }, label: a.name })) },
-    { label: "Looks", subjects: d.traits.map((t) => ({ subject: { kind: "trait", id: t.id }, label: t.label })) },
-    { label: "Rooms", subjects: d.rooms.map((r) => ({ subject: { kind: "room", id: r.id }, label: r.name })) },
-    {
-      label: "Room features",
-      subjects: d.features.map((f) => ({ subject: { kind: "feature", id: f.id }, label: f.label })),
-    },
-    { label: "Hours", subjects: d.hours.map((h, i) => ({ subject: { kind: "hour", id: i }, label: h })) },
-    { label: "Devices", subjects: d.devices.map((x) => ({ subject: { kind: "device", id: x.id }, label: x.name })) },
-  ];
-}
-
 /** "Fedora, black coat, tall, …" — an agent's look in a few words. */
 export function looks(d: Dossier, agentId: number): string {
   const a = d.agents[agentId];

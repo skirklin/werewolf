@@ -37,10 +37,9 @@ export type Mode = "competitive" | "coop";
  * How much of the deduction the app does for players. A house rule, so the
  * host picks it and everyone plays with the same help:
  *  - notes: clues are filed; players cross things off themselves.
- *  - gauge: also shows how many answers remain, but not which.
  *  - grid:  the full auto-filled grid, with reasons for every cross.
  */
-export type Assist = "notes" | "gauge" | "grid";
+export type Assist = "notes" | "grid";
 
 export interface GameConfig {
   mode: Mode;
@@ -52,11 +51,11 @@ export interface GameConfig {
 
 /**
  * Provisional until humans have played. Baseline bots asking at random need
- * eight or nine turns each, so at this limit they win a little under half
- * their co-op games; people choosing their subjects should do better.
+ * about five turns each, so at this limit they win roughly half their co-op
+ * games; people choosing their subjects should do better.
  */
 export function defaultTurnLimit(players: number): number {
-  return players * 8;
+  return players * 5;
 }
 
 export type { Seat };
@@ -435,7 +434,6 @@ function checkSubject(d: Dossier, s: Subject) {
     ((s.kind === "agent" && index(d.agents.length)) ||
       (s.kind === "room" && index(d.rooms.length)) ||
       (s.kind === "device" && index(d.devices.length)) ||
-      (s.kind === "hour" && index(d.hours.length)) ||
       (s.kind === "trait" && d.traits.some((t) => t.id === s.id)) ||
       (s.kind === "feature" && d.features.some((f) => f.id === s.id)));
   if (!ok) throw new GameError("Unknown subject.");
@@ -447,10 +445,9 @@ function checkAnswer(d: Dossier, a: Answer) {
     !a ||
     !inRange(a.agent, d.agents.length) ||
     !inRange(a.device, d.devices.length) ||
-    !inRange(a.room, d.rooms.length) ||
-    !inRange(a.hour, d.hours.length)
+    !inRange(a.room, d.rooms.length)
   )
-    throw new GameError("That accusation doesn't name a real suspect, device, room and hour.");
+    throw new GameError("That accusation doesn't name a real suspect, device and room.");
 }
 
 function clone(s: GameState): GameState {

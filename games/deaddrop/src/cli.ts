@@ -55,13 +55,10 @@ if (values.sim) {
     console.log(`  ${a.name.padEnd(20)} ${traits.join(", ")}`);
   }
   console.log("\nROOMS");
-  for (const r of d.rooms)
-    console.log(
-      `  ${r.name.padEnd(10)} [${r.features.join(", ")}] → ${r.adjacent.map((x) => d.rooms[x].name).join(", ")}`
-    );
+  for (const r of d.rooms) console.log(`  ${r.name.padEnd(10)} [${r.features.join(", ")}]`);
   console.log("\nDEVICES");
   for (const x of d.devices)
-    console.log(`  ${x.name.padEnd(26)} hidden in the ${d.rooms[x.location].name}. ${requirementText(d, x.requirement)}`);
+    console.log(`  ${x.name.padEnd(26)} hidden ${d.rooms[x.location].preposition} the ${d.rooms[x.location].name}. ${requirementText(d, x.requirement)}`);
 
   console.log(`\nBefore any clues: ${solver.remaining([])} possible answers.`);
   console.log(`\nPUBLIC (${left(s.publicClues)} answers left)`);

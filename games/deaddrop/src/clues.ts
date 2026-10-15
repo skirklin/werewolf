@@ -5,24 +5,20 @@ import type { Space } from "./space.js";
 export function holds(space: Space, clue: ClueBody, i: number): boolean {
   const d = space.dossier;
   const agent = space.agent[i];
-  const hour = space.hour[i];
-  const route = space.paths[space.path[i]];
+  const room = space.room[i];
+  const visited = space.visitSets[space.visits[i]];
   switch (clue.kind) {
-    case "at":
-      // Only says something about the mole's route if this is the mole.
-      return agent !== clue.agent || (route[clue.hour] === clue.room) === clue.is;
+    case "visited":
+      // Only says something about the mole's evening if this is the mole.
+      return agent !== clue.agent || visited.includes(clue.room) === clue.is;
     case "never":
-      return d.agents[agent].traits[clue.trait] !== clue.value || !route.includes(clue.room);
+      return d.agents[agent].traits[clue.trait] !== clue.value || !visited.includes(clue.room);
     case "moleTrait":
       return (d.agents[agent].traits[clue.trait] === clue.value) === clue.is;
     case "handoffFeature":
-      return d.rooms[route[hour]].features.includes(clue.feature) === clue.is;
-    case "handoffHour":
-      if (clue.cmp === "before") return hour < clue.hour;
-      if (clue.cmp === "after") return hour > clue.hour;
-      return hour !== clue.hour;
+      return d.rooms[room].features.includes(clue.feature) === clue.is;
     case "notRoom":
-      return route[hour] !== clue.room;
+      return room !== clue.room;
     case "notDevice":
       return space.device[i] !== clue.device;
     case "notAgent":
@@ -34,15 +30,20 @@ export function holds(space: Space, clue: ClueBody, i: number): boolean {
 export function clueText(d: Dossier, clue: ClueBody): string {
   const agent = (id: number) => d.agents[id].name;
   const room = (id: number) => `the ${d.rooms[id].name}`;
-  const hour = (h: number) => d.hours[h];
   const value = (trait: string, v: string) =>
     d.traits.find((t) => t.id === trait)!.values.find((x) => x.id === v)!;
   const feature = (id: string) => d.features.find((f) => f.id === id)!;
   switch (clue.kind) {
-    case "at":
-      return `${agent(clue.agent)} was ${clue.is ? "" : "not "}${d.rooms[clue.room].preposition} ${room(clue.room)} at ${hour(clue.hour)}.`;
+    case "visited": {
+      const r = d.rooms[clue.room];
+      return clue.is
+        ? `${agent(clue.agent)} was seen ${r.preposition} ${room(clue.room)}.`
+        : `${agent(clue.agent)} never set foot ${r.preposition} ${room(clue.room)}.`;
+    }
     case "never":
-      return `Nobody who ${value(clue.trait, clue.value).pastPhrase} set foot in ${room(clue.room)} all evening.`;
+      return `Nobody who ${value(clue.trait, clue.value).pastPhrase} set foot ${d.rooms[clue.room].preposition} ${room(
+        clue.room
+      )} all evening.`;
     case "moleTrait": {
       const v = value(clue.trait, clue.value);
       return `The mole ${clue.is ? v.phrase : v.negPhrase}.`;
@@ -51,10 +52,6 @@ export function clueText(d: Dossier, clue: ClueBody): string {
       const f = feature(clue.feature);
       return `The handoff happened somewhere ${clue.is ? f.phrase : f.negPhrase}.`;
     }
-    case "handoffHour":
-      if (clue.cmp === "before") return `The handoff happened before ${hour(clue.hour)}.`;
-      if (clue.cmp === "after") return `The handoff happened after ${hour(clue.hour)}.`;
-      return `The handoff did not happen at ${hour(clue.hour)}.`;
     case "notRoom":
       return `The handoff did not happen ${d.rooms[clue.room].preposition} ${room(clue.room)}.`;
     case "notDevice":
@@ -67,11 +64,10 @@ export function clueText(d: Dossier, clue: ClueBody): string {
 /** What a clue is "about" — the subjects someone could ask for it by. */
 export function clueSubjects(clue: ClueBody): Subject[] {
   switch (clue.kind) {
-    case "at":
+    case "visited":
       return [
         { kind: "agent", id: clue.agent },
         { kind: "room", id: clue.room },
-        { kind: "hour", id: clue.hour },
       ];
     case "never":
       return [
@@ -82,8 +78,6 @@ export function clueSubjects(clue: ClueBody): Subject[] {
       return [{ kind: "trait", id: clue.trait }];
     case "handoffFeature":
       return [{ kind: "feature", id: clue.feature }];
-    case "handoffHour":
-      return [{ kind: "hour", id: clue.hour }];
     case "notRoom":
       return [{ kind: "room", id: clue.room }];
     case "notDevice":
@@ -107,8 +101,6 @@ export function subjectText(d: Dossier, s: Subject): string {
       return d.agents[s.id].name;
     case "room":
       return `the ${d.rooms[s.id].name}`;
-    case "hour":
-      return d.hours[s.id];
     case "device":
       return `the ${d.devices[s.id].name.toLowerCase()}`;
     case "trait":
@@ -124,7 +116,6 @@ export function allSubjects(d: Dossier): Subject[] {
     ...d.agents.map((a): Subject => ({ kind: "agent", id: a.id })),
     ...d.devices.map((x): Subject => ({ kind: "device", id: x.id })),
     ...d.rooms.map((r): Subject => ({ kind: "room", id: r.id })),
-    ...d.hours.map((_, h): Subject => ({ kind: "hour", id: h })),
     ...d.traits.map((t): Subject => ({ kind: "trait", id: t.id })),
     ...d.features.map((f): Subject => ({ kind: "feature", id: f.id })),
   ];
@@ -135,20 +126,18 @@ export function allSubjects(d: Dossier): Subject[] {
  * generator measures them and decides which go into play.
  */
 export function trueClues(d: Dossier, secret: Secret): ClueBody[] {
-  const { answer, schedule } = secret;
+  const { answer, visits } = secret;
   const out: ClueBody[] = [];
   const mole = d.agents[answer.agent];
 
   for (const a of d.agents)
-    for (let h = 0; h < d.hours.length; h++)
-      for (const r of d.rooms)
-        out.push({ kind: "at", agent: a.id, room: r.id, hour: h, is: schedule[a.id][h] === r.id });
+    for (const r of d.rooms) out.push({ kind: "visited", agent: a.id, room: r.id, is: visits[a.id].includes(r.id) });
 
   for (const t of d.traits)
     for (const v of t.values)
       for (const r of d.rooms) {
         const wearers = d.agents.filter((a) => a.traits[t.id] === v.id);
-        if (wearers.length && wearers.every((a) => !schedule[a.id].includes(r.id)))
+        if (wearers.length && wearers.every((a) => !visits[a.id].includes(r.id)))
           out.push({ kind: "never", trait: t.id, value: v.id, room: r.id });
       }
 
@@ -162,12 +151,6 @@ export function trueClues(d: Dossier, secret: Secret): ClueBody[] {
   const room = d.rooms[answer.room];
   for (const f of d.features)
     out.push({ kind: "handoffFeature", feature: f.id, is: room.features.includes(f.id) });
-
-  for (let h = 0; h < d.hours.length; h++) {
-    if (h > answer.hour) out.push({ kind: "handoffHour", cmp: "before", hour: h });
-    if (h < answer.hour) out.push({ kind: "handoffHour", cmp: "after", hour: h });
-    if (h !== answer.hour) out.push({ kind: "handoffHour", cmp: "not", hour: h });
-  }
 
   for (const r of d.rooms) if (r.id !== answer.room) out.push({ kind: "notRoom", room: r.id });
   for (const x of d.devices) if (x.id !== answer.device) out.push({ kind: "notDevice", device: x.id });
@@ -195,14 +178,14 @@ export function requirementText(d: Dossier, r: Requirement): string {
     const f = d.features.find((x) => x.id === r.feature)!;
     return `The handoff must be somewhere ${r.is ? f.phrase : f.negPhrase}.`;
   }
-  if (r.kind === "hours") return `The handoff must be between ${d.hours[r.from]} and ${d.hours[r.to]}.`;
   const t = d.traits.find((x) => x.id === r.trait)!;
-  const values = r.values.map((v) => t.values.find((x) => x.id === v)!.label.toLowerCase());
-  return `The courier's ${t.label.toLowerCase()} must be ${values.join(" or ")}.`;
+  const values = r.values.map((v) => t.values.find((x) => x.id === v)!);
+  if (values.length === 1) return `The courier ${values[0].phrase}.`; // "The courier wears gloves."
+  return `The courier's ${t.label.toLowerCase()} must be ${values.map((v) => v.label.toLowerCase()).join(" or ")}.`;
 }
 
-/** "Dr. Moreau, with the umbrella, on the Terrace, at 9pm." */
+/** "Dr. Moreau, with the umbrella, on the Terrace." */
 export function answerText(d: Dossier, a: Answer): string {
   const room = d.rooms[a.room];
-  return `${d.agents[a.agent].name}, with the ${d.devices[a.device].name.toLowerCase()}, ${room.preposition} the ${room.name}, at ${d.hours[a.hour]}`;
+  return `${d.agents[a.agent].name}, with the ${d.devices[a.device].name.toLowerCase()}, ${room.preposition} the ${room.name}`;
 }

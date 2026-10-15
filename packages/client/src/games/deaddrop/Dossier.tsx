@@ -7,9 +7,9 @@ export function Dossier({ view }: { view: PlayerView }) {
   return (
     <div className="stack">
       <p className="muted small">
-        During {d.title.replace(/^The /, "the ")}, a mole handed secrets to their handler. Each hour a guest stays put
-        or walks to a neighbouring room, and the mole had to pass the device&apos;s hiding place at or before the
-        handoff.
+        During {d.title.replace(/^The /, "the ")}, a mole handed secrets to their handler. Every guest wandered
+        through a few rooms over the evening. The handoff happened in a room the mole visited, and the mole must also
+        have visited the room where the device was hidden.
       </p>
 
       <div className="muted small group-label">🕴️ Suspects</div>
@@ -44,13 +44,10 @@ export function Dossier({ view }: { view: PlayerView }) {
             <span className="muted small">
               {r.features.map((f) => d.features.find((x) => x.id === f)!.label.toLowerCase()).join(", ")}
             </span>
-            <span className="src">Leads to {r.adjacent.map((n) => d.rooms[n].name).join(", ")}</span>
           </div>
         ))}
       </div>
 
-      <div className="muted small group-label">🕰️ Hours</div>
-      <p className="small">{d.hours.join(" · ")}</p>
     </div>
   );
 }

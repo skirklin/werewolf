@@ -3,7 +3,7 @@
 *Working title.* A deduction game in the family of Awkward Guests, with a spy
 story. During an embassy reception a mole handed secrets to their handler.
 The players trade intelligence to work out **who** the mole was, **what
-device** they used, **where** and **when** the handoff happened.
+device** they used, and **where** the handoff happened.
 
 This package is the engine: content, scenario generator, solver, turn rules
 and a baseline bot, exported to the platform as `deaddropModule`. The screens
@@ -22,19 +22,21 @@ npm run deaddrop -- --sim 200 --players 4 --mode coop --turn-limit 999
 - **Suspects (8)**, each with visible traits: headwear, coat colour, height,
   handedness, glasses, gloves. Any two suspects differ in at least two traits.
 - **The house (6 rooms)** with features (outdoors, crowded, quiet, dark,
-  seating) and a map. Each hour a guest stays put or walks to an adjacent room.
-- **Devices (6 of 13)**. Each one waits in a room, and the mole has to pass
-  that room at or before the handoff. Each device also has one requirement:
+  seating). Every guest visited between two and four rooms over the evening.
+- **Devices (6 of 11)**. Each one was hidden in a room, which the mole must
+  have visited. Each device also has one requirement:
   - a **room feature**: the umbrella only works outdoors, the hollow coin needs a crowd;
-  - an **hour**: cigars only came out after 10pm;
   - a **courier trait**: the hatband needs a hat, the ledger needs a tall courier.
-- **Hours**: 8pm–11pm.
+- The handoff happened in a room the mole visited.
 
 These links between categories are where the extrapolation comes from. Learn
 that the handoff was indoors and the umbrella is out. Learn the mole is
-bareheaded and the hatband is out. Learn where someone was at 9pm and the map
-limits where they could have been at 10pm, which limits which devices they
-could have collected.
+bareheaded and the hatband is out. Learn that Petrov never set foot in the
+Garden, and if he's the mole, it wasn't the device hidden there, nor a handoff
+there.
+
+An earlier version also asked *when*, with an hour-by-hour route for every
+guest through a house map. It was dropped as more bookkeeping than fun.
 
 ## Clues
 
@@ -43,11 +45,10 @@ evaluated, rendered and sent over the wire:
 
 | kind | example |
 |---|---|
-| `at` | Colonel Petrov was (not) in the Library at 9pm. |
+| `visited` | Colonel Petrov was seen in the Library. / … never set foot in the Library. |
 | `never` | Nobody who wore a beret set foot in the Study all evening. |
 | `moleTrait` | The mole wears a hat. / The mole does not wear a grey coat. |
 | `handoffFeature` | The handoff happened somewhere without seating. |
-| `handoffHour` | The handoff happened before 10pm. |
 | `notRoom` / `notDevice` / `notAgent` | Dr. Moreau is not the mole. |
 
 ## Every game is generated, never sorted
@@ -55,8 +56,9 @@ evaluated, rendered and sent over the wire:
 A broken deal can't happen, because each scenario is built and then verified
 by the solver:
 
-1. Cast the suspects, hide the devices, pick the mole, then pick a route, device
-   and hour that the dossier allows. Everyone else wanders the house at random.
+1. Cast the suspects, hide the devices, pick the mole, then pick a device, room
+   and evening (rooms visited) that the dossier allows. Everyone else visits a
+   random few rooms.
 2. List every true statement, and measure how much each narrows the answer.
 3. Draw clues (preferring the kinds that need combining over ones that name a
    suspect outright) until exactly one answer remains. Then drop any clue the
@@ -72,13 +74,13 @@ The generator is deterministic given a seed, and takes about 0.1–0.8 s.
 
 ## The solver
 
-`Space` lists every possible world: mole × device × hour × the mole's whole
-route through the house. That's about 45k worlds, and around 300 distinct
-answers survive the dossier's rules. The solver is exact filtering over
+`Space` lists every possible world: mole × device × handoff room × the set
+of rooms the mole visited. That's about fourteen thousand worlds, and around
+130 distinct answers survive the dossier's rules. The solver is exact filtering over
 bitsets. It gives:
 
 - **remaining answers** and the **marginals** (how many answers each suspect,
-  device, room and hour still appears in): the auto-filled notebook;
+  device and room still appears in): the auto-filled board;
 - **`explain`**: the clues that together rule a value out, for "why is this
   crossed out?";
 - **`valueOf`**: how much a clue would tell someone, in bits. This can show
@@ -86,11 +88,16 @@ bitsets. It gives:
 
 The host picks how much of this the app shows, as a house rule
 (`GameConfig.assist`):
-- `notes`: clues are filed and players cross things off by hand;
-- `gauge`: also "N possible answers left", but not which;
-- `grid` (default): the auto-filled grid. Tap a crossed-off value to see the
-  clues that rule it out, and the accusation form comes prefilled once one
-  answer remains.
+- `grid` (default): the auto-filled board. Tap a crossed-off value to see the
+  clues that rule it out, and an accusation comes prefilled once one answer
+  remains.
+- `notes`: clues are filed and players cross things off the board by hand.
+
+A gauge-only level ("N answers left", but not which) was tried and dropped:
+you can't choose sensible trades without tracking what you know.
+
+The board is also where you pick on your turn: two subjects to ask about, or
+who, how and where to accuse.
 
 ## Cards, hands and rounds
 
@@ -122,7 +129,7 @@ about a third of co-op games with no turn limit never got solved.
 
 On your turn you either **ask the table** or **accuse**.
 
-1. Name **two subjects**: a suspect, look (trait), room, room feature, hour or
+1. Name **two subjects**: a suspect, look (trait), room, room feature or
    device. Two subjects also hides which one a card is about.
 2. Everyone else, at the same time, offers any cards from their hand about
    either subject, or nothing. The table sees only "Ivo offers 4 points on 2
@@ -147,11 +154,13 @@ across 30 games:
 
 | players | competitive | co-op |
 |---|---|---|
-| 3 | 26 (≈9 each) | 24 (≈8 each) |
-| 4 | 39 (≈10 each) | 38 (≈9.5 each) |
-| 5 | 42 (≈8.5 each) | 44 (≈9 each) |
+| 3 | 14 (≈5 each) | 14 (≈5 each) |
+| 4 | 21 (≈5 each) | 19 (≈5 each) |
+| 5 | 25 (≈5 each) | 24 (≈5 each) |
 
-The co-op limit (`players × 8`) is set so these bots win a little under half
+Dropping the hours roughly halved these (from 8–10 turns each). If cases now
+feel too easy, more suspects or devices would grow them without bringing time
+back. The co-op limit (`players × 5`) is set so these bots win about half
 their games. People choosing their subjects should do better. It's still a
 guess until humans have played.
 

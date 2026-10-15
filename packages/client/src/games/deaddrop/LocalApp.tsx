@@ -57,7 +57,9 @@ function loadSetup(): Setup {
     const raw = localStorage.getItem(STORE_KEY);
     if (raw) {
       const s = JSON.parse(raw) as Setup;
-      if (Array.isArray(s.seats) && s.seats.length >= MIN_PLAYERS && s.seats.length <= MAX_PLAYERS) return s;
+      // A table saved before the gauge was dropped falls back to the full grid.
+      if (Array.isArray(s.seats) && s.seats.length >= MIN_PLAYERS && s.seats.length <= MAX_PLAYERS)
+        return { ...s, assist: s.assist === "notes" ? "notes" : "grid" };
     }
   } catch {
     /* fall back to the default table */
@@ -138,9 +140,9 @@ function SetupScreen({ onStart, onExit }: { onStart: (s: Setup) => void; onExit:
           </button>
         </div>
         <div className="btn-row">
-          {(["grid", "gauge", "notes"] as const).map((a) => (
+          {(["grid", "notes"] as const).map((a) => (
             <button key={a} className={s.assist === a ? "primary" : ""} onClick={() => setS({ ...s, assist: a })}>
-              {a === "grid" ? "🧮 Grid" : a === "gauge" ? "🌡️ Gauge" : "📝 Notes"}
+              {a === "grid" ? "🧮 Full grid" : "📝 Notes only"}
             </button>
           ))}
         </div>

@@ -15,9 +15,10 @@ describe("Space", () => {
       if (i % 97) return;
       checked++;
       const dev = d.devices[sp.device[i]];
-      const route = sp.paths[sp.path[i]];
-      expect(meets(d, dev.requirement, sp.agent[i], route[sp.hour[i]], sp.hour[i])).toBe(true);
-      expect(route.slice(0, sp.hour[i] + 1)).toContain(dev.location);
+      const seen = sp.visitSets[sp.visits[i]];
+      expect(meets(d, dev.requirement, sp.agent[i], sp.room[i])).toBe(true);
+      expect(seen).toContain(sp.room[i]);
+      expect(seen).toContain(dev.location);
     });
     expect(checked).toBeGreaterThan(0);
   });
