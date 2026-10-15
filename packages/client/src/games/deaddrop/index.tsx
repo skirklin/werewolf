@@ -13,7 +13,6 @@ import { DeadDropTable } from "./Table.js";
 
 const ASSISTS: { id: Assist; label: string; blurb: string }[] = [
   { id: "grid", label: "🧮 Full grid", blurb: "The app crosses things off and says why." },
-  { id: "gauge", label: "🌡️ Gauge", blurb: "Shows how many answers remain, not which." },
   { id: "notes", label: "📝 Notes", blurb: "Clues are filed; the logic is yours." },
 ];
 
@@ -66,7 +65,9 @@ export const deaddrop: ClientGame<GameConfig, PlayerView, Action> = {
 
   initialConfig(_players, last) {
     const l = (last ?? {}) as Partial<GameConfig>;
-    return { mode: l.mode === "coop" ? "coop" : "competitive", assist: l.assist ?? "grid", turnLimit: l.turnLimit };
+    // A config saved before the gauge was dropped falls back to the full grid.
+    const assist = l.assist === "notes" ? "notes" : "grid";
+    return { mode: l.mode === "coop" ? "coop" : "competitive", assist, turnLimit: l.turnLimit };
   },
 
   configProblems(_config, players) {

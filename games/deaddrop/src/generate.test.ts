@@ -2,34 +2,27 @@ import { describe, it, expect } from "vitest";
 import { generateScenario, buildDossier } from "./generate.js";
 import { Solver, sameAnswer } from "./solver.js";
 import { holds } from "./clues.js";
-import { enumeratePaths } from "./space.js";
+import { MAX_VISITS, MIN_VISITS } from "./space.js";
 import { makeRng } from "./rng.js";
 import type { Scenario } from "./types.js";
 
 /** Index of the candidate world that actually happened. */
 function truthIndex(solver: Solver, s: Scenario): number {
   const sp = solver.space;
-  const { answer, schedule } = s.secret;
-  const route = schedule[answer.agent].join(",");
+  const { answer, visits } = s.secret;
+  const seen = [...visits[answer.agent]].sort((x, y) => x - y).join(",");
   for (let i = 0; i < sp.size; i++)
     if (
       sp.agent[i] === answer.agent &&
       sp.device[i] === answer.device &&
-      sp.hour[i] === answer.hour &&
-      sp.paths[sp.path[i]].join(",") === route
+      sp.room[i] === answer.room &&
+      sp.visitSets[sp.visits[i]].join(",") === seen
     )
       return i;
   return -1;
 }
 
 describe("dossier", () => {
-  it("has a symmetric map and only walkable routes", () => {
-    const d = buildDossier(makeRng(1), 8, 6);
-    for (const r of d.rooms) for (const n of r.adjacent) expect(d.rooms[n].adjacent).toContain(r.id);
-    for (const p of enumeratePaths(d))
-      for (let h = 1; h < p.length; h++) expect([p[h - 1], ...d.rooms[p[h - 1]].adjacent]).toContain(p[h]);
-  });
-
   it("keeps every pair of suspects at least two traits apart", () => {
     const d = buildDossier(makeRng(2), 8, 6);
     for (const a of d.agents)
@@ -50,6 +43,19 @@ describe("generateScenario", () => {
   it("rejects unsupported table sizes", () => {
     expect(() => generateScenario({ seed: 1, players: 1 })).toThrow();
     expect(() => generateScenario({ seed: 1, players: 7 })).toThrow();
+  });
+
+  it("sends every guest to between two and four rooms", () => {
+    const s = generateScenario({ seed: 5, players: 3 });
+    for (const v of s.secret.visits) {
+      expect(v.length).toBeGreaterThanOrEqual(MIN_VISITS);
+      expect(v.length).toBeLessThanOrEqual(MAX_VISITS);
+      expect(new Set(v).size).toBe(v.length);
+    }
+    // The mole was where the handoff happened, and where the device was hidden.
+    const { answer, visits } = s.secret;
+    expect(visits[answer.agent]).toContain(answer.room);
+    expect(visits[answer.agent]).toContain(s.dossier.devices[answer.device].location);
   });
 
   for (const players of [2, 3, 4, 5, 6])

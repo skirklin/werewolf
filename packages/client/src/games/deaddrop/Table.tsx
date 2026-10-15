@@ -1,37 +1,95 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   answerText,
   clueText,
+  sameSubject,
   type Action,
   type Answer,
+  type Dimension,
   type PlayerView,
   type Subject,
 } from "@party/deaddrop";
 import type { TableProps } from "../../shell/game.js";
-import { Notebook } from "./Notebook.js";
+import { Notebook, type Picking } from "./Notebook.js";
 import { Dossier } from "./Dossier.js";
-import { SubjectPicker, ChoiceRow } from "./pickers.js";
 import { useAnalysis } from "./solver.js";
+import { CardFan, Pips } from "./cards.js";
 import { cap, cards, logText, nameOf, pts, subjectsText } from "./text.js";
 
 type Act = (a: Action) => void;
 type Tab = "notebook" | "dossier" | "log";
 
+/** On your turn: what you're picking on the board, and what you've picked so far. */
+interface TurnState {
+  mode: "ask" | "accuse";
+  subjects: Subject[];
+  answer: Partial<Answer>;
+}
+
 /** A Dead Drop game in progress, on one player's own device. */
 export function DeadDropTable({ view, room, isHost, act, playAgain, onExit }: TableProps<PlayerView, Action>) {
   const [tab, setTab] = useState<Tab>("notebook");
+  const { analysis } = useAnalysis(view);
+  const myTurn = view.phase.kind === "turn" && view.phase.active === view.you.seat;
+  const [turn, setTurn] = useState<TurnState | null>(null);
+
+  // A fresh turn starts in ask mode with nothing picked, on the board.
+  useEffect(() => {
+    setTurn(myTurn ? { mode: "ask", subjects: [], answer: {} } : null);
+    if (myTurn) setTab("notebook");
+  }, [myTurn, view.turnsTaken]);
+
+  const setMode = (mode: TurnState["mode"]) => {
+    setTab("notebook");
+    setTurn((t) => {
+      if (!t) return t;
+      // With the full grid, a solved case comes pre-filled.
+      const answer = mode === "accuse" && view.assist === "grid" && analysis.solved && !t.answer.agent ? analysis.solved : t.answer;
+      return { ...t, mode, answer };
+    });
+  };
+
+  const picking: Picking =
+    turn?.mode === "ask"
+      ? {
+          mode: "ask",
+          subjects: turn.subjects,
+          onPick: (s) =>
+            setTurn((t) =>
+              t && {
+                ...t,
+                // Tap again to drop; a third pick replaces the oldest.
+                subjects: t.subjects.some((x) => sameSubject(x, s))
+                  ? t.subjects.filter((x) => !sameSubject(x, s))
+                  : [...t.subjects, s].slice(-2),
+              }
+            ),
+        }
+      : turn?.mode === "accuse"
+        ? {
+            mode: "accuse",
+            answer: turn.answer,
+            onPick: (dim: Dimension, value: number) =>
+              setTurn((t) => t && { ...t, answer: { ...t.answer, [dim]: t.answer[dim] === value ? undefined : value } }),
+          }
+        : null;
+
   return (
     <div className="stack">
       <Seats view={view} />
-      <ActionPanel view={view} act={act} isHost={isHost} playAgain={playAgain} onExit={onExit} />
+      {myTurn && turn ? (
+        <TurnPanel view={view} act={act} turn={turn} setMode={setMode} />
+      ) : (
+        <ActionPanel view={view} act={act} isHost={isHost} playAgain={playAgain} onExit={onExit} />
+      )}
       <div className="tabs">
         {(["notebook", "dossier", "log"] as const).map((t) => (
           <button key={t} className={tab === t ? "on" : ""} onClick={() => setTab(t)}>
-            {t === "notebook" ? "🗂️ Notebook" : t === "dossier" ? "📁 Dossier" : "📜 Log"}
+            {t === "notebook" ? "🗂️ Board" : t === "dossier" ? "📁 Dossier" : "📜 Log"}
           </button>
         ))}
       </div>
-      {tab === "notebook" && <Notebook view={view} roomCode={room.code} />}
+      {tab === "notebook" && <Notebook view={view} roomCode={room.code} picking={picking} />}
       {tab === "dossier" && <Dossier view={view} />}
       {tab === "log" && <Log view={view} />}
     </div>
@@ -84,7 +142,6 @@ function ActionPanel({
   if (view.canOffer) return <OfferPanel view={view} act={act} />;
   if (view.choices) return <ChoosePanel view={view} act={act} />;
   if (view.mustDiscard !== null) return <DiscardPanel view={view} act={act} />;
-  if (phase.kind === "turn" && phase.active === me) return <MyTurn view={view} act={act} />;
 
   const name = (i: number) => cap(nameOf(view, view.players[i].id));
   let waiting: string;
@@ -94,17 +151,18 @@ function ActionPanel({
     waiting = `End of round ${view.round}. Waiting for ${left} more to discard.`;
   } else if (phase.kind === "offers") {
     const left = view.moved!.filter((o) => !o).length;
-    const mine = view.yours;
-    waiting =
-      (phase.active === me
-        ? "Waiting for the table's offers"
-        : mine
-          ? `You offered ${mine.length ? `${pts(mine.reduce((n, id) => n + clueOf(view, id).points, 0))} on ${cards(mine.length)}` : "nothing"}. Waiting for the others`
-          : "Waiting for offers") + ` (${left} still thinking).`;
+    waiting = `${phase.active === me ? "Waiting for the table's offers" : "Waiting for the others"} (${left} still thinking).`;
   } else waiting = `${name(phase.active)} is choosing which offers to take.`;
+  const mine = phase.kind === "offers" && phase.active !== me ? view.yours : null;
   return (
     <div className="card stack">
       <LastNews view={view} />
+      {mine && (
+        <div className="spread">
+          <span className="muted small">You offered</span>
+          <CardFan count={mine.length} points={mine.reduce((n, id) => n + clueOf(view, id).points, 0)} />
+        </div>
+      )}
       <p className="muted center" style={{ margin: 0 }}>{waiting}</p>
     </div>
   );
@@ -131,13 +189,22 @@ function LastNews({ view }: { view: PlayerView }) {
     const after = solver.remaining(view.you.known);
     narrowed = before === after ? "They didn't narrow anything down." : `They ruled out ${before - after} of ${before} answers.`;
   }
+  if (last.t === "offers" && last.offers.some((o) => o.cards))
+    return (
+      <div className="stack" style={{ gap: 6 }}>
+        <span className="muted small">The offers are in:</span>
+        <OfferList view={view} offers={last.offers.filter((o) => o.cards)} />
+      </div>
+    );
   return (
     <div className="stack" style={{ gap: 6 }}>
       <span className="muted small">{logText(view, last)}</span>
       {fresh.map((c) => (
         <div key={c.id} className="clue new">
-          {clueText(view.dossier, c)}
-          <span className="pts">{c.points}</span>
+          <span className="row">
+            <span>{clueText(view.dossier, c)}</span>
+            <Pips n={c.points} />
+          </span>
         </div>
       ))}
       {narrowed && <span className="muted small">{narrowed}</span>}
@@ -145,42 +212,107 @@ function LastNews({ view }: { view: PlayerView }) {
   );
 }
 
-function MyTurn({ view, act }: { view: PlayerView; act: Act }) {
-  const [mode, setMode] = useState<"ask" | "accuse">("ask");
+/** Each offer as a fan of face-down cards. */
+function OfferList({ view, offers }: { view: PlayerView; offers: { who: string; cards: number; points: number }[] }) {
+  return (
+    <div className="offer-list">
+      {offers.map((o) => (
+        <div key={o.who} className="offer-row spread">
+          <b>{cap(nameOf(view, o.who))}</b>
+          <CardFan count={o.cards} points={o.points} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * Your turn. The picking happens on the board below; this shows what's been
+ * picked and sends it.
+ */
+function TurnPanel({
+  view,
+  act,
+  turn,
+  setMode,
+}: {
+  view: PlayerView;
+  act: Act;
+  turn: TurnState;
+  setMode: (m: TurnState["mode"]) => void;
+}) {
+  const { solver, analysis } = useAnalysis(view);
+  const [confirm, setConfirm] = useState(false);
+  const d = view.dossier;
+  const { subjects, answer } = turn;
+  const full =
+    answer.agent !== undefined && answer.device !== undefined && answer.room !== undefined ? (answer as Answer) : null;
+  // With the full grid, warn before accusing something the notebook rules out.
+  const impossible =
+    full && view.assist === "grid" && !solver.space.answers(analysis.candidates).includes(solver.space.keyOf(full));
+
   return (
     <div className="card stack">
       <LastNews view={view} />
       <b>Your turn</b>
       <div className="btn-row">
-        <button className={mode === "ask" ? "primary" : ""} onClick={() => setMode("ask")}>
+        <button className={turn.mode === "ask" ? "primary" : ""} onClick={() => setMode("ask")}>
           🗣️ Ask the table
         </button>
-        <button className={mode === "accuse" ? "primary" : ""} onClick={() => setMode("accuse")}>
+        <button className={turn.mode === "accuse" ? "primary" : ""} onClick={() => setMode("accuse")}>
           ☝️ Accuse
         </button>
       </div>
-      {mode === "ask" ? <AskForm view={view} act={act} /> : <AccuseForm view={view} act={act} />}
-    </div>
-  );
-}
 
-function AskForm({ view, act }: { view: PlayerView; act: Act }) {
-  const [subjects, setSubjects] = useState<Subject[]>([]);
-  const ready = subjects.length === 2;
-  return (
-    <div className="stack">
-      <p className="muted small" style={{ margin: 0 }}>
-        Pick two subjects. Everyone else may offer you clues about either one, and you pay back whatever you accept
-        with at least as many points.
-      </p>
-      <SubjectPicker dossier={view.dossier} value={subjects} onChange={setSubjects} />
-      <button
-        className="primary full lg"
-        disabled={!ready}
-        onClick={() => ready && act({ type: "ask", subjects: [subjects[0], subjects[1]] })}
-      >
-        {ready ? `Ask about ${subjectsText(view.dossier, subjects)}` : `Pick ${2 - subjects.length} more`}
-      </button>
+      {turn.mode === "ask" ? (
+        <>
+          <p className="muted small" style={{ margin: 0 }}>
+            Tap two subjects on the board below. Everyone else may offer you cards about either one; you pay back what
+            you take with at least as many points.
+          </p>
+          <button
+            className="primary full lg"
+            disabled={subjects.length !== 2}
+            onClick={() => subjects.length === 2 && act({ type: "ask", subjects: [subjects[0], subjects[1]] })}
+          >
+            {subjects.length === 2
+              ? `Ask about ${subjectsText(d, subjects)}`
+              : subjects.length === 1
+                ? `${cap(subjectsText(d, subjects))}, and…`
+                : "Pick two subjects below"}
+          </button>
+        </>
+      ) : (
+        <>
+          <p className="muted small" style={{ margin: 0 }}>
+            Tap who, with what and where on the board below.{" "}
+            {view.mode === "coop"
+              ? "The table gets one accusation. If it's wrong, the mole gets away."
+              : "If you're wrong, you're out of the running, though you still trade."}
+          </p>
+          <div className="pick-summary">
+            <span className="pill">{answer.agent !== undefined ? d.agents[answer.agent].name : "who?"}</span>
+            <span className="pill">{answer.device !== undefined ? d.devices[answer.device].name : "with what?"}</span>
+            <span className="pill">{answer.room !== undefined ? d.rooms[answer.room].name : "where?"}</span>
+          </div>
+          {impossible && <p className="err" style={{ margin: 0 }}>Your notebook says it can't be that.</p>}
+          {!confirm ? (
+            <button className="danger full lg" disabled={!full} onClick={() => setConfirm(true)}>
+              Accuse
+            </button>
+          ) : (
+            <div className="stack">
+              <b className="center">{full && answerText(d, full)}?</b>
+              <div className="btn-row">
+                <button onClick={() => setConfirm(false)}>Not yet</button>
+                <button className="danger" onClick={() => full && act({ type: "accuse", answer: full })}>
+                  Yes, accuse
+                </button>
+              </div>
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }
@@ -206,7 +338,7 @@ function OfferPanel({ view, act }: { view: PlayerView; act: Act }) {
         <button key={id} className={`clue pickable ${picked.includes(id) ? "selected" : ""}`} onClick={() => toggle(id)}>
           <span className="row">
             <span>{clueText(view.dossier, clueOf(view, id))}</span>
-            <span className="pts">{clueOf(view, id).points}</span>
+            <Pips n={clueOf(view, id).points} />
           </span>
         </button>
       ))}
@@ -241,7 +373,6 @@ function ChoosePanel({ view, act }: { view: PlayerView; act: Act }) {
 
   return (
     <div className="card stack">
-      <LastNews view={view} />
       <b>Choose which offers to take</b>
       <p className="muted small" style={{ margin: 0 }}>
         You see the cards once you take an offer. Pay each one back from your hand with at least as many points;
@@ -261,10 +392,10 @@ function ChoosePanel({ view, act }: { view: PlayerView; act: Act }) {
             >
               <span className="row">
                 <span>
-                  <b>{cap(name)}</b> offers {pts(c.points)} on {cards(c.cards)}
-                  {!canAfford && <span className="src">Your hand isn't worth that much.</span>}
+                  <b>{cap(name)}</b>
+                  <span className="src">{on ? "✓ Taking" : canAfford ? "Tap to take" : "Your hand isn't worth that much"}</span>
                 </span>
-                <span>{on ? "✓ Taking" : "Take"}</span>
+                <CardFan count={c.cards} points={c.points} />
               </span>
             </button>
             {on && (
@@ -282,7 +413,7 @@ function ChoosePanel({ view, act }: { view: PlayerView; act: Act }) {
                     >
                       <span className="row">
                         <span>{clueText(view.dossier, clueOf(view, id))}</span>
-                        <span className="pts">{clueOf(view, id).points}</span>
+                        <Pips n={clueOf(view, id).points} />
                       </span>
                     </button>
                   ))}
@@ -320,7 +451,7 @@ function DiscardPanel({ view, act }: { view: PlayerView; act: Act }) {
         <button key={id} className={`clue pickable ${picked.includes(id) ? "selected" : ""}`} onClick={() => toggle(id)}>
           <span className="row">
             <span>{clueText(view.dossier, clueOf(view, id))}</span>
-            <span className="pts">{clueOf(view, id).points}</span>
+            <Pips n={clueOf(view, id).points} />
           </span>
         </button>
       ))}
@@ -331,55 +462,6 @@ function DiscardPanel({ view, act }: { view: PlayerView; act: Act }) {
       >
         {picked.length === need ? `Discard ${cards(need)}` : `Pick ${need - picked.length} more`}
       </button>
-    </div>
-  );
-}
-
-function AccuseForm({ view, act }: { view: PlayerView; act: Act }) {
-  const { analysis } = useAnalysis(view);
-  const d = view.dossier;
-  const auto = view.assist === "grid";
-  const start = auto ? analysis.solved : null;
-  const [agent, setAgent] = useState<number | null>(start?.agent ?? null);
-  const [device, setDevice] = useState<number | null>(start?.device ?? null);
-  const [room, setRoom] = useState<number | null>(start?.room ?? null);
-  const [hour, setHour] = useState<number | null>(start?.hour ?? null);
-  const [confirm, setConfirm] = useState(false);
-  const m = analysis.marginals;
-  const out = (dim: keyof typeof m, i: number) => auto && m[dim][i] === 0;
-  const answer: Answer | null =
-    agent !== null && device !== null && room !== null && hour !== null ? { agent, device, room, hour } : null;
-  const stakes =
-    view.mode === "coop"
-      ? "The table gets one accusation. If it's wrong, the mole gets away."
-      : "If you're wrong, you're out of the running, though you still answer questions.";
-
-  return (
-    <div className="stack">
-      <ChoiceRow<number> label="Who" value={agent} onChange={setAgent}
-        options={d.agents.map((a) => ({ id: a.id, label: a.name, ruledOut: out("agent", a.id) }))} />
-      <ChoiceRow<number> label="With what" value={device} onChange={setDevice}
-        options={d.devices.map((x) => ({ id: x.id, label: x.name, ruledOut: out("device", x.id) }))} />
-      <ChoiceRow<number> label="Where" value={room} onChange={setRoom}
-        options={d.rooms.map((r) => ({ id: r.id, label: r.name, ruledOut: out("room", r.id) }))} />
-      <ChoiceRow<number> label="When" value={hour} onChange={setHour}
-        options={d.hours.map((h, i) => ({ id: i, label: h, ruledOut: out("hour", i) }))} />
-      <p className="muted small" style={{ margin: 0 }}>{stakes}</p>
-      {!confirm ? (
-        <button className="danger full lg" disabled={!answer} onClick={() => setConfirm(true)}>
-          Accuse
-        </button>
-      ) : (
-        <div className="stack">
-          <b className="center">{answer && answerText(d, answer)}?</b>
-          <div className="btn-row">
-            <button onClick={() => setConfirm(false)}>Not yet</button>
-            <button className="danger" onClick={() => answer && act({ type: "accuse", answer })}>
-              Yes, accuse
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

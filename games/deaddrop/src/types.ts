@@ -11,8 +11,6 @@
 export type AgentId = number;
 export type RoomId = number;
 export type DeviceId = number;
-/** Index into `Dossier.hours`. Earlier hours have lower indices. */
-export type Hour = number;
 
 export interface TraitValue {
   id: string;
@@ -55,8 +53,6 @@ export interface Room {
   /** "in" or "on": someone is *on* the Terrace. */
   preposition: string;
   features: string[];
-  /** Rooms a guest can walk to in one hour (staying put is always allowed). */
-  adjacent: RoomId[];
 }
 
 /**
@@ -66,13 +62,12 @@ export interface Room {
  */
 export type Requirement =
   | { kind: "feature"; feature: string; is: boolean }
-  | { kind: "trait"; trait: string; values: string[] }
-  | { kind: "hours"; from: Hour; to: Hour };
+  | { kind: "trait"; trait: string; values: string[] };
 
 export interface Device {
   id: DeviceId;
   name: string;
-  /** Where the device was waiting. The mole must pass through here first. */
+  /** Where the device was waiting. The mole must have visited this room. */
   location: RoomId;
   requirement: Requirement;
   /** Why the requirement holds, in the story's voice. */
@@ -87,7 +82,6 @@ export interface Dossier {
   agents: Agent[];
   rooms: Room[];
   devices: Device[];
-  hours: string[];
 }
 
 /** What the players are trying to name. */
@@ -95,28 +89,25 @@ export interface Answer {
   agent: AgentId;
   device: DeviceId;
   room: RoomId;
-  hour: Hour;
 }
 
 /** The ground truth behind a scenario. Never sent to a player mid-game. */
 export interface Secret {
   answer: Answer;
-  /** schedule[agent][hour] = the room that agent was in. */
-  schedule: RoomId[][];
+  /** visits[agent] = the rooms that agent set foot in during the evening. */
+  visits: RoomId[][];
 }
 
 /** A single piece of intelligence. Always true of the scenario it came from. */
 export type ClueBody =
-  /** "X was (not) in R at H." */
-  | { kind: "at"; agent: AgentId; room: RoomId; hour: Hour; is: boolean }
+  /** "X was seen in R." / "X never set foot in R." */
+  | { kind: "visited"; agent: AgentId; room: RoomId; is: boolean }
   /** "Nobody who wore V set foot in R all evening." */
   | { kind: "never"; trait: string; value: string; room: RoomId }
   /** "The mole (does not) wear V." */
   | { kind: "moleTrait"; trait: string; value: string; is: boolean }
   /** "The handoff happened somewhere (not) outdoors." */
   | { kind: "handoffFeature"; feature: string; is: boolean }
-  /** "The handoff happened before / after / not at H." */
-  | { kind: "handoffHour"; cmp: "before" | "after" | "not"; hour: Hour }
   /** "The handoff did not happen in R." */
   | { kind: "notRoom"; room: RoomId }
   /** "D was not used." */
@@ -133,7 +124,6 @@ export type Clue = ClueBody & { id: number; points: Points };
 export type Subject =
   | { kind: "agent"; id: AgentId }
   | { kind: "room"; id: RoomId }
-  | { kind: "hour"; id: Hour }
   | { kind: "device"; id: DeviceId }
   | { kind: "trait"; id: string }
   | { kind: "feature"; id: string };

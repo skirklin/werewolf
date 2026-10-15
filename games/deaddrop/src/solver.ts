@@ -7,13 +7,12 @@ export interface Marginals {
   agent: number[];
   device: number[];
   room: number[];
-  hour: number[];
 }
 
 export interface Analysis {
   /** Candidate worlds still consistent with everything known. */
   candidates: Bitset;
-  /** How many distinct (mole, device, room, hour) answers remain. */
+  /** How many distinct (mole, device, room) answers remain. */
   remaining: number;
   /** Bits of information still missing (log2 of `remaining`). */
   bitsLeft: number;
@@ -66,14 +65,12 @@ export class Solver {
       agent: d.agents.map(() => 0),
       device: d.devices.map(() => 0),
       room: d.rooms.map(() => 0),
-      hour: d.hours.map(() => 0),
     };
     for (const k of keys) {
       const a = this.space.answerOfKey(k);
       marginals.agent[a.agent]++;
       marginals.device[a.device]++;
       marginals.room[a.room]++;
-      marginals.hour[a.hour]++;
     }
     return {
       candidates,
@@ -138,10 +135,9 @@ export class Solver {
 function valueIn(s: Space, i: number, dim: Dimension): number {
   if (dim === "agent") return s.agent[i];
   if (dim === "device") return s.device[i];
-  if (dim === "hour") return s.hour[i];
-  return s.roomAt(i);
+  return s.room[i];
 }
 
 export function sameAnswer(a: Answer, b: Answer): boolean {
-  return a.agent === b.agent && a.device === b.device && a.room === b.room && a.hour === b.hour;
+  return a.agent === b.agent && a.device === b.device && a.room === b.room;
 }

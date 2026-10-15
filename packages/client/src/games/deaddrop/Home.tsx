@@ -13,7 +13,7 @@ export function DeadDropHome({ sub, navigate, onBack }: HomeProps) {
       <div className="phase-banner">
         <div className="big" style={{ fontSize: "5rem" }}>🕵️</div>
         <h1>Dead Drop</h1>
-        <p className="muted">A mole passed secrets at the embassy reception. Trade intel and name who, how, where and when.</p>
+        <p className="muted">A mole passed secrets at the embassy reception. Trade intel and name who, how and where.</p>
       </div>
       <div className="spacer" />
       <div className="stack">
@@ -45,23 +45,23 @@ function Rules({ onBack }: { onBack: () => void }) {
         <h2>How to play</h2>
         <p>
           During a reception, a mole handed secrets to their handler. Name the <b>mole</b>, the <b>device</b> they
-          used, the <b>room</b> and the <b>hour</b>.
+          used, and the <b>room</b>.
         </p>
         <h3>What everyone knows</h3>
         <p className="muted">
-          The dossier: every suspect&apos;s looks, the rooms and how they connect, and each device&apos;s hiding place
-          and requirement. The umbrella only works outdoors; the hatband needs a hat. Each hour a guest stays put or
-          walks next door, and the mole had to pass the device&apos;s hiding place first.
+          The dossier: every suspect&apos;s looks, the rooms, and each device&apos;s hiding place and requirement. The
+          umbrella only works outdoors; the hatband needs a hat. Every guest visited a few rooms over the evening: the
+          handoff happened in one the mole visited, and the mole must have visited the device&apos;s hiding place too.
         </p>
         <h3>Your hand</h3>
         <p className="muted">
           You're dealt a hand of clue cards, each worth 1 to 3 points: 3 for clues that cut broadly ("the handoff
-          happened somewhere outdoors"), 1 for narrow ones ("Dr. Moreau was in the Study at 9pm"). Nobody&apos;s hand
+          happened somewhere outdoors"), 1 for narrow ones ("Dr. Moreau was seen in the Study"). Nobody&apos;s hand
           solves the case alone. Everything together always points to exactly one answer.
         </p>
         <h3>On your turn</h3>
         <p className="muted">
-          <b>Ask the table</b> about two subjects: suspects, looks, rooms, room features, hours or devices. Everyone
+          <b>Ask the table</b> about two subjects: suspects, looks, rooms, room features or devices. You pick them on the board. Everyone
           else may offer you cards from their hand about either one, or nothing. You only see how many points and
           cards each person offers, and nobody sees which subject they&apos;re about.
         </p>
@@ -84,8 +84,9 @@ function Rules({ onBack }: { onBack: () => void }) {
         <p className="muted">The table shares a turn limit and one accusation.</p>
         <h3>The notebook</h3>
         <p className="muted">
-          Clues are filed for you. The host picks how much more the app helps: just the notes, a count of the answers
-          still possible, or a full grid that crosses things off and tells you why.
+          Clues are filed for you, alongside a board of every suspect, device and room. The host picks how much the
+          board helps: a full grid that crosses things off and tells you why, or notes only, where you cross things
+          off yourself.
         </p>
       </div>
     </div>
