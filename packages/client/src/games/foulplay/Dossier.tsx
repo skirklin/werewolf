@@ -1,4 +1,4 @@
-import { requirementText, type PlayerView } from "@party/deaddrop";
+import type { PlayerView } from "@party/foulplay";
 import { looks } from "./text.js";
 
 /** The public dossier: everything every player knows from the start. */
@@ -7,9 +7,8 @@ export function Dossier({ view }: { view: PlayerView }) {
   return (
     <div className="stack">
       <p className="muted small">
-        During {d.title.replace(/^The /, "the ")}, a mole handed secrets to their handler. Every guest wandered
-        through a few rooms over the evening. The handoff happened in a room the mole visited, and the mole must also
-        have visited the room where the device was hidden.
+        {d.theme.story} The murder happened in a room the killer visited, and the killer must also have visited the
+        room where the weapon was kept.
       </p>
 
       <div className="muted small group-label">🕴️ Suspects</div>
@@ -22,15 +21,14 @@ export function Dossier({ view }: { view: PlayerView }) {
         ))}
       </div>
 
-      <div className="muted small group-label">🧳 Devices</div>
+      <div className="muted small group-label">🔪 Weapons</div>
       <div className="stack" style={{ gap: 6 }}>
         {d.devices.map((x) => {
           const room = d.rooms[x.location];
           return (
             <div key={x.id} className="clue">
-              <b>{x.name}</b> — hidden {room.preposition} the {room.name}
-              <div>{requirementText(d, x.requirement)}</div>
-              <span className="src">{x.blurb}</span>
+              <b>{x.name}</b> <span className="muted small">kept {room.preposition} the {room.name}</span>
+              <div>{x.blurb}</div>
             </div>
           );
         })}

@@ -1,63 +1,74 @@
-# Dead Drop
+# Foul Play
 
-*Working title.* A deduction game in the family of Awkward Guests, with a spy
-story. During an embassy reception a mole handed secrets to their handler.
-The players trade intelligence to work out **who** the mole was, **what
-device** they used, and **where** the handoff happened.
+A deduction game in the family of Awkward Guests. Lord Ashcombe was found
+dead during his own party at Ashcombe Manor. The players trade evidence to
+work out **who** the killer was, **which weapon** they used, and **where** the
+murder happened.
 
 This package is the engine: content, scenario generator, solver, turn rules
-and a baseline bot, exported to the platform as `deaddropModule`. The screens
-live in `packages/client/src/games/deaddrop/`. Play it from the game picker,
+and a baseline bot, exported to the platform as `foulplayModule`. The screens
+live in `packages/client/src/games/foulplay/`. Play it from the game picker,
 each player on their own phone, or practise on one device: a solo game
 against bots, or pass-the-device when more than one seat is a person.
 
 ```bash
-npm run deaddrop -- --seed 7 --players 4               # print a scenario, its hands and the solution
-npm run deaddrop -- --sim 200 --players 4              # bot games, competitive
-npm run deaddrop -- --sim 200 --players 4 --mode coop --turn-limit 999
+npm run foulplay -- --seed 7 --players 4               # print a case, its hands and the solution
+npm run foulplay -- --sim 200 --players 4              # bot games, competitive
+npm run foulplay -- --sim 200 --players 4 --mode coop --turn-limit 999
 ```
 
-## What every player knows: the dossier
+## Theme and engine
+
+The engine doesn't know it's a murder. It knows **suspects** with traits
+(`agents`), **rooms** with features, and **items** (`devices`) each kept in a
+room with one requirement; the answer is a suspect, an item and a room (the
+"act" happens there). Everything players read comes from the content set in
+`content.ts`: the `Theme` words ("the killer", "the murder", "weapon"), and
+evidence sentences on each trait value and room feature. Another setting is
+another content set. Some identifiers (`moleTrait`, `handoffFeature`) are
+left over from the first, spy-themed draft; see History.
+
+## What every player knows: the case file
 
 - **Suspects (8)**, each with visible traits: headwear, coat colour, height,
   handedness, glasses, gloves. Any two suspects differ in at least two traits.
 - **The house (6 rooms)** with features (outdoors, crowded, quiet, dark,
   seating). Every guest visited between two and four rooms over the evening.
-- **Devices (6 of 11)**. Each one was hidden in a room, which the mole must
-  have visited. Each device also has one requirement:
-  - a **room feature**: the umbrella only works outdoors, the hollow coin needs a crowd;
-  - a **courier trait**: the hatband needs a hat, the ledger needs a tall courier.
-- The handoff happened in a room the mole visited.
+- **Weapons (6 of 9)**. Each one was kept in a room, which the killer must
+  have visited to take it. Each one also only fits some murders:
+  - a **room feature**: a revolver shot would be heard anywhere quiet, so it
+    happened somewhere crowded; garden shears mean outdoors;
+  - a **killer trait**: a candlestick blow to the top of the head needs a tall
+    killer; a wiped-clean poison vial means the poisoner wore gloves.
+- The murder happened in a room the killer visited.
 
-These links between categories are where the extrapolation comes from. Learn
-that the handoff was indoors and the umbrella is out. Learn the mole is
-bareheaded and the hatband is out. Learn that Petrov never set foot in the
-Garden, and if he's the mole, it wasn't the device hidden there, nor a handoff
-there.
+These links are where the extrapolation comes from. Mud on the victim's shoes
+means outdoors, so not the revolver. The wound was struck from the left, Ruiz
+is left-handed, and the staff swear Ruiz never set foot in the Study, where
+the letter opener was kept.
 
-An earlier version also asked *when*, with an hour-by-hour route for every
-guest through a house map. It was dropped as more bookkeeping than fun.
+## Clues are evidence
 
-## Clues
-
-Every clue is true, and every clue is data (`ClueBody`), so it can be
-evaluated, rendered and sent over the wire:
+Every clue is true, has a source you can picture, and is data (`ClueBody`),
+so it can be evaluated, rendered and sent over the wire:
 
 | kind | example |
 |---|---|
-| `visited` | Colonel Petrov was seen in the Library. / … never set foot in the Library. |
-| `never` | Nobody who wore a beret set foot in the Study all evening. |
-| `moleTrait` | The mole wears a hat. / The mole does not wear a grey coat. |
-| `handoffFeature` | The handoff happened somewhere without seating. |
-| `notRoom` / `notDevice` / `notAgent` | Dr. Moreau is not the mole. |
+| `visited` | The butler saw Colonel Petrov in the Library. / The staff swear he never set foot there. |
+| `never` | The staff swear nobody who wore a beret set foot in the Study. |
+| `moleTrait` | Red wool fibres were found on the body: the killer wears a red coat. |
+| `handoffFeature` | There was mud and grass on the victim's shoes: the murder happened outdoors. |
+| `notRoom` | The Garden was searched top to bottom: the murder didn't happen there. |
+| `notDevice` | No trace on the candlestick: not the weapon. |
+| `notAgent` | Dr. Moreau has a solid alibi: not the killer. |
 
 ## Every game is generated, never sorted
 
 A broken deal can't happen, because each scenario is built and then verified
 by the solver:
 
-1. Cast the suspects, hide the devices, pick the mole, then pick a device, room
-   and evening (rooms visited) that the dossier allows. Everyone else visits a
+1. Cast the suspects, place the weapons, pick the killer, then pick a weapon,
+   room and evening (rooms visited) that the case file allows. Everyone else visits a
    random few rooms.
 2. List every true statement, and measure how much each narrows the answer.
 3. Draw clues (preferring the kinds that need combining over ones that name a
@@ -74,13 +85,13 @@ The generator is deterministic given a seed, and takes about 0.1–0.8 s.
 
 ## The solver
 
-`Space` lists every possible world: mole × device × handoff room × the set
-of rooms the mole visited. That's about fourteen thousand worlds, and around
-130 distinct answers survive the dossier's rules. The solver is exact filtering over
+`Space` lists every possible world: killer × weapon × room × the set of rooms
+the killer visited. That's about fourteen thousand worlds, and roughly
+100–150 distinct answers survive the case file's rules. The solver is exact filtering over
 bitsets. It gives:
 
 - **remaining answers** and the **marginals** (how many answers each suspect,
-  device and room still appears in): the auto-filled board;
+  weapon and room still appears in): the auto-filled board;
 - **`explain`**: the clues that together rule a value out, for "why is this
   crossed out?";
 - **`valueOf`**: how much a clue would tell someone, in bits. This can show
@@ -103,8 +114,8 @@ who, how and where to accuse.
 
 Clues are cards worth **1, 2 or 3 points**, printed on them. Points come from
 how much a clue cuts on its own, measured against the dossier, and are split
-into thirds within each case so every game has a spread. "The handoff
-happened somewhere outdoors" is a 3; "Dr. Moreau was in the Study at 9pm" is
+into thirds within each case so every game has a spread. "Mud on the
+victim's shoes: outdoors" is a 3; "the butler saw Dr. Moreau in the Study" is
 a 1.
 
 Your **hand** is what you can trade. Your **notebook** remembers every clue
@@ -117,7 +128,7 @@ answer; the starting hands together must not.
 
 A **round** is one turn for each player still in the running. At the end of
 it everyone discards half their hand (rounded down), at the same time, and
-draws the same number from the deck. New intelligence keeps arriving while
+draws the same number from the deck. New evidence keeps arriving while
 old cards stay in circulation.
 
 **Discards go under the deck**, reshuffled. If they left play instead, a clue
@@ -129,8 +140,8 @@ about a third of co-op games with no turn limit never got solved.
 
 On your turn you either **ask the table** or **accuse**.
 
-1. Name **two subjects**: a suspect, look (trait), room, room feature or
-   device. Two subjects also hides which one a card is about.
+1. Name **two subjects**: a suspect, look (trait), weapon, room or room
+   feature. Two subjects also hides which one a card is about.
 2. Everyone else, at the same time, offers any cards from their hand about
    either subject, or nothing. The table sees only "Ivo offers 4 points on 2
    cards", never the subjects or contents.
@@ -159,12 +170,22 @@ across 30 games:
 | 5 | 25 (≈5 each) | 24 (≈5 each) |
 
 Dropping the hours roughly halved these (from 8–10 turns each). If cases now
-feel too easy, more suspects or devices would grow them without bringing time
+feel too easy, more suspects or weapons would grow them without bringing time
 back. The co-op limit (`players × 5`) is set so these bots win about half
 their games. People choosing their subjects should do better. It's still a
 guess until humans have played.
 
 ### History
+
+Foul Play started as **Dead Drop**, a spy game: a mole passing secrets with a
+concealment device (an umbrella, a hatband). The device rules were arbitrary
+("the umbrella only works outdoors") and a secret handoff leaves no evidence
+by design, so the clues read as bare facts. A murder leaves a body, fibres,
+fingerprints and a missing weapon, so the same engine reads as detective
+work.
+
+An earlier version also asked *when*, with an hour-by-hour route for every
+guest; it was dropped as more bookkeeping than fun.
 
 The first version had you ask one player about one subject, and they had to
 answer. That needed a category fallback ("nothing on the Garden, so something
@@ -181,5 +202,5 @@ closer to Awkward Guests and makes offering a decision.
   players). That's fine for a household; move it to a worker if it ever isn't.
 - **Smarter bots** to tune the co-op limit and hand sizes: for example, a bot
   that tracks who answered what and asks about the subjects of its own clues.
-- **More content**: further house maps, a train or a casino, and more devices.
+- **More content**: other houses, a train or an ocean liner, and more weapons.
   Hidden traits or unreliable witnesses only once the base game is fun.

@@ -135,7 +135,7 @@ describe("websocket transport", () => {
 
   it("lists the games it can host", async () => {
     const res = await app.inject({ method: "GET", url: "/api/catalog" });
-    expect(res.json().map((g: { id: string }) => g.id)).toEqual(["werewolf", "deaddrop"]);
+    expect(res.json().map((g: { id: string }) => g.id)).toEqual(["werewolf", "foulplay"]);
   });
 
   it("refuses a room for a game it doesn't have, and junk on the wire", async () => {

@@ -8,7 +8,7 @@ import {
   type Dimension,
   type PlayerView,
   type Subject,
-} from "@party/deaddrop";
+} from "@party/foulplay";
 import type { TableProps } from "../../shell/game.js";
 import { Notebook, type Picking } from "./Notebook.js";
 import { Dossier } from "./Dossier.js";
@@ -26,8 +26,8 @@ interface TurnState {
   answer: Partial<Answer>;
 }
 
-/** A Dead Drop game in progress, on one player's own device. */
-export function DeadDropTable({ view, room, isHost, act, playAgain, onExit }: TableProps<PlayerView, Action>) {
+/** A Foul Play game in progress, on one player's own device. */
+export function FoulPlayTable({ view, room, isHost, act, playAgain, onExit }: TableProps<PlayerView, Action>) {
   const [tab, setTab] = useState<Tab>("notebook");
   const { analysis } = useAnalysis(view);
   const myTurn = view.phase.kind === "turn" && view.phase.active === view.you.seat;
@@ -96,7 +96,7 @@ export function DeadDropTable({ view, room, isHost, act, playAgain, onExit }: Ta
   );
 }
 
-/** Who's at the table, whose turn it is, and how much intel each holds. */
+/** Who's at the table, whose turn it is, and how many cards each holds. */
 function Seats({ view }: { view: PlayerView }) {
   const phase = view.phase;
   const active = "active" in phase ? phase.active : -1;
@@ -174,7 +174,7 @@ const clueOf = (view: PlayerView, id: number) => view.you.known.find((c) => c.id
 function LastNews({ view }: { view: PlayerView }) {
   const { solver } = useAnalysis(view);
   const last = view.log[view.log.length - 1];
-  if (!last) return <p className="muted small" style={{ margin: 0 }}>The reception is under way. Nobody has asked anything yet.</p>;
+  if (!last) return <p className="muted small" style={{ margin: 0 }}>The investigation is under way. Nobody has asked anything yet.</p>;
   // Clues that reached me on the turn that just ended.
   const fresh = view.you.known.filter((c) => {
     const src = view.you.sources[c.id];
@@ -287,7 +287,7 @@ function TurnPanel({
           <p className="muted small" style={{ margin: 0 }}>
             Tap who, with what and where on the board below.{" "}
             {view.mode === "coop"
-              ? "The table gets one accusation. If it's wrong, the mole gets away."
+              ? "The table gets one accusation. If it's wrong, the killer gets away."
               : "If you're wrong, you're out of the running, though you still trade."}
           </p>
           <div className="pick-summary">
@@ -483,15 +483,15 @@ function GameOver({
   const headline =
     phase.reason === "solved"
       ? view.mode === "coop"
-        ? "🎉 The table unmasked the mole"
+        ? "🎉 The table caught the killer"
         : won
-          ? "🎉 You unmasked the mole"
-          : `🕵️ ${cap(winnerNames[0])} unmasked the mole`
+          ? "🎉 You caught the killer"
+          : `🔍 ${cap(winnerNames[0])} caught the killer`
       : phase.reason === "outOfTime"
-        ? "⌛ Out of time. The handler got away"
+        ? "⌛ Out of time. The killer got away"
         : phase.reason === "wrongAccusation"
-          ? "💨 Wrong accusation. The mole slipped away"
-          : "💨 Every accusation was wrong. The mole slipped away";
+          ? "💨 Wrong accusation. The killer slipped away"
+          : "💨 Every accusation was wrong. The killer slipped away";
   return (
     <div className="card stack center">
       <h2>{headline}</h2>

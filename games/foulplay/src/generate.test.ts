@@ -52,7 +52,7 @@ describe("generateScenario", () => {
       expect(v.length).toBeLessThanOrEqual(MAX_VISITS);
       expect(new Set(v).size).toBe(v.length);
     }
-    // The mole was where the handoff happened, and where the device was hidden.
+    // The culprit was where the murder happened, and where the weapon was kept.
     const { answer, visits } = s.secret;
     expect(visits[answer.agent]).toContain(answer.room);
     expect(visits[answer.agent]).toContain(s.dossier.devices[answer.device].location);

@@ -7,14 +7,14 @@ export const MAX_VISITS = 4;
 /**
  * The space of possible worlds, small enough to list in full.
  *
- * A candidate is a mole, a device, the handoff room, and the set of rooms the
- * mole visited during the evening. The dossier's rules are applied up front:
- * the handoff happened in a room the mole visited, the mole visited the room
+ * A candidate is a culprit, an item (weapon), the room of the act, and the set
+ * of rooms the culprit visited during the evening. The dossier's rules are
+ * applied up front: the act happened in a room the culprit visited, the culprit visited the room
  * the device was hidden in, and the device's requirement holds. So every
  * candidate here is already consistent with the dossier.
  *
  * Keeping the visits in the candidate is what lets "X never set foot in the
- * Garden" rule out devices hidden there, and handoffs there, if X is the mole.
+ * Garden" rule out weapons kept there, and a murder there, if X is the killer.
  * With six rooms that's about fourteen thousand candidates, so the solver is
  * exact filtering over bitsets rather than anything clever.
  */
@@ -64,7 +64,7 @@ export class Space {
       const room = this.room[i];
       return (
         seen.includes(room) &&
-        seen.includes(dev.location) && // the mole had to collect the device
+        seen.includes(dev.location) && // the culprit had to collect the item
         meets(dossier, dev.requirement, this.agent[i], room)
       );
     }, true);
@@ -127,7 +127,7 @@ export class Space {
   }
 }
 
-/** Does a handoff by `agent` in `room` satisfy a requirement? */
+/** Does the act, by `agent` in `room`, satisfy a requirement? */
 export function meets(d: Dossier, req: Requirement, agent: number, room: RoomId): boolean {
   switch (req.kind) {
     case "feature":

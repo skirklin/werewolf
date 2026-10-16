@@ -1,9 +1,9 @@
 import type { HomeProps } from "../../shell/game.js";
-import { DeadDropLocal } from "./LocalApp.js";
+import { FoulPlayLocal } from "./LocalApp.js";
 
-export function DeadDropHome({ sub, navigate, onBack }: HomeProps) {
+export function FoulPlayHome({ sub, navigate, onBack }: HomeProps) {
   if (sub === "rules") return <Rules onBack={() => navigate("")} />;
-  if (sub === "practice") return <DeadDropLocal onExit={() => navigate("")} />;
+  if (sub === "practice") return <FoulPlayLocal onExit={() => navigate("")} />;
   return (
     <div className="app">
       <div className="spread">
@@ -11,9 +11,9 @@ export function DeadDropHome({ sub, navigate, onBack }: HomeProps) {
       </div>
       <div className="spacer" />
       <div className="phase-banner">
-        <div className="big" style={{ fontSize: "5rem" }}>🕵️</div>
-        <h1>Dead Drop</h1>
-        <p className="muted">A mole passed secrets at the embassy reception. Trade intel and name who, how and where.</p>
+        <div className="big" style={{ fontSize: "5rem" }}>🔍</div>
+        <h1>Foul Play</h1>
+        <p className="muted">Lord Ashcombe is dead. Trade evidence and name the killer, the weapon and the room.</p>
       </div>
       <div className="spacer" />
       <div className="stack">
@@ -44,24 +44,26 @@ function Rules({ onBack }: { onBack: () => void }) {
       <div className="stack">
         <h2>How to play</h2>
         <p>
-          During a reception, a mole handed secrets to their handler. Name the <b>mole</b>, the <b>device</b> they
-          used, and the <b>room</b>.
+          Lord Ashcombe was found dead during his own party. Name the <b>killer</b>, the <b>weapon</b> and the{" "}
+          <b>room</b>.
         </p>
         <h3>What everyone knows</h3>
         <p className="muted">
-          The dossier: every suspect&apos;s looks, the rooms, and each device&apos;s hiding place and requirement. The
-          umbrella only works outdoors; the hatband needs a hat. Every guest visited a few rooms over the evening: the
-          handoff happened in one the mole visited, and the mole must have visited the device&apos;s hiding place too.
+          The case file: every suspect&apos;s looks, the rooms, and where each weapon was kept. Each weapon only fits
+          some murders: a revolver shot would be heard anywhere quiet, a candlestick blow needs a tall killer. Every
+          guest visited a few rooms over the evening: the murder happened in one the killer visited, and the killer
+          must have visited the room the weapon was taken from.
         </p>
         <h3>Your hand</h3>
         <p className="muted">
-          You're dealt a hand of clue cards, each worth 1 to 3 points: 3 for clues that cut broadly ("the handoff
-          happened somewhere outdoors"), 1 for narrow ones ("Dr. Moreau was seen in the Study"). Nobody&apos;s hand
+          You're dealt a hand of evidence cards, each worth 1 to 3 points: 3 for evidence that cuts broadly ("mud on
+          the victim&apos;s shoes: the murder happened outdoors"), 1 for narrow sightings ("the butler saw Dr. Moreau in
+          the Study"). Nobody&apos;s hand
           solves the case alone. Everything together always points to exactly one answer.
         </p>
         <h3>On your turn</h3>
         <p className="muted">
-          <b>Ask the table</b> about two subjects: suspects, looks, rooms, room features or devices. You pick them on the board. Everyone
+          <b>Ask the table</b> about two subjects: suspects, looks, weapons, rooms or room features. You pick them on the board. Everyone
           else may offer you cards from their hand about either one, or nothing. You only see how many points and
           cards each person offers, and nobody sees which subject they&apos;re about.
         </p>
@@ -71,7 +73,7 @@ function Rules({ onBack }: { onBack: () => void }) {
           you&apos;re feeling mean.
         </p>
         <p className="muted">
-          Or <b>accuse</b>: name all four.
+          Or <b>accuse</b>: name the killer, the weapon and the room.
         </p>
         <h3>Rounds</h3>
         <p className="muted">
@@ -84,7 +86,7 @@ function Rules({ onBack }: { onBack: () => void }) {
         <p className="muted">The table shares a turn limit and one accusation.</p>
         <h3>The notebook</h3>
         <p className="muted">
-          Clues are filed for you, alongside a board of every suspect, device and room. The host picks how much the
+          Evidence is filed for you, alongside a board of every suspect, weapon and room. The host picks how much the
           board helps: a full grid that crosses things off and tells you why, or notes only, where you cross things
           off yourself.
         </p>

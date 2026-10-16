@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { Solver, type Analysis, type Dossier, type PlayerView } from "@party/deaddrop";
+import { Solver, type Analysis, type Dossier, type PlayerView } from "@party/foulplay";
 
 /**
  * One solver per dossier. Views arrive as fresh objects on every broadcast, so

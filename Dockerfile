@@ -14,7 +14,7 @@ COPY packages/server/package.json packages/server/
 COPY packages/client/package.json packages/client/
 COPY packages/arena/package.json packages/arena/
 COPY games/werewolf/package.json games/werewolf/
-COPY games/deaddrop/package.json games/deaddrop/
+COPY games/foulplay/package.json games/foulplay/
 RUN npm ci
 
 # Build the client into packages/client/dist (served by the server).

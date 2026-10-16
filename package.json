@@ -9,7 +9,7 @@
     "packages/client",
     "packages/arena",
     "games/werewolf",
-    "games/deaddrop"
+    "games/foulplay"
   ],
   "scripts": {
     "dev": "concurrently -n server,client -c blue,magenta \"npm:dev:server\" \"npm:dev:client\"",
@@ -18,13 +18,13 @@
     "build": "npm -w @party/client run build",
     "start": "npm -w @party/server run start",
     "test": "npm run test --workspaces --if-present",
-    "typecheck": "tsc -p packages/core --noEmit && tsc -p games/werewolf --noEmit && tsc -p games/deaddrop --noEmit && tsc -p packages/server --noEmit && tsc -p packages/client --noEmit && tsc -p packages/arena --noEmit",
+    "typecheck": "tsc -p packages/core --noEmit && tsc -p games/werewolf --noEmit && tsc -p games/foulplay --noEmit && tsc -p packages/server --noEmit && tsc -p packages/client --noEmit && tsc -p packages/arena --noEmit",
     "arena": "npm -w @party/arena run arena --",
     "arena:analyze": "npm -w @party/arena run analyze --",
     "arena:annotate": "npm -w @party/arena run annotate --",
     "arena:tournament": "npm -w @party/arena run tournament --",
     "arena:sweep": "npm -w @party/arena run sweep --",
-    "deaddrop": "npm -w @party/deaddrop run cli --"
+    "foulplay": "npm -w @party/foulplay run cli --"
   },
   "devDependencies": {
     "concurrently": "^9.1.0",

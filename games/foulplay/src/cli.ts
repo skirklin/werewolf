@@ -9,8 +9,8 @@ import type { Mode } from "./game.js";
  * Print a scenario, or simulate bot games, so the content and the dealing
  * rules can be judged before there's any UI.
  *
- *   npm run deaddrop -- --seed 7 --players 4
- *   npm run deaddrop -- --sim 200 --players 4 --mode coop
+ *   npm run foulplay -- --seed 7 --players 4
+ *   npm run foulplay -- --sim 200 --players 4 --mode coop
  */
 const { values } = parseArgs({
   options: {
@@ -56,9 +56,9 @@ if (values.sim) {
   }
   console.log("\nROOMS");
   for (const r of d.rooms) console.log(`  ${r.name.padEnd(10)} [${r.features.join(", ")}]`);
-  console.log("\nDEVICES");
+  console.log("\nWEAPONS");
   for (const x of d.devices)
-    console.log(`  ${x.name.padEnd(26)} hidden ${d.rooms[x.location].preposition} the ${d.rooms[x.location].name}. ${requirementText(d, x.requirement)}`);
+    console.log(`  ${x.name.padEnd(26)} kept ${d.rooms[x.location].preposition} the ${d.rooms[x.location].name}. ${requirementText(d, x.requirement)}`);
 
   console.log(`\nBefore any clues: ${solver.remaining([])} possible answers.`);
   console.log(`\nPUBLIC (${left(s.publicClues)} answers left)`);

@@ -59,7 +59,7 @@ describe("Solver", () => {
     expect(why).not.toBeNull();
     // Those clues alone are enough to clear the suspect.
     expect(solver.analyze(why).marginals.agent[innocent]).toBe(0);
-    // And the real mole is never "explained" away.
+    // And the real culprit is never "explained" away.
     expect(solver.explain(all, "agent", s.secret.answer.agent)).toBeNull();
   });
 });

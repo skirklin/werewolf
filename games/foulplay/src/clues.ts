@@ -9,7 +9,7 @@ export function holds(space: Space, clue: ClueBody, i: number): boolean {
   const visited = space.visitSets[space.visits[i]];
   switch (clue.kind) {
     case "visited":
-      // Only says something about the mole's evening if this is the mole.
+      // Only says something about the culprit's evening if this is the culprit.
       return agent !== clue.agent || visited.includes(clue.room) === clue.is;
     case "never":
       return d.agents[agent].traits[clue.trait] !== clue.value || !visited.includes(clue.room);
@@ -28,38 +28,42 @@ export function holds(space: Space, clue: ClueBody, i: number): boolean {
 
 /** The clue as the players read it. */
 export function clueText(d: Dossier, clue: ClueBody): string {
+  const { culprit, act, item } = d.theme;
   const agent = (id: number) => d.agents[id].name;
-  const room = (id: number) => `the ${d.rooms[id].name}`;
+  const at = (id: number) => `${d.rooms[id].preposition} the ${d.rooms[id].name}`;
   const value = (trait: string, v: string) =>
     d.traits.find((t) => t.id === trait)!.values.find((x) => x.id === v)!;
   const feature = (id: string) => d.features.find((f) => f.id === id)!;
   switch (clue.kind) {
     case "visited": {
-      const r = d.rooms[clue.room];
+      // A witness, varied by the sighting so the same clue always reads the same.
+      const who = WITNESSES[(clue.agent * 7 + clue.room) % WITNESSES.length];
       return clue.is
-        ? `${agent(clue.agent)} was seen ${r.preposition} ${room(clue.room)}.`
-        : `${agent(clue.agent)} never set foot ${r.preposition} ${room(clue.room)}.`;
+        ? `${who} saw ${agent(clue.agent)} ${at(clue.room)}.`
+        : `The staff swear ${agent(clue.agent)} never set foot ${at(clue.room)}.`;
     }
     case "never":
-      return `Nobody who ${value(clue.trait, clue.value).pastPhrase} set foot ${d.rooms[clue.room].preposition} ${room(
-        clue.room
-      )} all evening.`;
+      return `The staff swear nobody who ${value(clue.trait, clue.value).pastPhrase} set foot ${at(clue.room)}.`;
     case "moleTrait": {
       const v = value(clue.trait, clue.value);
-      return `The mole ${clue.is ? v.phrase : v.negPhrase}.`;
+      return clue.is ? v.evidence : `A witness is sure ${culprit} ${v.negPhrase}.`;
     }
     case "handoffFeature": {
       const f = feature(clue.feature);
-      return `The handoff happened somewhere ${clue.is ? f.phrase : f.negPhrase}.`;
+      return clue.is ? f.evidence : f.notEvidence;
     }
     case "notRoom":
-      return `The handoff did not happen ${d.rooms[clue.room].preposition} ${room(clue.room)}.`;
+      return `${cap(at(clue.room).replace(/^(in|on) /, ""))} was searched top to bottom: ${act} didn't happen there.`;
     case "notDevice":
-      return `The ${d.devices[clue.device].name.toLowerCase()} was not used.`;
+      return `No trace on the ${d.devices[clue.device].name.toLowerCase()}: not the ${item}.`;
     case "notAgent":
-      return `${agent(clue.agent)} is not the mole.`;
+      return `${agent(clue.agent)} has a solid alibi: not ${culprit}.`;
   }
 }
+
+const WITNESSES = ["A waiter", "The butler", "A maid", "The chauffeur", "The cook"];
+
+const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 /** What a clue is "about" — the subjects someone could ask for it by. */
 export function clueSubjects(clue: ClueBody): Subject[] {
@@ -128,7 +132,7 @@ export function allSubjects(d: Dossier): Subject[] {
 export function trueClues(d: Dossier, secret: Secret): ClueBody[] {
   const { answer, visits } = secret;
   const out: ClueBody[] = [];
-  const mole = d.agents[answer.agent];
+  const culprit = d.agents[answer.agent];
 
   for (const a of d.agents)
     for (const r of d.rooms) out.push({ kind: "visited", agent: a.id, room: r.id, is: visits[a.id].includes(r.id) });
@@ -143,7 +147,7 @@ export function trueClues(d: Dossier, secret: Secret): ClueBody[] {
 
   for (const t of d.traits)
     for (const v of t.values) {
-      const is = mole.traits[t.id] === v.id;
+      const is = culprit.traits[t.id] === v.id;
       // For a two-valued trait, "not X" is just "Y" said another way.
       if (is || t.values.length > 2) out.push({ kind: "moleTrait", trait: t.id, value: v.id, is });
     }
@@ -172,19 +176,23 @@ export function withIds(bodies: ClueBody[], bits: number[]): Clue[] {
   return bodies.map((b, id) => ({ ...b, id, points: points[id] }));
 }
 
-/** A device's requirement, as the dossier states it. */
+/** An item's requirement, as the dossier states it: "Only if the killer is tall." */
 export function requirementText(d: Dossier, r: Requirement): string {
+  const { culprit, act } = d.theme;
   if (r.kind === "feature") {
     const f = d.features.find((x) => x.id === r.feature)!;
-    return `The handoff must be somewhere ${r.is ? f.phrase : f.negPhrase}.`;
+    return `Only if ${act} happened somewhere ${r.is ? f.phrase : f.negPhrase}.`;
   }
   const t = d.traits.find((x) => x.id === r.trait)!;
   const values = r.values.map((v) => t.values.find((x) => x.id === v)!);
-  if (values.length === 1) return `The courier ${values[0].phrase}.`; // "The courier wears gloves."
-  return `The courier's ${t.label.toLowerCase()} must be ${values.map((v) => v.label.toLowerCase()).join(" or ")}.`;
+  if (values.length === 1) return `Only if ${culprit} ${values[0].phrase}.`;
+  // Everything but one value: say it through the one left out ("wears a hat").
+  const others = t.values.filter((v) => !r.values.includes(v.id));
+  if (others.length === 1) return `Only if ${culprit} ${others[0].negPhrase}.`;
+  return `Only if ${culprit}'s ${t.label.toLowerCase()} is ${values.map((v) => v.label.toLowerCase()).join(" or ")}.`;
 }
 
-/** "Dr. Moreau, with the umbrella, on the Terrace." */
+/** "Dr. Moreau, with the candlestick, in the Library." */
 export function answerText(d: Dossier, a: Answer): string {
   const room = d.rooms[a.room];
   return `${d.agents[a.agent].name}, with the ${d.devices[a.device].name.toLowerCase()}, ${room.preposition} the ${room.name}`;

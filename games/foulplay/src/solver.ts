@@ -12,7 +12,7 @@ export interface Marginals {
 export interface Analysis {
   /** Candidate worlds still consistent with everything known. */
   candidates: Bitset;
-  /** How many distinct (mole, device, room) answers remain. */
+  /** How many distinct (culprit, item, room) answers remain. */
   remaining: number;
   /** Bits of information still missing (log2 of `remaining`). */
   bitsLeft: number;
