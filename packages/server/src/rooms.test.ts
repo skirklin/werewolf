@@ -8,7 +8,7 @@ import {
   type GameRecord,
   type WerewolfAction,
 } from "@party/werewolf";
-import { deaddropModule, botMove, Solver, makeRng, type PlayerView as DropView } from "@party/deaddrop";
+import { foulplayModule, botMove, Solver, makeRng, type PlayerView as DropView } from "@party/foulplay";
 import { RoomManager, type Client, type Room } from "./rooms.js";
 
 /** A fake client that records every message it received. */
@@ -77,7 +77,7 @@ let mgr: RoomManager;
 let finished: { game: string; record: unknown; ids: string[] }[];
 beforeEach(() => {
   finished = [];
-  mgr = new RoomManager([counter, werewolfModule, deaddropModule], (game, record, ids) =>
+  mgr = new RoomManager([counter, werewolfModule, foulplayModule], (game, record, ids) =>
     finished.push({ game: game.id, record, ids })
   );
 });
@@ -392,7 +392,7 @@ describe("werewolf in a room", () => {
 
 describe("dead drop in a room", () => {
   it("plays a bot game to a correct accusation", () => {
-    const { room, clients } = seatPlayers<DropView>(3, "deaddrop");
+    const { room, clients } = seatPlayers<DropView>(3, "foulplay");
     expect(() => room.handle(clients[0].playerId, { type: "startGame", config: { mode: "chaos" } })).toThrow(
       GameError
     );
@@ -411,6 +411,6 @@ describe("dead drop in a room", () => {
     const end = clients[0].view!;
     expect(end.phase).toMatchObject({ kind: "over", reason: "solved" });
     expect(clients[0].room!.over).toBe(true);
-    expect(finished).toEqual([{ game: "deaddrop", record: null, ids: clients.map((c) => c.playerId) }]);
+    expect(finished).toEqual([{ game: "foulplay", record: null, ids: clients.map((c) => c.playerId) }]);
   }, 30_000);
 });

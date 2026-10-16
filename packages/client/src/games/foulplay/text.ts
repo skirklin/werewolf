@@ -1,4 +1,4 @@
-import { answerText, subjectText, type Dossier, type LogEntry, type PlayerView, type Subject } from "@party/deaddrop";
+import { answerText, subjectText, type Dossier, type LogEntry, type PlayerView, type Subject } from "@party/foulplay";
 
 export function nameOf(view: PlayerView, id: string): string {
   if (id === view.you.id) return "you";

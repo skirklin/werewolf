@@ -7,7 +7,7 @@ import {
   type Dimension,
   type PlayerView,
   type Subject,
-} from "@party/deaddrop";
+} from "@party/foulplay";
 import { useAnalysis } from "./solver.js";
 import { nameOf, subjectsText } from "./text.js";
 import { Pips } from "./cards.js";
@@ -30,7 +30,7 @@ type Row =
 const ROWS: Row[] = [
   { kind: "dim", dim: "agent", label: "🕴️ Suspects", subject: "agent" },
   { kind: "tag", label: "👒 Looks", subject: "trait" },
-  { kind: "dim", dim: "device", label: "🧳 Devices", subject: "device" },
+  { kind: "dim", dim: "device", label: "🔪 Weapons", subject: "device" },
   { kind: "dim", dim: "room", label: "🚪 Rooms", subject: "room" },
   { kind: "tag", label: "🏷️ Room features", subject: "feature" },
 ];
@@ -75,7 +75,7 @@ function dealKey(view: PlayerView, roomCode: string): string {
     view.dossier.devices.map((x) => x.name + x.location).join("|");
   let h = 0;
   for (let i = 0; i < text.length; i++) h = (Math.imul(h, 31) + text.charCodeAt(i)) | 0;
-  return `deaddrop.marks.${roomCode}.${(h >>> 0).toString(36)}`;
+  return `foulplay.marks.${roomCode}.${(h >>> 0).toString(36)}`;
 }
 
 export function Notebook({ view, roomCode, picking }: { view: PlayerView; roomCode: string; picking: Picking }) {
@@ -179,7 +179,7 @@ export function Notebook({ view, roomCode, picking }: { view: PlayerView; roomCo
               <div className="why">
                 <b>Why {names(view, dim)[why.value]} is ruled out:</b>
                 {explanation.length === 0 ? (
-                  <div>The dossier alone rules it out: no device fits.</div>
+                  <div>The case file alone rules it out: no weapon fits.</div>
                 ) : (
                   explanation.map((c) => <div key={c.id}>• {clueText(d, c)}</div>)
                 )}
@@ -208,7 +208,7 @@ function ClueList({ view }: { view: PlayerView }) {
   const hand = new Set(view.you.hand);
   return (
     <div className="stack" style={{ gap: 6 }}>
-      <div className="muted small group-label">🗂️ Your intelligence ({known.length})</div>
+      <div className="muted small group-label">🗂️ Your evidence ({known.length})</div>
       {known.map((c) => {
         const src = view.you.sources[c.id];
         const origin = !src

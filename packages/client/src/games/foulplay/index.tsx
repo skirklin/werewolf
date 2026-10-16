@@ -6,10 +6,10 @@ import {
   type Assist,
   type GameConfig,
   type PlayerView,
-} from "@party/deaddrop";
+} from "@party/foulplay";
 import type { ClientGame, LobbySettingsProps } from "../../shell/game.js";
-import { DeadDropHome } from "./Home.js";
-import { DeadDropTable } from "./Table.js";
+import { FoulPlayHome } from "./Home.js";
+import { FoulPlayTable } from "./Table.js";
 
 const ASSISTS: { id: Assist; label: string; blurb: string }[] = [
   { id: "grid", label: "🧮 Full grid", blurb: "The app crosses things off and says why." },
@@ -56,12 +56,12 @@ function Settings({ config, players, onChange }: LobbySettingsProps<GameConfig>)
   );
 }
 
-export const deaddrop: ClientGame<GameConfig, PlayerView, Action> = {
-  id: "deaddrop",
-  name: "Dead Drop",
-  emoji: "🕵️",
-  tagline: "Trade intel, unmask the mole.",
-  Home: DeadDropHome,
+export const foulplay: ClientGame<GameConfig, PlayerView, Action> = {
+  id: "foulplay",
+  name: "Foul Play",
+  emoji: "🔍",
+  tagline: "Trade evidence, catch the killer.",
+  Home: FoulPlayHome,
 
   initialConfig(_players, last) {
     const l = (last ?? {}) as Partial<GameConfig>;
@@ -77,5 +77,5 @@ export const deaddrop: ClientGame<GameConfig, PlayerView, Action> = {
   },
 
   LobbySettings: Settings,
-  Table: DeadDropTable,
+  Table: FoulPlayTable,
 };

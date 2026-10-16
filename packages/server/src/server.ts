@@ -6,12 +6,12 @@ import websocket from "@fastify/websocket";
 import fastifyStatic from "@fastify/static";
 import { GameError, type ClientMessage, type ServerMessage } from "@party/core";
 import { aggregate, parseGameRecord, werewolfModule, type GameRecord } from "@party/werewolf";
-import { deaddropModule } from "@party/deaddrop";
+import { foulplayModule } from "@party/foulplay";
 import { RoomManager, type Client } from "./rooms.js";
 import { GameStore } from "./store.js";
 
 /** Every game this server can host. */
-export const GAMES = [werewolfModule, deaddropModule];
+export const GAMES = [werewolfModule, foulplayModule];
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const clientDist = join(__dirname, "../../client/dist");

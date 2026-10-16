@@ -43,7 +43,7 @@ export type Assist = "notes" | "grid";
 
 export interface GameConfig {
   mode: Mode;
-  /** Co-op only: turns the table has before the handler gets away. */
+  /** Co-op only: turns the table has before the culprit gets away. */
   turnLimit?: number;
   /** Defaults to "grid". */
   assist?: Assist;

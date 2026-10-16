@@ -196,7 +196,7 @@ label.field { display: flex; flex-direction: column; gap: 6px; }
 .chat .said { font-size: 0.9rem; padding: 6px 10px; background: var(--bg-2); border-radius: 8px; overflow-wrap: anywhere; }
 .chat .said b { color: var(--accent-2); }
 
-/* ---- Chip pickers (Dead Drop subjects, accusations) ---- */
+/* ---- Chip pickers (Foul Play subjects, accusations) ---- */
 .group-label { font-weight: 700; letter-spacing: 0.5px; margin: 4px 0 6px; }
 .choices { display: flex; flex-wrap: wrap; gap: 6px; }
 .choice {
@@ -211,7 +211,7 @@ label.field { display: flex; flex-direction: column; gap: 6px; }
 .tabs > button { flex: 1; min-height: 42px; font-size: 0.95rem; }
 .tabs > button.on { background: var(--panel-2); border-color: var(--accent-2); color: var(--accent-2); font-weight: 700; }
 
-/* ---- Dead Drop: notebook ---- */
+/* ---- Foul Play: notebook ---- */
 .clue { font-size: 0.95rem; padding: 10px 12px; background: var(--bg-2); border-radius: 10px; border: 1px solid transparent; }
 .clue.new { border-color: var(--accent); }
 .clue .src { display: block; font-size: 0.75rem; color: var(--muted); margin-top: 4px; }
@@ -239,7 +239,7 @@ label.field { display: flex; flex-direction: column; gap: 6px; }
 .pts { display: inline-block; min-width: 22px; padding: 1px 6px; margin-left: 6px; border-radius: 999px; background: var(--panel-2); color: var(--moon); font-size: 0.75rem; font-weight: 700; text-align: center; vertical-align: middle; }
 .clue .row, .offer-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
 
-/* ---- Dead Drop: cards ---- */
+/* ---- Foul Play: cards ---- */
 .pips { display: inline-flex; gap: 3px; flex: 0 0 auto; }
 .pips > span { width: 7px; height: 7px; border-radius: 50%; border: 1px solid var(--moon); opacity: 0.35; }
 .pips > span.on { background: var(--moon); opacity: 1; }

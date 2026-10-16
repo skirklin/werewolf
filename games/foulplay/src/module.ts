@@ -10,10 +10,10 @@ import {
   type PlayerView,
 } from "./game.js";
 
-/** Dead Drop as a platform game. */
-export const deaddropModule: GameModule<GameConfig, GameState, PlayerView> = {
-  id: "deaddrop",
-  name: "Dead Drop",
+/** Foul Play as a platform game. */
+export const foulplayModule: GameModule<GameConfig, GameState, PlayerView> = {
+  id: "foulplay",
+  name: "Foul Play",
   minPlayers: MIN_PLAYERS,
   maxPlayers: MAX_PLAYERS,
 

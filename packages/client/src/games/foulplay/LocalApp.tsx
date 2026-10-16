@@ -16,9 +16,9 @@ import {
   type GameConfig,
   type GameState,
   type Mode,
-} from "@party/deaddrop";
+} from "@party/foulplay";
 import type { RoomInfo } from "@party/core";
-import { DeadDropTable } from "./Table.js";
+import { FoulPlayTable } from "./Table.js";
 import { solverFor } from "./solver.js";
 
 /**
@@ -42,7 +42,7 @@ interface Setup {
 const BOT_NAMES = ["Cipher", "Echo", "Falcon", "Juno", "Kestrel", "Lark"];
 /** Long enough to follow what a bot did, short enough not to drag. */
 const BOT_DELAY_MS = 900;
-const STORE_KEY = "deaddrop.practice";
+const STORE_KEY = "foulplay.practice";
 
 function defaultSetup(): Setup {
   return {
@@ -67,7 +67,7 @@ function loadSetup(): Setup {
   return defaultSetup();
 }
 
-export function DeadDropLocal({ onExit }: { onExit: () => void }) {
+export function FoulPlayLocal({ onExit }: { onExit: () => void }) {
   const [setup, setSetup] = useState<Setup | null>(null);
   if (!setup) return <SetupScreen onStart={setSetup} onExit={onExit} />;
   return <Practice setup={setup} onQuit={() => setSetup(null)} />;
@@ -212,7 +212,7 @@ function Practice({ setup, onQuit }: { setup: Setup; onQuit: () => void }) {
     () => ({
       // Notebook marks are kept per room code, so give each person their own.
       code: `PRACTICE-${viewer}`,
-      game: "deaddrop",
+      game: "foulplay",
       phase: "playing",
       over: state?.phase.kind === "over",
       players: setup.seats.map((s, i) => ({ id: `seat${i}`, name: s.name, isHost: i === firstHuman, connected: true })),
@@ -251,7 +251,7 @@ function Practice({ setup, onQuit }: { setup: Setup; onQuit: () => void }) {
         )}
         {error && <div className="err">⚠️ {error}</div>}
       </div>
-      <DeadDropTable
+      <FoulPlayTable
         view={projectView(state, id)}
         room={room}
         you={id}

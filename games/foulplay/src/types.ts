@@ -1,7 +1,11 @@
 /**
- * Core types for Dead Drop: a deduction game where a mole passed secrets to a
- * handler during an evening reception, and the players trade intelligence to
- * work out who did it, how, where and when.
+ * Core types for Foul Play: a deduction game where someone was murdered during
+ * a party, and the players trade evidence to work out who did it, with what,
+ * and where.
+ *
+ * The engine itself is theme-agnostic: an "agent" is a suspect, a "device" is
+ * the item used (here, the weapon), and the "handoff" is the act (the murder).
+ * The words players read come from the content set's `Theme` and evidence.
  *
  * Everything here is plain data so a whole scenario can be serialised, sent
  * over the wire, and replayed from its seed.
@@ -15,10 +19,12 @@ export type DeviceId = number;
 export interface TraitValue {
   id: string;
   label: string;
-  /** Completes "The mole …", e.g. "wears a beret". */
+  /** Completes "The killer …", e.g. "wears a beret". */
   phrase: string;
-  /** Completes "The mole …" in the negative, e.g. "does not wear a beret". */
+  /** Completes "The killer …" in the negative, e.g. "does not wear a beret". */
   negPhrase: string;
+  /** The evidence that shows the culprit has this trait, as a full sentence. */
+  evidence: string;
   /** Completes "Nobody who …", e.g. "wore a beret". */
   pastPhrase: string;
 }
@@ -41,10 +47,13 @@ export interface Agent {
 export interface FeatureDef {
   id: string;
   label: string;
-  /** Completes "The handoff happened somewhere …". */
+  /** Completes "somewhere …", e.g. "outdoors". */
   phrase: string;
   /** The negation of `phrase`. */
   negPhrase: string;
+  /** The evidence that the act happened somewhere with this feature, and without it. */
+  evidence: string;
+  notEvidence: string;
 }
 
 export interface Room {
@@ -56,9 +65,9 @@ export interface Room {
 }
 
 /**
- * What a concealment device demands of the handoff. This is the source of most
- * of the game's extrapolation: learning the room or the mole's coat rules
- * devices out, and vice versa.
+ * What an item (weapon) demands of the act. This is the source of most of the
+ * game's extrapolation: learning the room or the culprit's coat rules
+ * weapons out, and vice versa.
  */
 export type Requirement =
   | { kind: "feature"; feature: string; is: boolean }
@@ -67,7 +76,7 @@ export type Requirement =
 export interface Device {
   id: DeviceId;
   name: string;
-  /** Where the device was waiting. The mole must have visited this room. */
+  /** Where the item was kept. The culprit must have visited this room. */
   location: RoomId;
   requirement: Requirement;
   /** Why the requirement holds, in the story's voice. */
@@ -75,8 +84,22 @@ export interface Device {
 }
 
 /** Everything every player knows from the start. */
+/** The words a content set uses for the engine's roles. */
+export interface Theme {
+  /** "the killer" */
+  culprit: string;
+  /** "the murder" */
+  act: string;
+  /** "weapon", "weapons" */
+  item: string;
+  items: string;
+  /** The scene-setter shown before play. */
+  story: string;
+}
+
 export interface Dossier {
   title: string;
+  theme: Theme;
   traits: TraitDef[];
   features: FeatureDef[];
   agents: Agent[];
@@ -100,19 +123,19 @@ export interface Secret {
 
 /** A single piece of intelligence. Always true of the scenario it came from. */
 export type ClueBody =
-  /** "X was seen in R." / "X never set foot in R." */
+  /** "The butler saw X in R." / "The staff swear X never set foot in R." */
   | { kind: "visited"; agent: AgentId; room: RoomId; is: boolean }
   /** "Nobody who wore V set foot in R all evening." */
   | { kind: "never"; trait: string; value: string; room: RoomId }
-  /** "The mole (does not) wear V." */
+  /** Evidence of the culprit's look: "Red fibres on the body…" / "…does not wear V." */
   | { kind: "moleTrait"; trait: string; value: string; is: boolean }
-  /** "The handoff happened somewhere (not) outdoors." */
+  /** Evidence of where it happened: "Mud on the victim's shoes: outdoors." */
   | { kind: "handoffFeature"; feature: string; is: boolean }
-  /** "The handoff did not happen in R." */
+  /** "R was searched: it didn't happen there." */
   | { kind: "notRoom"; room: RoomId }
-  /** "D was not used." */
+  /** "No trace on D: not the weapon." */
   | { kind: "notDevice"; device: DeviceId }
-  /** "X is not the mole." */
+  /** "X has a solid alibi." */
   | { kind: "notAgent"; agent: AgentId };
 
 /** Printed on every clue: how much it cuts on its own. 3 cuts broadly; 1 is narrow. */

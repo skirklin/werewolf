@@ -1,5 +1,5 @@
 import type { Agent, ClueBody, Device, Dossier, Room, Scenario, Secret } from "./types.js";
-import { AGENT_NAMES, DEVICES, FEATURES, ROOMS, TITLE, TRAITS, type DeviceTemplate } from "./content.js";
+import { AGENT_NAMES, DEVICES, FEATURES, ROOMS, THEME, TITLE, TRAITS, type DeviceTemplate } from "./content.js";
 import { makeRng, pick, shuffle, type Rng } from "./rng.js";
 import { trueClues, withIds } from "./clues.js";
 import { Solver } from "./solver.js";
@@ -42,7 +42,7 @@ export function defaultHandSize(players: number): number {
 export function generateScenario(opts: GenerateOptions): Scenario {
   const players = opts.players;
   if (players < MIN_PLAYERS || players > MAX_PLAYERS)
-    throw new Error(`Dead Drop needs ${MIN_PLAYERS}–${MAX_PLAYERS} players.`);
+    throw new Error(`Foul Play needs ${MIN_PLAYERS}–${MAX_PLAYERS} players.`);
   const rng = makeRng(opts.seed);
   for (let attempt = 0; attempt < 200; attempt++) {
     const scenario = attemptScenario(opts, rng);
@@ -64,17 +64,17 @@ function attemptScenario(opts: GenerateOptions, rng: Rng): Scenario | null {
   const solver = new Solver(dossier);
   const space = solver.space;
 
-  // Pick the mole first so every suspect is equally likely, then one of the
+  // Pick the culprit first so every suspect is equally likely, then one of the
   // devices, rooms and evenings that would have let them do it.
-  const mole = Math.floor(rng() * dossier.agents.length);
+  const culprit = Math.floor(rng() * dossier.agents.length);
   const options: number[] = [];
   space.base.forEach((i) => {
-    if (space.agent[i] === mole) options.push(i);
+    if (space.agent[i] === culprit) options.push(i);
   });
   if (!options.length) return null;
   const truth = pick(options, rng);
   const visits = dossier.agents.map((a) =>
-    a.id === mole ? space.visitSets[space.visits[truth]] : pick(space.visitSets, rng)
+    a.id === culprit ? space.visitSets[space.visits[truth]] : pick(space.visitSets, rng)
   );
   const secret: Secret = { answer: space.answerAt(truth), visits };
 
@@ -180,7 +180,7 @@ function weightKey(c: ClueBody): WeightKey {
 /** How readily each kind of clue is drawn into play. */
 const KIND_WEIGHT: Record<WeightKey, number> = {
   visitedTrue: 4,
-  visited: 2,
+  visited: 1,
   never: 4,
   moleTrait: 3,
   handoffFeature: 2,
@@ -227,7 +227,7 @@ export function buildDossier(rng: Rng, agentCount: number, deviceCount: number):
       blurb: t.blurb,
       location: spots[id % spots.length].id,
     }));
-    return { title: TITLE, traits: TRAITS, features: FEATURES, agents, rooms, devices };
+    return { title: TITLE, theme: THEME, traits: TRAITS, features: FEATURES, agents, rooms, devices };
   }
 }
 
@@ -248,7 +248,7 @@ function castAgents(rng: Rng, n: number): Agent[] {
   }
 }
 
-/** A mix of devices: half tied to the room, half to the courier. */
+/** A mix of items: half tied to the room, half to the culprit. */
 function chooseDevices(rng: Rng, n: number): DeviceTemplate[] {
   const byKind = (k: string) => shuffle(DEVICES.filter((d) => d.requirement.kind === k), rng);
   const nFeature = Math.ceil(n / 2);
