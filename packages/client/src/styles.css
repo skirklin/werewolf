@@ -261,3 +261,25 @@ label.field { display: flex; flex-direction: column; gap: 6px; }
 .cell.picked { border-color: var(--accent-2); background: var(--panel-2); box-shadow: inset 0 0 0 1px var(--accent-2); }
 .cell.picked .name { color: var(--accent-2); font-weight: 700; }
 .pick-summary { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+
+/* A game still being worked out: a banner across the corner of its button. */
+button.has-beta { position: relative; overflow: hidden; }
+.beta-banner {
+  position: absolute; top: 14px; right: -34px; width: 130px; transform: rotate(35deg);
+  background: #f5c84b; color: #2a1f00; font-weight: 800; font-size: 0.75rem; letter-spacing: 0.2em;
+  text-align: center; padding: 3px 0; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35); pointer-events: none;
+}
+.beta-pill { display: inline-block; background: #f5c84b; color: #2a1f00; font-weight: 800; font-size: 0.7rem; letter-spacing: 0.15em; padding: 2px 8px; border-radius: 999px; vertical-align: middle; }
+
+/* Foul Play */
+.leads { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px; }
+.leads > button { text-align: left; font-size: 0.85rem; padding: 8px 10px; }
+.leads > button.selected { border-color: var(--accent-2); background: var(--panel-2); color: var(--accent-2); font-weight: 700; }
+.leads > button .src { display: block; font-weight: 400; color: var(--muted); font-size: 0.75rem; }
+.role { border: 1px solid var(--panel-2); }
+.role.guilty { border-color: var(--danger); }
+.clue.clash { border-color: var(--danger); }
+.clue.doubted { opacity: 0.55; }
+.clue.doubted > .row > span:first-child { text-decoration: line-through; }
+.clash-box { border: 1px solid var(--danger); border-radius: 12px; padding: 10px 12px; }
+.mini { font-size: 0.75rem; padding: 4px 10px; min-height: 0; width: auto; }

@@ -1,5 +1,5 @@
 import { GameError, type GameModule } from "@party/core";
-import { MAX_PLAYERS, MIN_PLAYERS, generateScenario } from "./generate.js";
+import { MAX_PLAYERS, MIN_PLAYERS, defaultAccomplice, generateScenario } from "./generate.js";
 import {
   createGame,
   projectView,
@@ -17,22 +17,16 @@ export const foulplayModule: GameModule<GameConfig, GameState, PlayerView> = {
   minPlayers: MIN_PLAYERS,
   maxPlayers: MAX_PLAYERS,
 
-  parseConfig(raw) {
+  parseConfig(raw, players) {
     const c = (raw ?? {}) as Partial<GameConfig>;
-    if (c.mode !== "competitive" && c.mode !== "coop") throw new GameError("Pick competitive or co-op.");
-    if (c.turnLimit !== undefined && !(Number.isInteger(c.turnLimit) && c.turnLimit >= 1 && c.turnLimit <= 500))
-      throw new GameError("The turn limit should be a whole number of turns.");
-    if (c.assist !== undefined && !["notes", "grid"].includes(c.assist))
-      throw new GameError("Unknown level of notebook help.");
-    return {
-      mode: c.mode,
-      assist: c.assist ?? "grid",
-      ...(c.turnLimit !== undefined && c.mode === "coop" ? { turnLimit: c.turnLimit } : {}),
-    };
+    if (c.accomplice !== undefined && typeof c.accomplice !== "boolean")
+      throw new GameError("Say whether there's an accomplice.");
+    if (c.accomplice && players < 5) throw new GameError("An accomplice needs at least five players.");
+    return { accomplice: c.accomplice ?? defaultAccomplice(players) };
   },
 
   start(seats, config, { seed }) {
-    const scenario = generateScenario({ seed, players: seats.length });
+    const scenario = generateScenario({ seed, players: seats.length, accomplice: config.accomplice });
     return createGame(scenario, seats, config);
   },
 

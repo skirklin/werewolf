@@ -12,7 +12,8 @@ export function Picker({ onPick }: { onPick: (gameId: string) => void }) {
       <div className="spacer" />
       <div className="stack">
         {GAMES.map((g) => (
-          <button key={g.id} className="full lg" onClick={() => onPick(g.id)}>
+          <button key={g.id} className={`full lg ${g.beta ? "has-beta" : ""}`} onClick={() => onPick(g.id)}>
+            {g.beta && <span className="beta-banner">BETA</span>}
             {g.emoji} {g.name}
             <div className="small muted" style={{ fontWeight: 400 }}>{g.tagline}</div>
           </button>

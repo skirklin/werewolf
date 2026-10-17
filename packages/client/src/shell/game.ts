@@ -37,6 +37,8 @@ export interface ClientGame<Config = any, View = any, Action = any> {
   name: string;
   emoji: string;
   tagline: string;
+  /** Still being worked out: the picker flags it so nobody expects polish. */
+  beta?: boolean;
   Home: ComponentType<HomeProps>;
   /** Starting config for a lobby; `last` is the previous game's, if any. */
   initialConfig(players: number, last: unknown): Config;

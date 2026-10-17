@@ -1,57 +1,29 @@
-import {
-  MAX_PLAYERS,
-  MIN_PLAYERS,
-  defaultTurnLimit,
-  type Action,
-  type Assist,
-  type GameConfig,
-  type PlayerView,
-} from "@party/foulplay";
+import { MAX_PLAYERS, MIN_PLAYERS, defaultAccomplice, type Action, type GameConfig, type PlayerView } from "@party/foulplay";
 import type { ClientGame, LobbySettingsProps } from "../../shell/game.js";
 import { FoulPlayHome } from "./Home.js";
 import { FoulPlayTable } from "./Table.js";
 
-const ASSISTS: { id: Assist; label: string; blurb: string }[] = [
-  { id: "grid", label: "🧮 Full grid", blurb: "The app crosses things off and says why." },
-  { id: "notes", label: "📝 Notes", blurb: "Clues are filed; the logic is yours." },
-];
-
 function Settings({ config, players, onChange }: LobbySettingsProps<GameConfig>) {
-  const limit = config.turnLimit ?? defaultTurnLimit(players);
+  const accomplice = config.accomplice ?? defaultAccomplice(players);
   return (
     <div className="stack">
-      <div className="btn-row">
-        <button className={config.mode === "competitive" ? "primary" : ""} onClick={() => onChange({ ...config, mode: "competitive", turnLimit: undefined })}>
-          ⚔️ Competitive
-        </button>
-        <button className={config.mode === "coop" ? "primary" : ""} onClick={() => onChange({ ...config, mode: "coop" })}>
-          🤝 Co-op
-        </button>
-      </div>
-      <p className="muted small" style={{ margin: 0 }}>
-        {config.mode === "competitive"
-          ? "First correct accusation wins. A wrong one puts you out of the running."
-          : "Everyone wins or loses together, with one accusation and a turn limit."}
-      </p>
-      {config.mode === "coop" && (
-        <div className="spread">
-          <span>Turn limit</span>
-          <div className="btn-row" style={{ alignItems: "center" }}>
-            <button className="small" disabled={limit <= players} onClick={() => onChange({ ...config, turnLimit: limit - players })}>−</button>
-            <b className="count" style={{ minWidth: 40, textAlign: "center" }}>{limit}</b>
-            <button className="small" onClick={() => onChange({ ...config, turnLimit: limit + players })}>+</button>
+      {players >= 5 ? (
+        <>
+          <div className="btn-row">
+            <button className={!accomplice ? "primary" : ""} onClick={() => onChange({ ...config, accomplice: false })}>
+              🔪 Killer alone
+            </button>
+            <button className={accomplice ? "primary" : ""} onClick={() => onChange({ ...config, accomplice: true })}>
+              🤝 With an accomplice
+            </button>
           </div>
-        </div>
+          <p className="muted small" style={{ margin: 0 }}>
+            The accomplice knows who the killer is, but not how, and can plant one forgery of their own.
+          </p>
+        </>
+      ) : (
+        <p className="muted small" style={{ margin: 0 }}>One of you is the killer. No accomplice at four players.</p>
       )}
-      <div className="muted small group-label">Notebook help</div>
-      <div className="stack" style={{ gap: 6 }}>
-        {ASSISTS.map((a) => (
-          <button key={a.id} className={`full ${(config.assist ?? "grid") === a.id ? "primary" : ""}`} onClick={() => onChange({ ...config, assist: a.id })}>
-            {a.label}
-            <div className="small" style={{ fontWeight: 400, opacity: 0.8 }}>{a.blurb}</div>
-          </button>
-        ))}
-      </div>
     </div>
   );
 }
@@ -60,14 +32,14 @@ export const foulplay: ClientGame<GameConfig, PlayerView, Action> = {
   id: "foulplay",
   name: "Foul Play",
   emoji: "🔍",
-  tagline: "Trade evidence, catch the killer.",
+  tagline: "One of you is the killer. Find out who, with what, and where.",
+  beta: true,
   Home: FoulPlayHome,
 
-  initialConfig(_players, last) {
+  initialConfig(players, last) {
     const l = (last ?? {}) as Partial<GameConfig>;
-    // A config saved before the gauge was dropped falls back to the full grid.
-    const assist = l.assist === "notes" ? "notes" : "grid";
-    return { mode: l.mode === "coop" ? "coop" : "competitive", assist, turnLimit: l.turnLimit };
+    // Only carry the accomplice over if this table is big enough for one.
+    return typeof l.accomplice === "boolean" && players >= 5 ? { accomplice: l.accomplice } : {};
   },
 
   configProblems(_config, players) {

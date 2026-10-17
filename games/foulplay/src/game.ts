@@ -1,208 +1,235 @@
 import { GameError, type Seat } from "@party/core";
-import type { Answer, Clue, Dossier, Scenario, Subject } from "./types.js";
-import { isAbout, sameSubject } from "./clues.js";
+import type { Answer, Clue, Dossier, Forgery, Lead, Scenario, Secret } from "./types.js";
+import { allLeads, leadKey, leadOfKey, sameLead } from "./clues.js";
 import { sameAnswer } from "./solver.js";
-import { makeRng, shuffle } from "./rng.js";
+import { PLANTS } from "./generate.js";
 
 /**
- * The turn-based game. Pure: `reduce` takes a state and returns a new one, so
- * the same rules run on the server for multi-device play and in the browser
- * for practice.
+ * The game. Pure: `reduce` takes a state and returns a new one, so the same
+ * rules run on the server for play on separate phones and in the browser for
+ * practice.
  *
- * Clues are cards. Your hand is what you can trade; your notebook remembers
- * every clue you've ever seen, so passing a card on doesn't make you forget it.
+ * Every player is a guest, and one of them is the killer. The night is three
+ * rounds of one turn each. A turn has two steps:
+ *  1. Investigate a lead, drawing its top card (only you see what it says),
+ *     or call an inquest, naming who, with what and where, for the table to
+ *     vote on.
+ *  2. Then, if you like, share: testify (put a card from your hand on the
+ *     public record), or confer with someone (each of you shows the other one
+ *     card).
+ * The killer and the accomplice can tamper while they "investigate": bury
+ * the lead's top card, or plant a forgery on it. Once a game the killer can
+ * strike again; the body is found at the end of the round.
  *
- * A round is one turn for each player still in the running. On your turn you
- * either ask the table about two subjects, or accuse.
- *  1. Everyone else, at once, offers any cards from their hand about either
- *     subject, or nothing. The table sees only how many points and cards each
- *     offered, never which subject they're about.
- *  2. The asker takes any offers they like, and pays each back with cards from
- *     their hand worth at least as many points; fewer cards is fine. A card
- *     they already had is fair game, if mean.
- * At the end of a round everyone discards half their hand, at once, and draws
- * replacements from the deck, so new intelligence keeps arriving while old
- * cards stay in circulation. Discards are shuffled into the bottom of the
- * deck: if they left play, a clue discarded before anyone else saw it would
- * be gone for good, and the case could become unsolvable for everyone.
+ * At dawn the table votes who, then with what, then where. The innocents win
+ * only if all three are right.
  *
- *  - Competitive: first correct accusation wins; a wrong one puts you out of
- *    the running (you still offer and trade).
- *  - Co-op: the table shares one accusation and a turn limit.
+ * Seeing a card puts it in your notebook for good; holding one is what lets
+ * you show it. Your hand holds at most `HAND_LIMIT` cards; over that, you
+ * testify or burn one.
  */
 
-export type Mode = "competitive" | "coop";
+export const ROUNDS = 3;
+export const HAND_LIMIT = 4;
 
-/**
- * How much of the deduction the app does for players. A house rule, so the
- * host picks it and everyone plays with the same help:
- *  - notes: clues are filed; players cross things off themselves.
- *  - grid:  the full auto-filled grid, with reasons for every cross.
- */
-export type Assist = "notes" | "grid";
+export type Role = "innocent" | "killer" | "accomplice";
 
 export interface GameConfig {
-  mode: Mode;
-  /** Co-op only: turns the table has before the culprit gets away. */
-  turnLimit?: number;
-  /** Defaults to "grid". */
-  assist?: Assist;
-}
-
-/**
- * Provisional until humans have played. Baseline bots asking at random need
- * about five turns each, so at this limit they win roughly half their co-op
- * games; people choosing their subjects should do better.
- */
-export function defaultTurnLimit(players: number): number {
-  return players * 5;
+  /** Seat an accomplice. Defaults by player count. */
+  accomplice?: boolean;
+  /** Rounds before dawn. Defaults to `ROUNDS`. */
+  rounds?: number;
 }
 
 export type { Seat };
 
-/** How a player came by a clue they weren't dealt at the start. */
-export type Source =
-  | {
-      /** "offer": offered on your ask. "payback": paid to you for your offer. */
-      via: "offer" | "payback";
-      from: string;
-      /** The subjects of the ask it changed hands on. */
-      subjects: [Subject, Subject];
-      /** `turnsTaken` when it changed hands. */
-      turn: number;
-    }
-  | { via: "draw"; round: number; turn: number };
+/** Where a card entered play. Printed on the card, so anyone who sees it sees this. */
+export type Origin =
+  | { via: "memory"; who: string }
+  | { via: "lead"; lead: Lead; by: string; round: number }
+  | { via: "victim"; who: string; round: number };
+
+/** How a particular player came to see a card. */
+export type How =
+  | { via: "dealt" }
+  | { via: "drew"; round: number }
+  | { via: "shown"; by: string; round: number }
+  | { via: "record"; by: string; round: number };
+
+/** Something only you learned: what a lead gave you. */
+export interface Finding {
+  lead: Lead;
+  round: number;
+  /** The card drawn, or null if the lead had nothing more. */
+  clue: number | null;
+}
 
 export interface PlayerState {
   id: string;
   name: string;
-  /** Cards in hand: what this player can offer or pay with. */
+  role: Role;
   hand: number[];
-  /** Every clue this player has seen, in the order they saw it. */
+  /** Every card this player has seen, in the order they saw it. */
   known: number[];
-  /** Where each clue they weren't dealt at the start came from. */
-  sources: Record<number, Source>;
-  /** Made a wrong accusation (competitive). */
-  out: boolean;
+  how: Record<number, How>;
+  findings: Finding[];
+  alive: boolean;
+  inquestUsed: boolean;
 }
 
-export type Phase =
-  | { kind: "turn"; active: number }
-  /** The table is offering on the active player's two subjects. */
-  | { kind: "offers"; active: number; subjects: [Subject, Subject] }
-  /** The active player is choosing which offers to take, and paying them back. */
-  | { kind: "choose"; active: number; subjects: [Subject, Subject] }
-  /** End of a round: everyone discards half their hand. `next` takes the next turn. */
-  | { kind: "discard"; next: number }
-  | { kind: "over"; winners: string[]; reason: "solved" | "allOut" | "wrongAccusation" | "outOfTime" };
+export type Part = "agent" | "device" | "room";
+export const PARTS: Part[] = ["agent", "device", "room"];
 
-/** What everyone sees of an offer: its size, never its contents. */
-export interface OfferSummary {
-  who: string;
-  cards: number;
-  points: number;
+export type Phase =
+  /** `step`: investigate (or call an inquest) first, then share (or pass). */
+  | { kind: "turn"; active: number; step: "investigate" | "share" }
+  /** The active player showed `card` to `with`, who now shows one back. */
+  | { kind: "confer"; active: number; with: number; card: number }
+  /** The active player is over the hand limit and must testify or burn. */
+  | { kind: "trim"; active: number }
+  /** The table is voting on the active player's accusation. */
+  | { kind: "inquest"; active: number; answer: Answer }
+  /** Dawn: the table votes on one part of the accusation. */
+  | { kind: "vote"; part: Part; options: number[]; revote: boolean }
+  | {
+      kind: "over";
+      /** caught: all three right. wrong: an accusation stood, but it was wrong. deadlock: no agreement. */
+      result: "caught" | "wrong" | "deadlock";
+      by: "inquest" | "dawn";
+      accusation: Partial<Answer>;
+      winners: string[];
+    };
+
+export interface RecordEntry {
+  clue: number;
+  by: string;
+  round: number;
 }
 
 export type LogEntry =
-  | { t: "ask"; who: string; subjects: [Subject, Subject] }
-  | { t: "offers"; offers: OfferSummary[] }
-  /** `asker` took `with`'s offer and paid it back. */
-  | {
-      t: "deal";
-      asker: string;
-      with: string;
-      gotCards: number;
-      gotPoints: number;
-      paidCards: number;
-      paidPoints: number;
-    }
-  /** Offers were made but the asker took none. */
-  | { t: "noDeal"; asker: string }
-  | { t: "accuse"; who: string; answer: Answer; correct: boolean }
-  /** A round ended: who drew how many replacements, and what's left in the deck. */
-  | { t: "round"; round: number; drew: { who: string; cards: number }[]; deckLeft: number };
+  | { t: "investigate"; who: string; lead: Lead }
+  | { t: "confer"; who: string; with: string }
+  | { t: "testify"; who: string; clue: number }
+  | { t: "burn"; who: string }
+  | { t: "inquest"; who: string; answer: Answer }
+  | { t: "inquestFailed"; who: string; yes: number; no: number }
+  | { t: "inquestPassed"; who: string; yes: number; no: number }
+  | { t: "death"; who: string; round: number }
+  | { t: "round"; round: number }
+  | { t: "dawn" }
+  | { t: "voted"; part: Part; value: number | null; tied: number[]; revote: boolean };
+
+/** What the killer and the accomplice did in secret. Revealed at the end. */
+export type Tamper =
+  | { how: "plant"; by: string; lead: Lead; clue: number; round: number }
+  | { how: "bury"; by: string; lead: Lead; round: number };
 
 export interface GameState {
   scenario: Scenario;
   config: GameConfig;
   players: PlayerState[];
   phase: Phase;
-  /** The draw pile, top first. */
-  deck: number[];
-  /** Per seat, for the current ask (offers) or round end (discards): null until they've moved. */
-  pending: (number[] | null)[];
-  /** 1-based. */
+  /** Each lead's stack, top first. */
+  stacks: Record<string, number[]>;
+  /** Leads that exist. The second body joins once there is one. */
+  leads: Lead[];
+  origins: Record<number, Origin>;
+  record: RecordEntry[];
+  /** Forgeries already planted. */
+  planted: number[];
+  tampers: Tamper[];
+  /** The killer's second strike: chosen in secret, carried out at round end. */
+  strike: { target: number; round: number } | null;
+  strikeDone: boolean;
+  /** Per seat, for whatever the table is voting on: null until they've voted. */
+  votes: (number | null)[];
+  accusation: Partial<Answer>;
   round: number;
-  /** Turns taken so far this round, and how many the round has. */
-  roundTurns: number;
-  roundLength: number;
+  /** Turns still to come this round. */
+  turnsLeft: number;
   turnsTaken: number;
   log: LogEntry[];
 }
 
-export interface Deal {
-  /** The player whose offer is taken. */
-  from: string;
-  /** Cards from the asker's hand paid back to them. */
-  payback: number[];
-}
+export type Tampering = { how: "bury" } | { how: "plant"; clue: number };
 
 export type Action =
-  | { type: "ask"; subjects: [Subject, Subject] }
-  | { type: "offer"; clueIds: number[] }
-  | { type: "accept"; deals: Deal[] }
-  | { type: "discard"; clueIds: number[] }
-  | { type: "accuse"; answer: Answer };
+  | { type: "investigate"; lead: string; tamper?: Tampering }
+  | { type: "confer"; with: string; card: number }
+  | { type: "show"; card: number }
+  | { type: "testify"; card: number }
+  | { type: "burn"; card: number }
+  | { type: "inquest"; answer: Answer }
+  /** Skip sharing this turn. */
+  | { type: "pass" }
+  /** On an inquest: 1 for yes, 0 for no. At dawn: the option voted for. */
+  | { type: "vote"; value: number }
+  | { type: "strike"; target: string };
 
 export { GameError };
 
 export function createGame(scenario: Scenario, seats: readonly Seat[], config: GameConfig): GameState {
   if (seats.length !== scenario.hands.length)
-    throw new GameError(`This scenario was dealt for ${scenario.hands.length} players.`);
+    throw new GameError(`This case was dealt for ${scenario.hands.length} players.`);
+  const role = (i: number): Role =>
+    i === scenario.killer ? "killer" : i === scenario.accomplice ? "accomplice" : "innocent";
+  const origins: Record<number, Origin> = {};
+  scenario.hands.forEach((h, i) => h.forEach((id) => (origins[id] = { via: "memory", who: seats[i].id })));
   return {
     scenario,
-    config:
-      config.mode === "coop" ? { ...config, turnLimit: config.turnLimit ?? defaultTurnLimit(seats.length) } : config,
+    config,
     players: seats.map((s, i) => ({
       id: s.id,
       name: s.name,
+      role: role(i),
       hand: [...scenario.hands[i]],
-      known: [...scenario.publicClues, ...scenario.hands[i]],
-      sources: {},
-      out: false,
+      known: [...scenario.hands[i]],
+      how: Object.fromEntries(scenario.hands[i].map((id) => [id, { via: "dealt" }])),
+      findings: [],
+      alive: true,
+      inquestUsed: false,
     })),
-    phase: { kind: "turn", active: 0 },
-    deck: [...scenario.deck],
-    pending: seats.map(() => null),
+    phase: { kind: "turn", active: 0, step: "investigate" },
+    stacks: Object.fromEntries(allLeads(scenario.dossier).map((l) => [leadKey(l), [...(scenario.stacks[leadKey(l)] ?? [])]])),
+    leads: allLeads(scenario.dossier),
+    origins,
+    record: [],
+    planted: [],
+    tampers: [],
+    strike: null,
+    strikeDone: false,
+    votes: seats.map(() => null),
+    accusation: {},
     round: 1,
-    roundTurns: 0,
-    roundLength: seats.length,
+    turnsLeft: seats.length,
     turnsTaken: 0,
     log: [],
   };
 }
 
-export const pointsOf = (state: GameState, ids: readonly number[]) =>
-  ids.reduce((sum, id) => sum + state.scenario.clues[id].points, 0);
-
-/** The cards `seat` may offer on the current ask: any in hand about either subject. */
-export function offerable(state: GameState, seat: number): number[] {
-  const p = state.phase;
-  if (p.kind !== "offers" || seat === p.active) return [];
-  return state.players[seat].hand.filter((id) => p.subjects.some((s) => isAbout(state.scenario.clues[id], s)));
+/** The forgeries a seat may plant: theirs, unplanted, while they have plants left. */
+export function forgeriesFor(state: GameState, seat: number): { forgery: Forgery; planted: boolean }[] {
+  const role = state.players[seat].role;
+  if (role === "innocent") return [];
+  return state.scenario.forgeries[role].map((f) => ({ forgery: f, planted: state.planted.includes(f.clue) }));
 }
 
-/** How many cards `seat` must discard at the end of this round. */
-export function discardCount(state: GameState, seat: number): number {
-  return Math.floor(state.players[seat].hand.length / 2);
+export function plantsLeft(state: GameState, seat: number): number {
+  const role = state.players[seat].role;
+  if (role === "innocent") return 0;
+  const mine = new Set(state.scenario.forgeries[role].map((f) => f.clue));
+  return PLANTS[role] - state.planted.filter((id) => mine.has(id)).length;
 }
 
-/** Seats that owe a move right now. Several at once while the table offers or discards. */
+const living = (s: GameState) => s.players.flatMap((p, i) => (p.alive ? [i] : []));
+
+/** Seats that owe a move right now. Several at once while the table votes. */
 export function whoMustAct(state: GameState): number[] {
   const p = state.phase;
-  if (p.kind === "turn" || p.kind === "choose") return [p.active];
-  if (p.kind === "offers") return state.pending.flatMap((o, i) => (o === null && i !== p.active ? [i] : []));
-  if (p.kind === "discard") return state.pending.flatMap((o, i) => (o === null ? [i] : []));
+  if (p.kind === "turn" || p.kind === "trim") return [p.active];
+  if (p.kind === "confer") return [p.with];
+  if (p.kind === "inquest" || p.kind === "vote")
+    return living(state).filter((i) => state.votes[i] === null);
   return [];
 }
 
@@ -210,108 +237,129 @@ export function reduce(state: GameState, actorId: string, action: Action): GameS
   const s = clone(state);
   const actor = s.players.findIndex((p) => p.id === actorId);
   if (actor < 0) throw new GameError("You are not in this game.");
+  const me = s.players[actor];
   const phase = s.phase;
+  const myTurn = phase.kind === "turn" && phase.active === actor;
+  const step = (want: "investigate" | "share") => {
+    if (!myTurn) throw new GameError("It isn't your turn.");
+    if (phase.step !== want)
+      throw new GameError(want === "investigate" ? "You've already investigated this turn." : "Investigate first.");
+  };
+  const card = (id: unknown) => {
+    if (typeof id !== "number" || !me.hand.includes(id)) throw new GameError("That card isn't in your hand.");
+    return id;
+  };
 
   switch (action?.type) {
-    case "ask": {
-      if (phase.kind !== "turn" || phase.active !== actor) throw new GameError("It isn't your turn to ask.");
-      const subjects = action.subjects;
-      if (!Array.isArray(subjects) || subjects.length !== 2) throw new GameError("Ask about two subjects.");
-      for (const sub of subjects) checkSubject(s.scenario.dossier, sub);
-      if (sameSubject(subjects[0], subjects[1])) throw new GameError("Pick two different subjects.");
-      s.log.push({ t: "ask", who: s.players[actor].id, subjects: [subjects[0], subjects[1]] });
-      s.phase = { kind: "offers", active: actor, subjects: [subjects[0], subjects[1]] };
-      s.pending = s.players.map(() => null);
-      // Anyone with nothing they could offer passes straight away.
-      s.players.forEach((_, i) => {
-        if (i !== actor && !offerable(s, i).length) s.pending[i] = [];
-      });
-      return afterOffer(s);
-    }
-
-    case "offer": {
-      if (phase.kind !== "offers") throw new GameError("Nobody is asking right now.");
-      if (actor === phase.active) throw new GameError("You can't offer on your own ask.");
-      if (s.pending[actor] !== null) throw new GameError("You've already made your offer.");
-      const ids = action.clueIds;
-      if (!Array.isArray(ids)) throw new GameError("Offer a list of cards, or none.");
-      const allowed = new Set(offerable(s, actor));
-      if (new Set(ids).size !== ids.length || ids.some((id) => !allowed.has(id)))
-        throw new GameError("You can only offer cards from your hand about the subjects asked for.");
-      s.pending[actor] = [...ids];
-      return afterOffer(s);
-    }
-
-    case "accept": {
-      if (phase.kind !== "choose" || phase.active !== actor) throw new GameError("There are no offers for you to take.");
-      const deals = action.deals;
-      if (!Array.isArray(deals)) throw new GameError("Say which offers you're taking.");
-      const me = s.players[actor];
-      const seen = new Set<number>();
-      const spent = new Set<number>();
-      const plan = deals.map((d) => {
-        const from = s.players.findIndex((p) => p.id === d?.from);
-        const offer = from >= 0 ? s.pending[from] : null;
-        if (from < 0 || from === actor || !offer?.length) throw new GameError("That player didn't offer anything.");
-        if (seen.has(from)) throw new GameError("Take each offer once.");
-        seen.add(from);
-        const payback = d.payback;
-        if (!Array.isArray(payback) || payback.some((id) => !me.hand.includes(id) || spent.has(id)))
-          throw new GameError("Pay back with cards from your hand, each card once.");
-        for (const id of payback) spent.add(id);
-        if (pointsOf(s, payback) < pointsOf(s, offer))
-          throw new GameError(`Pay ${s.players[from].name} back at least ${pointsOf(s, offer)} points.`);
-        return { from, offer, payback };
-      });
-      // All checked against the hand the asker held before the trade; now swap the cards.
-      const turn = s.turnsTaken;
-      for (const { from, offer, payback } of plan) {
-        const them = s.players[from];
-        move(them, me, offer, { via: "offer", from: them.id, subjects: phase.subjects, turn });
-        move(me, them, payback, { via: "payback", from: me.id, subjects: phase.subjects, turn });
-        s.log.push({
-          t: "deal",
-          asker: me.id,
-          with: them.id,
-          gotCards: offer.length,
-          gotPoints: pointsOf(s, offer),
-          paidCards: payback.length,
-          paidPoints: pointsOf(s, payback),
-        });
+    case "investigate": {
+      step("investigate");
+      const lead = typeof action.lead === "string" ? leadOfKey(action.lead) : null;
+      if (!lead || !s.leads.some((l) => sameLead(l, lead))) throw new GameError("There's no such lead.");
+      const key = leadKey(lead);
+      const stack = s.stacks[key];
+      s.log.push({ t: "investigate", who: me.id, lead });
+      const tamper = action.tamper;
+      if (tamper) {
+        if (me.role === "innocent") throw new GameError("Only the guilty tamper with evidence.");
+        if (tamper.how === "bury") {
+          // The top card goes to the bottom: the next person finds something else, or nothing.
+          if (stack.length > 1) stack.push(stack.shift()!);
+          s.tampers.push({ how: "bury", by: me.id, lead, round: s.round });
+        } else if (tamper.how === "plant") {
+          const f = forgeriesFor(s, actor).find((x) => x.forgery.clue === tamper.clue);
+          if (!f || f.planted) throw new GameError("You can't plant that.");
+          if (!sameLead(f.forgery.lead, lead)) throw new GameError("That forgery belongs with another lead.");
+          if (plantsLeft(s, actor) <= 0) throw new GameError("You've no forgeries left to plant.");
+          stack.unshift(f.forgery.clue);
+          s.planted.push(f.forgery.clue);
+          s.tampers.push({ how: "plant", by: me.id, lead, clue: f.forgery.clue, round: s.round });
+        } else throw new GameError("Unknown tampering.");
+        return toShare(s, actor);
       }
-      if (!plan.length) s.log.push({ t: "noDeal", asker: me.id });
-      return endTurn(s);
+      const id = stack.shift();
+      me.findings.push({ lead, round: s.round, clue: id ?? null });
+      if (id !== undefined) {
+        s.origins[id] = { via: "lead", lead, by: me.id, round: s.round };
+        me.hand.push(id);
+        learn(me, id, { via: "drew", round: s.round });
+      }
+      return toShare(s, actor);
     }
 
-    case "discard": {
-      if (phase.kind !== "discard") throw new GameError("It isn't time to discard.");
-      if (s.pending[actor] !== null) throw new GameError("You've already discarded.");
-      const ids = action.clueIds;
-      const hand = s.players[actor].hand;
-      const need = discardCount(s, actor);
-      if (!Array.isArray(ids) || new Set(ids).size !== ids.length || ids.some((id) => !hand.includes(id)))
-        throw new GameError("Discard cards from your hand.");
-      if (ids.length !== need) throw new GameError(`Discard exactly ${need} card${need === 1 ? "" : "s"}.`);
-      s.pending[actor] = [...ids];
-      return afterDiscard(s);
+    case "confer": {
+      step("share");
+      const other = s.players.findIndex((p) => p.id === action.with);
+      if (other < 0 || other === actor || !s.players[other].alive) throw new GameError("Confer with someone else at the table.");
+      const shown = card(action.card);
+      s.log.push({ t: "confer", who: me.id, with: s.players[other].id });
+      learn(s.players[other], shown, { via: "shown", by: me.id, round: s.round });
+      if (!s.players[other].hand.length) return afterAction(s, actor);
+      s.phase = { kind: "confer", active: actor, with: other, card: shown };
+      return s;
     }
 
-    case "accuse": {
-      if (phase.kind !== "turn" || phase.active !== actor) throw new GameError("You can only accuse on your turn.");
+    case "show": {
+      if (phase.kind !== "confer" || phase.with !== actor) throw new GameError("Nobody is waiting for you to show a card.");
+      learn(s.players[phase.active], card(action.card), { via: "shown", by: me.id, round: s.round });
+      return afterAction(s, phase.active);
+    }
+
+    case "testify": {
+      const trimming = phase.kind === "trim" && phase.active === actor;
+      if (!trimming) step("share");
+      const id = card(action.card);
+      me.hand = me.hand.filter((x) => x !== id);
+      s.record.push({ clue: id, by: me.id, round: s.round });
+      s.log.push({ t: "testify", who: me.id, clue: id });
+      for (const p of s.players) learn(p, id, { via: "record", by: me.id, round: s.round });
+      return trimming ? endTurn(s, actor) : afterAction(s, actor);
+    }
+
+    case "burn": {
+      if (phase.kind !== "trim" || phase.active !== actor) throw new GameError("You can only burn a card to get back to the hand limit.");
+      const id = card(action.card);
+      me.hand = me.hand.filter((x) => x !== id);
+      s.log.push({ t: "burn", who: me.id });
+      return endTurn(s, actor);
+    }
+
+    case "pass": {
+      step("share");
+      return afterAction(s, actor);
+    }
+
+    case "inquest": {
+      step("investigate");
+      if (me.inquestUsed) throw new GameError("You've already called an inquest.");
       checkAnswer(s.scenario.dossier, action.answer);
-      const correct = sameAnswer(action.answer, s.scenario.secret.answer);
-      s.log.push({ t: "accuse", who: s.players[actor].id, answer: action.answer, correct });
-      if (correct) {
-        const winners = s.config.mode === "coop" ? s.players.map((p) => p.id) : [s.players[actor].id];
-        s.phase = { kind: "over", winners, reason: "solved" };
-        return s;
-      }
-      if (s.config.mode === "coop") {
-        s.phase = { kind: "over", winners: [], reason: "wrongAccusation" };
-        return s;
-      }
-      s.players[actor].out = true;
-      return endTurn(s);
+      const answer = { agent: action.answer.agent, device: action.answer.device, room: action.answer.room };
+      me.inquestUsed = true;
+      s.log.push({ t: "inquest", who: me.id, answer });
+      s.phase = { kind: "inquest", active: actor, answer };
+      s.votes = s.players.map(() => null);
+      return s;
+    }
+
+    case "vote": {
+      if (phase.kind !== "inquest" && phase.kind !== "vote") throw new GameError("There's nothing to vote on.");
+      if (!me.alive) throw new GameError("The dead don't vote.");
+      if (s.votes[actor] !== null) throw new GameError("You've already voted.");
+      const v = action.value;
+      const ok = phase.kind === "inquest" ? v === 0 || v === 1 : phase.options.includes(v);
+      if (!ok) throw new GameError("That isn't one of the choices.");
+      s.votes[actor] = v;
+      return phase.kind === "inquest" ? afterInquestVote(s) : afterDawnVote(s);
+    }
+
+    case "strike": {
+      if (!myTurn) throw new GameError("It isn't your turn.");
+      if (me.role !== "killer") throw new GameError("Only the killer can do that.");
+      if (s.strike || s.strikeDone) throw new GameError("You can only strike once.");
+      const target = s.players.findIndex((p) => p.id === action.target);
+      if (target < 0 || target === actor || !s.players[target].alive) throw new GameError("Pick someone else at the table.");
+      // Nothing public happens until the body is found at the end of the round.
+      s.strike = { target, round: s.round };
+      return s;
     }
 
     default:
@@ -319,221 +367,303 @@ export function reduce(state: GameState, actorId: string, action: Action): GameS
   }
 }
 
-/** Once every offer is in, reveal their sizes and hand over to the asker (or move on). */
-function afterOffer(s: GameState): GameState {
-  const p = s.phase;
-  if (p.kind !== "offers" || whoMustAct(s).length) return s;
-  const offers = s.players.flatMap((pl, i) =>
-    i === p.active ? [] : [{ who: pl.id, cards: s.pending[i]!.length, points: pointsOf(s, s.pending[i]!) }]
-  );
-  s.log.push({ t: "offers", offers });
-  if (offers.every((o) => o.cards === 0)) return endTurn(s);
-  s.phase = { kind: "choose", active: p.active, subjects: p.subjects };
+/** On to the second step of the turn. */
+function toShare(s: GameState, seat: number): GameState {
+  s.phase = { kind: "turn", active: seat, step: "share" };
   return s;
 }
 
-/** Once everyone has discarded, deal replacements around the table and start the next round. */
-function afterDiscard(s: GameState): GameState {
-  const p = s.phase;
-  if (p.kind !== "discard" || whoMustAct(s).length) return s;
-  const drew = s.players.map((pl, i) => {
-    const gone = new Set(s.pending[i]!);
-    pl.hand = pl.hand.filter((id) => !gone.has(id));
-    return { who: pl.id, cards: 0, owed: gone.size };
-  });
-  // Deal one at a time around the table, so a short deck is shared fairly.
-  for (let more = true; more && s.deck.length; ) {
-    more = false;
-    s.players.forEach((pl, i) => {
-      if (drew[i].cards < drew[i].owed && s.deck.length) {
-        const id = s.deck.shift()!;
-        pl.hand.push(id);
-        learn(pl, id, { via: "draw", round: s.round, turn: s.turnsTaken });
-        drew[i].cards++;
-        more = true;
-      }
-    });
-  }
-  // Back under the deck, in an order fixed by the seed so a game replays exactly.
-  const discards = s.pending.flatMap((d) => d ?? []);
-  s.deck.push(...shuffle(discards, makeRng(s.scenario.seed + s.round)));
-  s.log.push({
-    t: "round",
-    round: s.round,
-    drew: drew.map(({ who, cards }) => ({ who, cards })),
-    deckLeft: s.deck.length,
-  });
-  return startRound(s, p.next);
-}
-
-function startRound(s: GameState, next: number): GameState {
-  s.round++;
-  s.roundTurns = 0;
-  s.roundLength = s.players.filter((pl) => !pl.out).length;
-  s.pending = s.players.map(() => null);
-  s.phase = { kind: "turn", active: next };
-  return s;
-}
-
-/** Move cards from one hand to another; the receiver learns them. */
-function move(from: PlayerState, to: PlayerState, ids: number[], source: Source) {
-  const set = new Set(ids);
-  from.hand = from.hand.filter((id) => !set.has(id));
-  for (const id of ids) {
-    to.hand.push(id);
-    learn(to, id, source);
-  }
-}
-
-function learn(p: PlayerState, id: number, source: Source) {
-  if (p.known.includes(id)) return; // they'd seen it already: no news
-  p.known.push(id);
-  p.sources[id] = source;
-}
-
-function endTurn(s: GameState): GameState {
-  if (s.phase.kind === "over") return s;
-  const active = "active" in s.phase ? s.phase.active : 0;
-  s.pending = s.players.map(() => null);
-  s.turnsTaken++;
-  s.roundTurns++;
-  if (s.config.mode === "coop" && s.config.turnLimit && s.turnsTaken >= s.config.turnLimit) {
-    s.phase = { kind: "over", winners: [], reason: "outOfTime" };
+/** After sharing: over the hand limit, testify or burn; otherwise the turn ends. */
+function afterAction(s: GameState, seat: number): GameState {
+  if (s.players[seat].hand.length > HAND_LIMIT) {
+    s.phase = { kind: "trim", active: seat };
     return s;
   }
-  const n = s.players.length;
-  let next = -1;
-  for (let step = 1; step <= n; step++) {
-    const i = (active + step) % n;
-    if (!s.players[i].out) {
-      next = i;
-      break;
+  return endTurn(s, seat);
+}
+
+function afterInquestVote(s: GameState): GameState {
+  const p = s.phase;
+  if (p.kind !== "inquest" || whoMustAct(s).length) return s;
+  const cast = s.votes.filter((v): v is number => v !== null);
+  const yes = cast.filter((v) => v === 1).length;
+  const no = cast.length - yes;
+  const who = s.players[p.active].id;
+  s.votes = s.players.map(() => null);
+  if (yes * 2 > living(s).length) {
+    s.log.push({ t: "inquestPassed", who, yes, no });
+    return finish(s, sameAnswer(p.answer, s.scenario.secret.answer) ? "caught" : "wrong", "inquest", p.answer);
+  }
+  s.log.push({ t: "inquestFailed", who, yes, no });
+  return endTurn(s, p.active);
+}
+
+function afterDawnVote(s: GameState): GameState {
+  const p = s.phase;
+  if (p.kind !== "vote" || whoMustAct(s).length) return s;
+  const tally = new Map<number, number>();
+  for (const v of s.votes) if (v !== null) tally.set(v, (tally.get(v) ?? 0) + 1);
+  const top = Math.max(...tally.values());
+  const leaders = [...tally].filter(([, n]) => n === top).map(([v]) => v);
+  s.votes = s.players.map(() => null);
+  if (leaders.length > 1) {
+    s.log.push({ t: "voted", part: p.part, value: null, tied: leaders, revote: p.revote });
+    if (!p.revote) {
+      s.phase = { kind: "vote", part: p.part, options: leaders.sort((a, b) => a - b), revote: true };
+      return s;
     }
+    return finish(s, "deadlock", "dawn", s.accusation);
   }
-  if (next < 0) {
-    s.phase = { kind: "over", winners: [], reason: "allOut" };
-    return s;
-  }
-  if (s.roundTurns < s.roundLength) {
-    s.phase = { kind: "turn", active: next };
-    return s;
-  }
-  // End of the round. With nothing to draw (a deck dealt empty), skip the discard.
-  if (!s.deck.length) return startRound(s, next);
-  s.phase = { kind: "discard", next };
-  s.players.forEach((_, i) => {
-    if (discardCount(s, i) === 0) s.pending[i] = [];
-  });
-  return afterDiscard(s);
+  s.log.push({ t: "voted", part: p.part, value: leaders[0], tied: [], revote: p.revote });
+  s.accusation = { ...s.accusation, [p.part]: leaders[0] };
+  const next = PARTS[PARTS.indexOf(p.part) + 1];
+  if (next) return startVote(s, next);
+  const a = s.accusation as Answer;
+  return finish(s, sameAnswer(a, s.scenario.secret.answer) ? "caught" : "wrong", "dawn", a);
 }
 
-function checkSubject(d: Dossier, s: Subject) {
-  const index = (n: number) => Number.isInteger(s.id) && (s.id as number) >= 0 && (s.id as number) < n;
-  const ok =
-    !!s &&
-    ((s.kind === "agent" && index(d.agents.length)) ||
-      (s.kind === "room" && index(d.rooms.length)) ||
-      (s.kind === "device" && index(d.devices.length)) ||
-      (s.kind === "trait" && d.traits.some((t) => t.id === s.id)) ||
-      (s.kind === "feature" && d.features.some((f) => f.id === s.id)));
-  if (!ok) throw new GameError("Unknown subject.");
+function startVote(s: GameState, part: Part): GameState {
+  const d = s.scenario.dossier;
+  const options =
+    part === "agent"
+      ? d.agents.filter((a) => s.players[a.id].alive).map((a) => a.id)
+      : part === "device"
+        ? d.devices.map((x) => x.id)
+        : d.rooms.map((r) => r.id);
+  s.votes = s.players.map(() => null);
+  s.phase = { kind: "vote", part, options, revote: false };
+  return s;
+}
+
+function finish(s: GameState, result: "caught" | "wrong" | "deadlock", by: "inquest" | "dawn", accusation: Partial<Answer>): GameState {
+  const guilty = (p: PlayerState) => p.role !== "innocent";
+  const winners = s.players.filter((p) => (result === "caught" ? !guilty(p) : guilty(p))).map((p) => p.id);
+  s.phase = { kind: "over", result, by, accusation, winners };
+  return s;
+}
+
+function learn(p: PlayerState, id: number, how: How) {
+  if (p.known.includes(id)) return; // seen it already: no news
+  p.known.push(id);
+  p.how[id] = how;
+}
+
+/** The turn is over: on to the next living guest, the end of the round, or dawn. */
+function endTurn(s: GameState, seat: number): GameState {
+  s.turnsTaken++;
+  s.turnsLeft--;
+  s.votes = s.players.map(() => null);
+  if (s.turnsLeft > 0) {
+    s.phase = { kind: "turn", active: nextLiving(s, seat), step: "investigate" };
+    return s;
+  }
+  // End of the round. A second body is found first, if there is one.
+  if (s.strike) {
+    const victim = s.players[s.strike.target];
+    victim.alive = false;
+    s.strikeDone = true;
+    s.strike = null;
+    s.log.push({ t: "death", who: victim.id, round: s.round });
+    // What they were carrying is found on them, for everyone to read.
+    for (const id of victim.hand) {
+      s.origins[id] ??= { via: "victim", who: victim.id, round: s.round };
+      s.record.push({ clue: id, by: victim.id, round: s.round });
+      for (const p of s.players) learn(p, id, { via: "record", by: victim.id, round: s.round });
+    }
+    victim.hand = [];
+    s.stacks.body2 = [...s.scenario.secondBody];
+    s.leads.push({ kind: "body2" });
+  }
+  s.log.push({ t: "round", round: s.round });
+  if (s.round >= (s.config.rounds ?? ROUNDS)) {
+    s.log.push({ t: "dawn" });
+    return startVote(s, "agent");
+  }
+  s.round++;
+  s.turnsLeft = living(s).length;
+  s.phase = { kind: "turn", active: nextLiving(s, seat), step: "investigate" };
+  return s;
+}
+
+function nextLiving(s: GameState, seat: number): number {
+  const n = s.players.length;
+  for (let step = 1; step <= n; step++) {
+    const i = (seat + step) % n;
+    if (s.players[i].alive) return i;
+  }
+  return seat;
 }
 
 function checkAnswer(d: Dossier, a: Answer) {
   const inRange = (v: number, n: number) => Number.isInteger(v) && v >= 0 && v < n;
-  if (
-    !a ||
-    !inRange(a.agent, d.agents.length) ||
-    !inRange(a.device, d.devices.length) ||
-    !inRange(a.room, d.rooms.length)
-  )
-    throw new GameError("That accusation doesn't name a real suspect, device and room.");
+  if (!a || !inRange(a.agent, d.agents.length) || !inRange(a.device, d.devices.length) || !inRange(a.room, d.rooms.length))
+    throw new GameError("Name a guest, a weapon and a room.");
 }
 
 function clone(s: GameState): GameState {
   return {
     ...s,
-    players: s.players.map((p) => ({ ...p, hand: [...p.hand], known: [...p.known], sources: { ...p.sources } })),
-    deck: [...s.deck],
-    pending: s.pending.map((o) => (o ? [...o] : null)),
+    players: s.players.map((p) => ({
+      ...p,
+      hand: [...p.hand],
+      known: [...p.known],
+      how: { ...p.how },
+      findings: [...p.findings],
+    })),
+    stacks: Object.fromEntries(Object.entries(s.stacks).map(([k, v]) => [k, [...v]])),
+    leads: [...s.leads],
+    origins: { ...s.origins },
+    record: [...s.record],
+    planted: [...s.planted],
+    tampers: [...s.tampers],
+    votes: [...s.votes],
+    accusation: { ...s.accusation },
     log: [...s.log],
   };
 }
 
-/** What one player is allowed to see. The secret only appears once it's over. */
+/** What one player is allowed to see. */
 export interface PlayerView {
   you: {
     id: string;
     seat: number;
-    /** Every clue you've seen: what the notebook works from. */
-    known: Clue[];
+    role: Role;
+    alive: boolean;
     /** Ids of the cards in your hand. */
     hand: number[];
-    sources: Record<number, Source>;
+    /** Every card you've seen: what the notebook works from. */
+    known: Clue[];
+    how: Record<number, How>;
+    findings: Finding[];
+    inquestUsed: boolean;
   };
-  mode: Mode;
+  /** Only for the killer and the accomplice. */
+  guilty: {
+    /** The killer sees the whole truth; the accomplice only who. */
+    answer: Answer | null;
+    killer: number;
+    accomplice: number | null;
+    /** What each forgery says, which lead it belongs with, and whether it's been planted. */
+    forgeries: { forgery: Forgery; planted: boolean; card: Clue }[];
+    plantsLeft: number;
+    /** Killer only: whether the second strike is still to use, or who's marked. */
+    canStrike: boolean;
+    marked: string | null;
+  } | null;
   dossier: Dossier;
-  publicClues: number[];
-  players: { id: string; name: string; handSize: number; out: boolean }[];
+  players: { id: string; name: string; handSize: number; alive: boolean; inquestUsed: boolean }[];
+  leads: Lead[];
+  /** Where each card you've seen came from. */
+  origins: Record<number, Origin>;
+  record: RecordEntry[];
   phase: Phase;
   round: number;
-  deckLeft: number;
-  /** While the table offers or discards: who has moved yet (never what). */
-  moved: boolean[] | null;
-  /** When you owe an offer: the cards you may put in it. */
-  canOffer: number[] | null;
-  /** When you owe a discard: how many cards. */
-  mustDiscard: number | null;
-  /** Your own offer or discard for the current step, once made. */
-  yours: number[] | null;
-  /** For the asker choosing: each offer's size. */
-  choices: { from: string; cards: number; points: number }[] | null;
+  rounds: number;
+  handLimit: number;
+  /** While the table votes: who has voted yet (never how). */
+  voted: boolean[] | null;
+  /** For a confer you're answering: the card you were shown. */
+  shownYou: number | null;
+  /** Your vote, once cast. */
+  yourVote: number | null;
+  accusation: Partial<Answer>;
   log: LogEntry[];
   turnsTaken: number;
-  turnLimit: number | null;
-  assist: Assist;
-  answer: Answer | null;
+  /** Everything, once it's over. */
+  reveal: {
+    secret: Secret;
+    killer: number;
+    accomplice: number | null;
+    /** Every card that was planted, with what it said. */
+    tampers: Tamper[];
+    clues: Clue[];
+    forged: number[];
+  } | null;
+}
+
+/**
+ * What a player knows from their role alone, as cards with negative ids that
+ * never go into play: an innocent knows it wasn't them; the accomplice knows
+ * who it was; the killer knows everything.
+ */
+export function selfKnowledge(view: PlayerView): Clue[] {
+  const d = view.dossier;
+  const others = (keep: number) =>
+    d.agents.filter((a) => a.id !== keep).map((a, i): Clue => ({ kind: "notAgent", agent: a.id, id: -2 - i }));
+  if (view.you.role === "innocent") return [{ kind: "notAgent", agent: view.you.seat, id: -1 }];
+  const g = view.guilty!;
+  if (!g.answer) return others(g.killer);
+  return [
+    ...others(g.killer),
+    { kind: "isDevice", device: g.answer.device, id: -100 },
+    { kind: "isRoom", room: g.answer.room, id: -101 },
+  ];
 }
 
 export function projectView(state: GameState, playerId: string): PlayerView {
   const seat = state.players.findIndex((p) => p.id === playerId);
   if (seat < 0) throw new GameError("You are not in this game.");
   const me = state.players[seat];
+  const sc = state.scenario;
   const phase = state.phase;
-  const gathering = phase.kind === "offers" || phase.kind === "discard";
+  const voting = phase.kind === "inquest" || phase.kind === "vote";
+  const over = phase.kind === "over";
   return {
     you: {
       id: me.id,
       seat,
-      known: me.known.map((id) => state.scenario.clues[id]),
+      role: me.role,
+      alive: me.alive,
       hand: [...me.hand],
-      sources: { ...me.sources },
+      known: me.known.map((id) => sc.clues[id]),
+      how: { ...me.how },
+      findings: [...me.findings],
+      inquestUsed: me.inquestUsed,
     },
-    mode: state.config.mode,
-    dossier: state.scenario.dossier,
-    publicClues: state.scenario.publicClues,
-    players: state.players.map((p) => ({ id: p.id, name: p.name, handSize: p.hand.length, out: p.out })),
-    phase,
+    guilty:
+      me.role === "innocent"
+        ? null
+        : {
+            answer: me.role === "killer" ? sc.secret.answer : null,
+            killer: sc.killer,
+            accomplice: me.role === "killer" ? sc.accomplice : seat,
+            forgeries: forgeriesFor(state, seat).map((f) => ({ ...f, card: sc.clues[f.forgery.clue] })),
+            plantsLeft: plantsLeft(state, seat),
+            canStrike: me.role === "killer" && !state.strike && !state.strikeDone,
+            marked: me.role === "killer" && state.strike ? state.players[state.strike.target].id : null,
+          },
+    dossier: sc.dossier,
+    players: state.players.map((p) => ({
+      id: p.id,
+      name: p.name,
+      handSize: p.hand.length,
+      alive: p.alive,
+      inquestUsed: p.inquestUsed,
+    })),
+    leads: [...state.leads],
+    // A planted card's origin reads exactly like a real one's.
+    origins: Object.fromEntries(me.known.filter((id) => state.origins[id]).map((id) => [id, state.origins[id]])),
+    record: [...state.record],
+    // Only the two conferring know which card was shown.
+    phase: phase.kind === "confer" && seat !== phase.active && seat !== phase.with ? { ...phase, card: -1 } : phase,
     round: state.round,
-    deckLeft: state.deck.length,
-    moved: gathering
-      ? state.pending.map((o, i) => (phase.kind === "offers" && i === phase.active) || o !== null)
-      : null,
-    canOffer:
-      phase.kind === "offers" && seat !== phase.active && state.pending[seat] === null ? offerable(state, seat) : null,
-    mustDiscard: phase.kind === "discard" && state.pending[seat] === null ? discardCount(state, seat) : null,
-    yours: gathering || phase.kind === "choose" ? state.pending[seat] : null,
-    choices:
-      phase.kind === "choose" && phase.active === seat
-        ? state.players.flatMap((p, i) => {
-            const o = state.pending[i];
-            return i === seat || !o?.length ? [] : [{ from: p.id, cards: o.length, points: pointsOf(state, o) }];
-          })
-        : null,
+    rounds: state.config.rounds ?? ROUNDS,
+    handLimit: HAND_LIMIT,
+    voted: voting ? state.votes.map((v, i) => v !== null || !state.players[i].alive) : null,
+    shownYou: phase.kind === "confer" && phase.with === seat ? phase.card : null,
+    yourVote: voting ? state.votes[seat] : null,
+    accusation: { ...state.accusation },
     log: state.log,
     turnsTaken: state.turnsTaken,
-    turnLimit: state.config.turnLimit ?? null,
-    assist: state.config.assist ?? "grid",
-    answer: phase.kind === "over" ? state.scenario.secret.answer : null,
+    reveal: over
+      ? {
+          secret: sc.secret,
+          killer: sc.killer,
+          accomplice: sc.accomplice,
+          tampers: state.tampers,
+          clues: sc.clues,
+          forged: sc.forged,
+        }
+      : null,
   };
 }

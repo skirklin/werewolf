@@ -18,8 +18,10 @@ export const THEME: Theme = {
   item: "weapon",
   items: "weapons",
   story:
-    "Lord Ashcombe was found dead during his own party. Everyone was mingling between the rooms all evening, " +
-    "and the weapon was taken from where it was kept.",
+    "Lord Ashcombe promised his guests an announcement at midnight, rumoured to be a new will. Midnight came " +
+    "and he didn't. At a quarter past twelve the butler found him dead at the foot of the grand staircase in " +
+    "the Hall. He didn't die there: someone killed him elsewhere and moved him to look like a fall. The roads " +
+    "are flooded and the inspector can't arrive until dawn. One of you did it.",
 };
 
 export const TRAITS: TraitDef[] = [
@@ -289,17 +291,50 @@ export const DEVICES: DeviceTemplate[] = [
   },
 ];
 
-export const AGENT_NAMES = [
-  "Countess Varga",
-  "Mr. Okafor",
-  "Attaché Lindqvist",
-  "Dr. Moreau",
-  "Colonel Petrov",
-  "Miss Tanaka",
-  "Signor Bellini",
-  "Mrs. Ashworth",
-  "Herr Brandt",
-  "Madame Duval",
-  "Señor Ruiz",
-  "Professor Haddad",
+/**
+ * The guests. Their looks are fixed, so a table can learn the cast; what
+ * changes from game to game is the evidence. Each trait splits the cast
+ * roughly in half, and no two guests share more than four of the six.
+ */
+export const CAST: { name: string; motive: string; traits: Record<string, string> }[] = [
+  {
+    name: "Lady Ashcombe",
+    motive: "The new will was said to leave her nothing.",
+    traits: { headwear: "none", coat: "red", height: "short", hand: "right", glasses: "no", gloves: "yes" },
+  },
+  {
+    name: "Julian Ashcombe",
+    motive: "The nephew, who inherits under the old will.",
+    traits: { headwear: "fedora", coat: "black", height: "tall", hand: "left", glasses: "no", gloves: "no" },
+  },
+  {
+    name: "Dr. Moreau",
+    motive: "Owed Lord Ashcombe more than he could ever repay.",
+    traits: { headwear: "none", coat: "grey", height: "tall", hand: "right", glasses: "yes", gloves: "yes" },
+  },
+  {
+    name: "Mr. Okafor",
+    motive: "His business partner, about to be bought out on bad terms.",
+    traits: { headwear: "fedora", coat: "camel", height: "tall", hand: "right", glasses: "no", gloves: "yes" },
+  },
+  {
+    name: "Miss Tanaka",
+    motive: "The secretary who typed the new will, so she knew what was in it.",
+    traits: { headwear: "beret", coat: "black", height: "short", hand: "left", glasses: "yes", gloves: "no" },
+  },
+  {
+    name: "Signor Bellini",
+    motive: "The art dealer whose Old Masters Lord Ashcombe had begun to doubt.",
+    traits: { headwear: "beret", coat: "camel", height: "short", hand: "right", glasses: "yes", gloves: "yes" },
+  },
+  {
+    name: "Colonel Petrov",
+    motive: "An old army friend who had been paying for his silence for years.",
+    traits: { headwear: "none", coat: "grey", height: "tall", hand: "left", glasses: "no", gloves: "no" },
+  },
+  {
+    name: "Madame Duval",
+    motive: "The medium. Lord Ashcombe had promised to expose her as a fraud.",
+    traits: { headwear: "beret", coat: "red", height: "short", hand: "right", glasses: "yes", gloves: "no" },
+  },
 ];
