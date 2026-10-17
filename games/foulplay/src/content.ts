@@ -198,7 +198,7 @@ export const FEATURES: FeatureDef[] = [
     phrase: "crowded",
     negPhrase: "uncrowded",
     evidence: "Spilled champagne and trampled canapés: the murder happened somewhere crowded.",
-    notEvidence: "Nobody was there to see it: the murder happened somewhere uncrowded.",
+    notEvidence: "Nobody was there to see it: the murder didn't happen anywhere crowded.",
   },
   {
     id: "quiet",
@@ -206,7 +206,7 @@ export const FEATURES: FeatureDef[] = [
     phrase: "quiet",
     negPhrase: "noisy",
     evidence: "A guest nearby heard a faint cry: the murder happened somewhere quiet.",
-    notEvidence: "Nobody heard a thing over the din: the murder happened somewhere noisy.",
+    notEvidence: "Nobody heard a thing over the din: the murder didn't happen anywhere quiet.",
   },
   {
     id: "dark",
@@ -214,7 +214,7 @@ export const FEATURES: FeatureDef[] = [
     phrase: "dark",
     negPhrase: "well lit",
     evidence: "A spent match by the body: the murder happened somewhere dark.",
-    notEvidence: "The victim's watch reflected a lamp: the murder happened somewhere well lit.",
+    notEvidence: "The victim's watch reflected a lamp: the murder didn't happen anywhere dark.",
   },
   {
     id: "seating",

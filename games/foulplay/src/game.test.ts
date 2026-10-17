@@ -56,7 +56,7 @@ describe("a turn", () => {
     const top = g0.stacks.body[0];
     const g = reduce(g0, "a", { type: "investigate", lead: "body" });
     expect(g.players[0].hand).toContain(top);
-    expect(g.players[0].findings).toEqual([{ lead: { kind: "body" }, round: 1, clue: top }]);
+    expect(g.players[0].findings).toEqual([{ lead: { kind: "body" }, round: 1, clue: top, more: true }]);
     expect(g.origins[top]).toEqual({ via: "lead", lead: { kind: "body" }, by: "a", round: 1 });
     expect(g.stacks.body).not.toContain(top);
     // The table sees that you looked, not what you found.
@@ -227,7 +227,7 @@ describe("dawn", () => {
     expect(g.phase).toMatchObject({ kind: "over", result: "caught", by: "dawn", accusation: truth });
   });
 
-  it("revotes a tie among the tied, and a second tie lets the killer go", () => {
+  it("revotes a tie among the tied, and the inspector settles a second tie", () => {
     let g = toDawn(fresh());
     const [x, y] = [0, 1];
     const split = (g: GameState) =>
@@ -237,7 +237,10 @@ describe("dawn", () => {
     g = split(g);
     expect(g.phase).toMatchObject({ kind: "vote", part: "agent", options: [0, 1], revote: true });
     g = split(g);
-    expect(g.phase).toMatchObject({ kind: "over", result: "deadlock" });
+    expect(g.phase).toMatchObject({ kind: "vote", part: "device" });
+    const settled = g.log.at(-1);
+    expect(settled).toMatchObject({ t: "voted", part: "agent", inspector: true, tally: [[0, 2], [1, 2]] });
+    expect([0, 1]).toContain(g.accusation.agent);
   });
 });
 
@@ -262,7 +265,7 @@ describe("simulation", () => {
   it("plays bot games to the end at every table size", () => {
     for (const players of [4, 5, 6, 7, 8]) {
       const r = simulateGame(players * 17, players);
-      expect(["caught", "wrong", "deadlock"]).toContain(r.result);
+      expect(["caught", "wrong"]).toContain(r.result);
     }
   }, 60_000);
 });

@@ -47,7 +47,6 @@ if (values.sim) {
   console.log(`  caught at dawn:       ${share((r) => r.result === "caught" && r.by === "dawn")}`);
   console.log(`  wrong at an inquest:  ${share((r) => r.result === "wrong" && r.by === "inquest")}`);
   console.log(`  wrong at dawn:        ${share((r) => r.result === "wrong" && r.by === "dawn")}`);
-  console.log(`  deadlock at dawn:     ${share((r) => r.result === "deadlock")}`);
   console.log(`second strike used: ${share((r) => r.struck)}`);
   console.log(`median answers left on the public record: ${median(results.map((r) => r.publicLeft))}`);
   console.log(`median answers left from all the innocents saw: ${median(results.map((r) => r.pooledLeft))}`);

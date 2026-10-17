@@ -63,6 +63,13 @@ export interface Notes {
   base: number;
   /** When the trusted cards can't all be true: a small set that clashes. */
   clash: Clue[] | null;
+  /**
+   * While there's a clash, the cards the board is leaving out so it can still
+   * count: whichever of the clashing ones you saw last. Empty otherwise.
+   */
+  setAside: Clue[];
+  /** The cards the board actually counts from: `trusted`, less `setAside`. */
+  basis: Clue[];
   doubts: Set<number>;
   toggleDoubt: (id: number) => void;
 }
@@ -73,12 +80,18 @@ export function useNotes(view: PlayerView, roomCode: string): Notes {
   const key = view.you.known.map((c) => c.id).join(",") + "|" + [...doubts].join(",");
   return useMemo(() => {
     const trusted = [...selfKnowledge(view), ...view.you.known.filter((c) => !doubts.has(c.id))];
+    const clash = solver.conflict(trusted);
+    // Keep counting through a clash: what you knew first stands, and the
+    // card that broke it is left out until you decide what to doubt.
+    const kept = clash ? solver.believable(trusted) : trusted;
     return {
       solver,
       trusted,
-      analysis: solver.analyze(trusted),
+      analysis: solver.analyze(kept),
       base: solver.remaining([]),
-      clash: solver.conflict(trusted),
+      clash,
+      setAside: clash ? trusted.filter((c) => !kept.includes(c)) : [],
+      basis: kept,
       doubts,
       toggleDoubt: toggle,
     };

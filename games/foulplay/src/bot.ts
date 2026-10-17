@@ -107,7 +107,9 @@ function investigate(view: PlayerView, solver: Solver, rng: Rng): Action {
   const score = (l: Lead): number => {
     const key = leadKey(l);
     if (dry.includes(key)) return -Infinity;
-    const seen = looks.get(key) ?? 0;
+    // Told there's more where I last looked: go back for it.
+    const last = [...view.you.findings].reverse().find((f) => leadKey(f.lead) === key);
+    const seen = last?.more ? 0 : (looks.get(key) ?? 0);
     switch (l.kind) {
       case "body":
       case "body2":
