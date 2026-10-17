@@ -12,14 +12,16 @@ export function FoulPlayHome({ sub, navigate, onBack }: HomeProps) {
       <div className="spacer" />
       <div className="phase-banner">
         <div className="big" style={{ fontSize: "5rem" }}>🔍</div>
-        <h1>Foul Play</h1>
-        <p className="muted">Lord Ashcombe is dead. Trade evidence and name the killer, the weapon and the room.</p>
+        <h1>
+          Foul Play <span className="beta-pill">BETA</span>
+        </h1>
+        <p className="muted">Lord Ashcombe is dead, and one of you did it. Name who, with what, and where.</p>
       </div>
       <div className="spacer" />
       <div className="stack">
         <button className="primary full lg" onClick={() => navigate("online")}>
           📱 Play together
-          <div className="small" style={{ fontWeight: 400, opacity: 0.8 }}>Everyone on their own phone · 2–6 players</div>
+          <div className="small" style={{ fontWeight: 400, opacity: 0.8 }}>Everyone on their own phone · 4–8 players</div>
         </button>
         <button className="full lg" onClick={() => navigate("practice")}>
           🤖 Practice on one device
@@ -30,7 +32,9 @@ export function FoulPlayHome({ sub, navigate, onBack }: HomeProps) {
         </button>
       </div>
       <div className="spacer" />
-      <p className="center small muted">Every case is generated fresh and checked to have exactly one answer.</p>
+      <p className="center small muted">
+        Every case is generated fresh and checked to have exactly one answer. Still being balanced: expect changes.
+      </p>
     </div>
   );
 }
@@ -40,55 +44,49 @@ function Rules({ onBack }: { onBack: () => void }) {
     <div className="app">
       <div className="spread">
         <button className="ghost small" onClick={onBack}>← Back</button>
+        <span className="beta-pill">BETA</span>
       </div>
       <div className="stack">
         <h2>How to play</h2>
         <p>
-          Lord Ashcombe was found dead during his own party. Name the <b>killer</b>, the <b>weapon</b> and the{" "}
-          <b>room</b>.
+          Lord Ashcombe promised his guests an announcement at midnight. At a quarter past twelve he was found dead at
+          the foot of the stairs, moved there from wherever he was really killed. Every player is one of the guests, and
+          one of you did it.
         </p>
-        <h3>What everyone knows</h3>
+        <h3>Your role</h3>
         <p className="muted">
-          The case file: every suspect&apos;s looks, the rooms, and where each weapon was kept. Each weapon only fits
-          some murders: a revolver shot would be heard anywhere quiet, a candlestick blow needs a tall killer. Every
-          guest visited a few rooms over the evening: the murder happened in one the killer visited, and the killer
-          must have visited the room the weapon was taken from.
+          One player is the <b>killer</b> and knows everything. At five or more there may be an <b>accomplice</b>, who
+          knows who the killer is but not how. Everyone else is <b>innocent</b>, and knows only that they didn&apos;t
+          do it.
         </p>
-        <h3>Your hand</h3>
+        <h3>A turn</h3>
         <p className="muted">
-          You're dealt a hand of evidence cards, each worth 1 to 3 points: 3 for evidence that cuts broadly ("mud on
-          the victim&apos;s shoes: the murder happened outdoors"), 1 for narrow sightings ("the butler saw Dr. Moreau in
-          the Study"). Nobody&apos;s hand
-          solves the case alone. Everything together always points to exactly one answer.
+          <b>Investigate</b> one lead and draw its top card: examine the body, question a room&apos;s staff about who
+          was there, check a guest&apos;s alibi, or search a room. Only you see what you find; the table sees where you
+          looked. Then you may <b>testify</b> (put a card on the public record) or <b>confer</b> (show one player a card
+          and see one of theirs). You can hold four cards: over that, testify one or burn it.
         </p>
-        <h3>On your turn</h3>
+        <h3>The killer&apos;s tools</h3>
         <p className="muted">
-          <b>Ask the table</b> about two subjects: suspects, looks, weapons, rooms or room features. You pick them on the board. Everyone
-          else may offer you cards from their hand about either one, or nothing. You only see how many points and
-          cards each person offers, and nobody sees which subject they&apos;re about.
+          The killer investigates like anyone, but can <b>tamper</b> instead: bury a lead&apos;s top card, or plant a
+          forgery on it for the next person to find. Once a game they can <b>strike again</b>; the victim is found at the
+          end of the round, with everything they were carrying.
         </p>
+        <h3>Catching a lie</h3>
         <p className="muted">
-          Take any offers you like. The cards come to you, and you pay each person back with cards from your hand
-          worth at least as many points; fewer cards is fine. A card they&apos;ve already seen still counts, if
-          you&apos;re feeling mean.
+          Every card shows where it came from. If cards you&apos;ve seen can&apos;t all be true, your board says so; doubt
+          one and it works without it. A forgery is drawn by an innocent, but someone else followed that lead first.
         </p>
+        <h3>Inquests and dawn</h3>
         <p className="muted">
-          Or <b>accuse</b>: name the killer, the weapon and the room.
+          Instead of investigating, you can once call an <b>inquest</b>: name who, with what and where. If most of the
+          living agree, the game ends there. Otherwise, after three rounds the inspector arrives and the table votes
+          who, then with what, then where.
         </p>
-        <h3>Rounds</h3>
+        <h3>Winning</h3>
         <p className="muted">
-          Once everyone has had a turn, everyone discards half their hand and draws fresh cards. Discards go under the
-          deck. Your notebook keeps everything you&apos;ve ever seen, so a discard only changes what you can trade.
-        </p>
-        <h3>Competitive</h3>
-        <p className="muted">The first correct accusation wins. A wrong one puts you out, but you still offer and trade.</p>
-        <h3>Co-op</h3>
-        <p className="muted">The table shares a turn limit and one accusation.</p>
-        <h3>The notebook</h3>
-        <p className="muted">
-          Evidence is filed for you, alongside a board of every suspect, weapon and room. The host picks how much the
-          board helps: a full grid that crosses things off and tells you why, or notes only, where you cross things
-          off yourself.
+          The innocents win only if the accusation gets all three right. Anything else, and the killer (with the
+          accomplice) wins.
         </p>
       </div>
     </div>

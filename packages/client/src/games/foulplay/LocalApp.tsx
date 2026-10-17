@@ -5,17 +5,14 @@ import {
   answerText,
   botMove,
   createGame,
-  defaultTurnLimit,
+  defaultAccomplice,
   generateScenario,
   makeRng,
   projectView,
   reduce,
   whoMustAct,
   type Action,
-  type Assist,
-  type GameConfig,
   type GameState,
-  type Mode,
 } from "@party/foulplay";
 import type { RoomInfo } from "@party/core";
 import { FoulPlayTable } from "./Table.js";
@@ -35,20 +32,18 @@ interface SeatSetup {
 
 interface Setup {
   seats: SeatSetup[];
-  mode: Mode;
-  assist: Assist;
+  /** Unset: the default for the table's size. */
+  accomplice?: boolean;
 }
 
-const BOT_NAMES = ["Cipher", "Echo", "Falcon", "Juno", "Kestrel", "Lark"];
+const BOT_NAMES = ["Cipher", "Echo", "Falcon", "Juno", "Kestrel", "Lark", "Moss", "Nell"];
 /** Long enough to follow what a bot did, short enough not to drag. */
 const BOT_DELAY_MS = 900;
 const STORE_KEY = "foulplay.practice";
 
 function defaultSetup(): Setup {
   return {
-    seats: [{ name: "You", bot: false }, ...BOT_NAMES.slice(0, 2).map((name) => ({ name, bot: true }))],
-    mode: "competitive",
-    assist: "grid",
+    seats: [{ name: "You", bot: false }, ...BOT_NAMES.slice(0, 4).map((name) => ({ name, bot: true }))],
   };
 }
 
@@ -57,9 +52,9 @@ function loadSetup(): Setup {
     const raw = localStorage.getItem(STORE_KEY);
     if (raw) {
       const s = JSON.parse(raw) as Setup;
-      // A table saved before the gauge was dropped falls back to the full grid.
+      // A table saved for an older version of the game may be too small now.
       if (Array.isArray(s.seats) && s.seats.length >= MIN_PLAYERS && s.seats.length <= MAX_PLAYERS)
-        return { ...s, assist: s.assist === "notes" ? "notes" : "grid" };
+        return { seats: s.seats, accomplice: typeof s.accomplice === "boolean" ? s.accomplice : undefined };
     }
   } catch {
     /* fall back to the default table */
@@ -111,7 +106,8 @@ function SetupScreen({ onStart, onExit }: { onStart: (s: Setup) => void; onExit:
         <div className="big">🤖</div>
         <h2>Who&apos;s at the table?</h2>
         <p className="muted small">
-          One person and some bots for a solo game. More than one person passes the device between them.
+          One person and some bots for a solo game. More than one person passes the device between them. Four to
+          eight seats; one of them is the killer.
         </p>
       </div>
       <div className="stack">
@@ -131,21 +127,19 @@ function SetupScreen({ onStart, onExit }: { onStart: (s: Setup) => void; onExit:
         </button>
         <p className="muted small center" style={{ margin: 0 }}>Tap 🙂/🤖 to switch a seat between a person and a bot.</p>
 
-        <div className="btn-row">
-          <button className={s.mode === "competitive" ? "primary" : ""} onClick={() => setS({ ...s, mode: "competitive" })}>
-            ⚔️ Competitive
-          </button>
-          <button className={s.mode === "coop" ? "primary" : ""} onClick={() => setS({ ...s, mode: "coop" })}>
-            🤝 Co-op
-          </button>
-        </div>
-        <div className="btn-row">
-          {(["grid", "notes"] as const).map((a) => (
-            <button key={a} className={s.assist === a ? "primary" : ""} onClick={() => setS({ ...s, assist: a })}>
-              {a === "grid" ? "🧮 Full grid" : "📝 Notes only"}
-            </button>
-          ))}
-        </div>
+        {s.seats.length >= 5 && (
+          <div className="btn-row">
+            {[false, true].map((on) => (
+              <button
+                key={String(on)}
+                className={(s.accomplice ?? defaultAccomplice(s.seats.length)) === on ? "primary" : ""}
+                onClick={() => setS({ ...s, accomplice: on })}
+              >
+                {on ? "🤝 With an accomplice" : "🔪 Killer alone"}
+              </button>
+            ))}
+          </div>
+        )}
         {problem && <p className="err center" style={{ margin: 0 }}>{problem}</p>}
         <button className="primary full lg" disabled={!!problem} onClick={start}>
           Deal a case
@@ -157,13 +151,10 @@ function SetupScreen({ onStart, onExit }: { onStart: (s: Setup) => void; onExit:
 
 function deal(setup: Setup): GameState {
   const seed = Math.floor(Math.random() * 2 ** 31);
-  const scenario = generateScenario({ seed, players: setup.seats.length });
-  const config: GameConfig = {
-    mode: setup.mode,
-    assist: setup.assist,
-    ...(setup.mode === "coop" ? { turnLimit: defaultTurnLimit(setup.seats.length) } : {}),
-  };
-  return createGame(scenario, seatIds(setup).map((id, i) => ({ id, name: setup.seats[i].name })), config);
+  const n = setup.seats.length;
+  const accomplice = n >= 5 ? (setup.accomplice ?? defaultAccomplice(n)) : false;
+  const scenario = generateScenario({ seed, players: n, accomplice });
+  return createGame(scenario, seatIds(setup).map((id, i) => ({ id, name: setup.seats[i].name })), { accomplice });
 }
 
 const seatIds = (setup: Setup) => setup.seats.map((_, i) => `seat${i}`);
@@ -186,7 +177,7 @@ function Practice({ setup, onQuit }: { setup: Setup; onQuit: () => void }) {
     return () => clearTimeout(t);
   }, [state, setup]);
 
-  // Several seats can owe a move at once (offers, discards).
+  // Several seats can owe a move at once (votes).
   const owed = state ? whoMustAct(state) : [];
   const bot = owed.find((i) => setup.seats[i].bot);
   const people = owed.filter((i) => !setup.seats[i].bot);
@@ -246,7 +237,8 @@ function Practice({ setup, onQuit }: { setup: Setup; onQuit: () => void }) {
         </div>
         {peek && (
           <div className="pill" style={{ textAlign: "center" }}>
-            Answer: {answerText(state.scenario.dossier, state.scenario.secret.answer)}
+            {setup.seats[state.scenario.killer].name} did it: {answerText(state.scenario.dossier, state.scenario.secret.answer)}
+            {state.scenario.accomplice !== null && ` · accomplice ${setup.seats[state.scenario.accomplice].name}`}
           </div>
         )}
         {error && <div className="err">⚠️ {error}</div>}

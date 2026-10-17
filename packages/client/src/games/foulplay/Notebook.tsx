@@ -1,38 +1,15 @@
-import { useEffect, useState } from "react";
-import {
-  answerText,
-  clueText,
-  sameSubject,
-  type Answer,
-  type Dimension,
-  type PlayerView,
-  type Subject,
-} from "@party/foulplay";
-import { useAnalysis } from "./solver.js";
-import { nameOf, subjectsText } from "./text.js";
-import { Pips } from "./cards.js";
+import { useState } from "react";
+import { answerText, clueText, type Answer, type Clue, type Dimension, type PlayerView } from "@party/foulplay";
+import type { Notes } from "./solver.js";
+import { cardText, howText, originText } from "./text.js";
 
-/**
- * What the board is being used to pick, if anything. On your turn the board
- * is where you choose: two subjects to ask about, or who, how and where to
- * accuse. Otherwise it's your notes.
- */
-export type Picking =
-  | { mode: "ask"; subjects: Subject[]; onPick: (s: Subject) => void }
-  | { mode: "accuse"; answer: Partial<Answer>; onPick: (dim: Dimension, value: number) => void }
-  | null;
+/** On your turn, the board is also where you name an accusation for an inquest. */
+export type Picking = { answer: Partial<Answer>; onPick: (dim: Dimension, value: number) => void } | null;
 
-type Row =
-  | { kind: "dim"; dim: Dimension; label: string; subject: Subject["kind"] }
-  | { kind: "tag"; label: string; subject: "trait" | "feature" };
-
-/** Everything a case is about, in board order. */
-const ROWS: Row[] = [
-  { kind: "dim", dim: "agent", label: "🕴️ Suspects", subject: "agent" },
-  { kind: "tag", label: "👒 Looks", subject: "trait" },
-  { kind: "dim", dim: "device", label: "🔪 Weapons", subject: "device" },
-  { kind: "dim", dim: "room", label: "🚪 Rooms", subject: "room" },
-  { kind: "tag", label: "🏷️ Room features", subject: "feature" },
+const ROWS: { dim: Dimension; label: string }[] = [
+  { dim: "agent", label: "🕴️ Guests" },
+  { dim: "device", label: "🔪 Weapons" },
+  { dim: "room", label: "🚪 Rooms" },
 ];
 
 function names(view: PlayerView, dim: Dimension): string[] {
@@ -42,60 +19,30 @@ function names(view: PlayerView, dim: Dimension): string[] {
   return d.rooms.map((r) => r.name);
 }
 
-/** Hand-made crosses for notes-only games. Kept per device. */
-function useMarks(key: string) {
-  const [marks, setMarks] = useState<Set<string>>(() => {
-    try {
-      return new Set(JSON.parse(localStorage.getItem(key) ?? "[]") as string[]);
-    } catch {
-      return new Set();
-    }
-  });
-  useEffect(() => {
-    try {
-      localStorage.setItem(key, JSON.stringify([...marks]));
-    } catch {
-      /* storage full or blocked; the marks still work for this visit */
-    }
-  }, [key, marks]);
-  const toggle = (k: string) =>
-    setMarks((m) => {
-      const next = new Set(m);
-      if (next.has(k)) next.delete(k);
-      else next.add(k);
-      return next;
-    });
-  return { marks, toggle };
-}
-
-/** A short fingerprint of the deal, so marks from an earlier game in the same room don't carry over. */
-function dealKey(view: PlayerView, roomCode: string): string {
-  const text =
-    view.dossier.agents.map((a) => a.name + JSON.stringify(a.traits)).join("|") +
-    view.dossier.devices.map((x) => x.name + x.location).join("|");
-  let h = 0;
-  for (let i = 0; i < text.length; i++) h = (Math.imul(h, 31) + text.charCodeAt(i)) | 0;
-  return `foulplay.marks.${roomCode}.${(h >>> 0).toString(36)}`;
-}
-
-export function Notebook({ view, roomCode, picking }: { view: PlayerView; roomCode: string; picking: Picking }) {
-  const { solver, analysis, base } = useAnalysis(view);
-  const { marks, toggle } = useMarks(dealKey(view, roomCode));
+/**
+ * The board: every guest, weapon and room, crossed off as your evidence rules
+ * them out, worked from everything you've seen except what you doubt.
+ */
+export function Board({ view, notes, picking }: { view: PlayerView; notes: Notes; picking: Picking }) {
+  const { solver, analysis, base, clash, trusted } = notes;
   const [why, setWhy] = useState<{ dim: Dimension; value: number } | null>(null);
-  const auto = view.assist === "grid";
   const d = view.dossier;
-
-  const progress = base > 1 ? 1 - Math.log(analysis.remaining) / Math.log(base) : 1;
-  const explanation = why && auto ? solver.explain(view.you.known, why.dim, why.value) : null;
-
-  const tags = (subject: "trait" | "feature") =>
-    subject === "trait"
-      ? d.traits.map((t) => ({ s: { kind: "trait", id: t.id } as Subject, label: t.label }))
-      : d.features.map((f) => ({ s: { kind: "feature", id: f.id } as Subject, label: f.label }));
+  const progress = base > 1 && analysis.remaining > 0 ? 1 - Math.log(analysis.remaining) / Math.log(base) : 1;
+  const explanation = why ? solver.explain(trusted, why.dim, why.value) : null;
 
   return (
     <div className="stack">
-      {auto && (
+      {clash ? (
+        <div className="clash-box stack" style={{ gap: 6 }}>
+          <b>⚠️ These cards can&apos;t all be true</b>
+          <span className="muted small">
+            One of them is a lie, or a plant. Doubt one in your evidence below and the board will work without it.
+          </span>
+          {clash.map((c) => (
+            <div key={c.id} className="small">• {cardText(view, c)}</div>
+          ))}
+        </div>
+      ) : (
         <div className="card tight stack" style={{ gap: 8 }}>
           {analysis.solved ? (
             <>
@@ -104,7 +51,7 @@ export function Notebook({ view, roomCode, picking }: { view: PlayerView; roomCo
             </>
           ) : (
             <div className="spread">
-              <b>{analysis.remaining === 1 ? "One answer left" : `${analysis.remaining} possible answers`}</b>
+              <b>{analysis.remaining} possible answers</b>
               <span className="muted small">of {base}</span>
             </div>
           )}
@@ -114,63 +61,34 @@ export function Notebook({ view, roomCode, picking }: { view: PlayerView; roomCo
         </div>
       )}
 
-      {ROWS.map((row) => {
-        if (row.kind === "tag") {
-          // Looks and room features are only ever asked about, never accused.
-          const askable = picking?.mode === "ask";
-          return (
-            <div key={row.label} className="stack" style={{ gap: 6 }}>
-              <div className="muted small group-label">{row.label}</div>
-              <div className="choices">
-                {tags(row.subject).map(({ s, label }) => {
-                  const on = askable && picking.subjects.some((x) => sameSubject(x, s));
-                  return (
-                    <button
-                      key={label}
-                      className={`choice ${on ? "selected" : ""}`}
-                      disabled={!askable}
-                      onClick={() => askable && picking.onPick(s)}
-                    >
-                      {label}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          );
-        }
-        const { dim } = row;
+      {ROWS.map(({ dim, label }) => {
         const counts = analysis.marginals[dim];
         const open = counts.filter((n) => n > 0).length;
         return (
-          <div key={row.label} className="stack" style={{ gap: 6 }}>
-            <div className="muted small group-label">{row.label}</div>
+          <div key={dim} className="stack" style={{ gap: 6 }}>
+            <div className="muted small group-label">{label}</div>
             <div className="grid-cells">
               {names(view, dim).map((name, value) => {
-                const key = `${dim}:${value}`;
-                const subject = { kind: row.subject, id: value } as Subject;
-                const out = auto ? counts[value] === 0 : marks.has(key);
-                const sure = auto && counts[value] > 0 && open === 1;
-                const picked =
-                  picking?.mode === "ask"
-                    ? picking.subjects.some((x) => sameSubject(x, subject))
-                    : picking?.mode === "accuse"
-                      ? picking.answer[dim] === value
-                      : false;
+                const out = !clash && counts[value] === 0;
+                const sure = !clash && counts[value] > 0 && open === 1;
+                const dead = dim === "agent" && !view.players[value].alive;
+                const picked = picking?.answer[dim] === value;
                 const onClick = () => {
-                  if (picking?.mode === "ask") picking.onPick(subject);
-                  else if (picking?.mode === "accuse") picking.onPick(dim, value);
-                  else if (auto) setWhy(out && !(why?.dim === dim && why.value === value) ? { dim, value } : null);
-                  else toggle(key);
+                  if (picking) picking.onPick(dim, value);
+                  else setWhy(out && !(why?.dim === dim && why.value === value) ? { dim, value } : null);
                 };
                 return (
                   <button
-                    key={key}
+                    key={value}
                     className={`cell ${out ? "out" : ""} ${sure ? "sure" : ""} ${picked ? "picked" : ""}`}
+                    disabled={!!picking && dim === "agent" && dead}
                     onClick={onClick}
                   >
-                    <span className="name">{name}</span>
-                    <span className="mark">{out ? "✗" : sure ? "✓" : auto ? counts[value] : ""}</span>
+                    <span className="name">
+                      {dead ? "☠️ " : ""}
+                      {name}
+                    </span>
+                    <span className="mark">{out ? "✗" : sure ? "✓" : clash ? "" : counts[value]}</span>
                   </button>
                 );
               })}
@@ -179,9 +97,9 @@ export function Notebook({ view, roomCode, picking }: { view: PlayerView; roomCo
               <div className="why">
                 <b>Why {names(view, dim)[why.value]} is ruled out:</b>
                 {explanation.length === 0 ? (
-                  <div>The case file alone rules it out: no weapon fits.</div>
+                  <div>The case file alone rules it out.</div>
                 ) : (
-                  explanation.map((c) => <div key={c.id}>• {clueText(d, c)}</div>)
+                  explanation.map((c) => <div key={c.id}>• {cardText(view, c)}</div>)
                 )}
               </div>
             )}
@@ -190,48 +108,82 @@ export function Notebook({ view, roomCode, picking }: { view: PlayerView; roomCo
       })}
       {!picking && (
         <p className="muted small center" style={{ margin: 0 }}>
-          {auto
-            ? "Numbers are how many answers each one still appears in. Tap a crossed-off one to see why."
-            : "Tap a name to cross it off. Only you see your marks."}
+          Numbers are how many answers each one still appears in. Tap a crossed-off one to see why.
         </p>
       )}
-
-      <ClueList view={view} />
     </div>
   );
 }
 
-function ClueList({ view }: { view: PlayerView }) {
-  const d = view.dossier;
-  const pub = new Set(view.publicClues);
-  const known = [...view.you.known].reverse(); // newest first
-  const hand = new Set(view.you.hand);
+/** One card: what it says, where it came from, how you came by it. */
+export function CardView({
+  view,
+  clue,
+  notes,
+  onClick,
+  selected,
+}: {
+  view: PlayerView;
+  clue: Clue;
+  notes?: Notes;
+  onClick?: () => void;
+  selected?: boolean;
+}) {
+  const doubted = notes?.doubts.has(clue.id);
+  const clashing = notes?.clash?.some((c) => c.id === clue.id);
+  const body = (
+    <>
+      <span className="row">
+        <span>{clueText(view.dossier, clue)}</span>
+      </span>
+      <span className="src">
+        {originText(view, view.origins[clue.id])}
+        {view.you.how[clue.id] && view.you.how[clue.id].via !== "dealt" && view.you.how[clue.id].via !== "drew"
+          ? ` · ${howText(view, view.you.how[clue.id])}`
+          : ""}
+      </span>
+    </>
+  );
+  const cls = `clue ${doubted ? "doubted" : ""} ${clashing ? "clash" : ""}`;
+  if (onClick)
+    return (
+      <button className={`${cls} pickable ${selected ? "selected" : ""}`} onClick={onClick}>
+        {body}
+      </button>
+    );
   return (
+    <div className={cls}>
+      {body}
+      {notes && (
+        <div style={{ marginTop: 6 }}>
+          <button className="ghost mini" onClick={() => notes.toggleDoubt(clue.id)}>
+            {doubted ? "Trust it again" : "🤨 Doubt this"}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Everything you've seen: your hand, the public record, and what you were shown. */
+export function Evidence({ view, notes }: { view: PlayerView; notes: Notes }) {
+  const byId = new Map(view.you.known.map((c) => [c.id, c]));
+  const hand = view.you.hand.map((id) => byId.get(id)!).filter(Boolean);
+  const onRecord = new Set(view.record.map((r) => r.clue));
+  const record = [...view.record].reverse().map((r) => byId.get(r.clue)!).filter(Boolean);
+  const inHand = new Set(view.you.hand);
+  const seen = [...view.you.known].reverse().filter((c) => !inHand.has(c.id) && !onRecord.has(c.id));
+  const section = (title: string, list: Clue[], empty: string) => (
     <div className="stack" style={{ gap: 6 }}>
-      <div className="muted small group-label">🗂️ Your evidence ({known.length})</div>
-      {known.map((c) => {
-        const src = view.you.sources[c.id];
-        const origin = !src
-          ? pub.has(c.id)
-            ? "Everyone has this"
-            : "Dealt to you"
-          : src.via === "draw"
-            ? `Drawn after round ${src.round}`
-            : src.via === "offer"
-              ? `Offered by ${nameOf(view, src.from)} when you asked about ${subjectsText(d, src.subjects)}`
-              : `Paid back by ${nameOf(view, src.from)} when they asked about ${subjectsText(d, src.subjects)}`;
-        const where = pub.has(c.id) ? origin : `${origin} · ${hand.has(c.id) ? "in your hand" : "no longer in hand"}`;
-        const fresh = src && (src.via === "draw" ? src.round === view.round - 1 : src.turn === view.turnsTaken - 1);
-        return (
-          <div key={c.id} className={`clue ${fresh ? "new" : ""}`}>
-            <span className="row">
-              <span>{clueText(d, c)}</span>
-              {!pub.has(c.id) && <Pips n={c.points} />}
-            </span>
-            <span className="src">{where}</span>
-          </div>
-        );
-      })}
+      <div className="muted small group-label">{title}</div>
+      {list.length ? list.map((c) => <CardView key={c.id} view={view} clue={c} notes={notes} />) : <span className="muted small">{empty}</span>}
+    </div>
+  );
+  return (
+    <div className="stack">
+      {section(`🃏 In your hand (${hand.length} of ${view.handLimit})`, hand, "Nothing in your hand.")}
+      {section("📜 The public record", record, "Nobody has testified yet.")}
+      {section("👀 Seen, not held", seen, "Nothing else yet.")}
     </div>
   );
 }

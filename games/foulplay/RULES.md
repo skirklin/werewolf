@@ -1,7 +1,13 @@
-# Foul Play: rules draft (hidden-killer version)
+# Foul Play: rules
 
-This is a draft for discussion. Nothing in it is built yet. Where a rule is
-still a guess, it's marked **Open**, with the option I'd start with.
+These are the rules as built (in beta). Where a rule is still a guess, it's
+marked **Open**, with the option the game currently uses.
+
+Changed from the first draft while building: a turn is now investigate
+*then* share, rather than one of the two, and each lead answers a specific
+question rather than holding random evidence. Bot simulations showed that
+with one action a turn, and evidence spread thin, the innocents almost never
+had enough by dawn.
 
 ## The story
 
@@ -103,7 +109,7 @@ A card is one fact, and every card shows where it came from:
 | Memory | Your starting hand | What your character remembers seeing. |
 | Testimony | Questioning the staff about a room | Who was or wasn't seen there. |
 | Alibi | Checking a player's alibi | Where that guest was. |
-| Forensics | Examining the body | The killer's looks; what the weapon was or wasn't. |
+| Forensics | Examining the body | The killer's looks; what kind of room it happened in. |
 | Scene | Searching a room | Whether this is the real scene; whether anything is missing from here. |
 
 All cards are true, except forgeries. A forgery looks exactly like a true
@@ -146,38 +152,41 @@ The generator guarantees three things:
 ## A night
 
 The night lasts **3 rounds**. In each round, every living player takes one
-turn. On your turn you do exactly one thing.
+turn. A turn has two steps.
 
 ### 1. Investigate
 
 Choose a lead and draw its top card into your hand. Only you see the card.
 The table sees which lead you followed, for example "Sam questioned the staff
-about the Library".
+about the Library". Each lead answers its own question:
 
-The leads are:
+- **Examine the body:** the killer's looks, and what kind of room it happened
+  in (mud on his shoes: outdoors).
+- **Question the staff** about a room: exactly who set foot there all
+  evening. Not every room's staff have something to say.
+- **Check an alibi:** exactly where that guest went all evening. Not every
+  guest's can be checked.
+- **Search a room:** whether this is where it happened, and whether a weapon
+  kept there is missing.
 
-- **Question the staff** about a room.
-- **Check an alibi** of another player.
-- **Examine the body.**
-- **Search a room.**
+Most leads hold one card, so once someone has followed a lead, the next
+person usually finds nothing: *"Search the Library: nothing more to find
+there."* That's information too.
 
-When a lead runs dry, you learn that instead: *"The staff have nothing more
-to say about the Library."* That's information too.
+Instead of investigating, you can **call an inquest** (see below).
 
-### 2. Confer
+### 2. Share, if you like
 
-Choose another player. Each of you secretly picks one card from your hand,
-and you show them to each other at the same time. Both cards stay where they
-were: you each learn the other's fact, but you can't prove it.
+Then do one of these, or keep your cards to yourself:
 
-The table sees who conferred with whom, but not what was shown.
+- **Testify.** Put one card from your hand face up in the **public record**.
+  Everyone's notebook takes it in, and the card's source stays printed on it.
+- **Confer.** Choose another player and show them one card; they show you
+  one back. Both cards stay where they were: you each learn the other's fact,
+  but you can't prove it. The table sees who conferred with whom, but not
+  what was shown.
 
-### 3. Testify
-
-Put one card from your hand face up in the **public record**. Everyone's
-notebook takes it in, and the card's source stays printed on it.
-
-### 4. Call an inquest
+### Calling an inquest
 
 Name the full answer: who, with what, and where. Everyone still alive votes
 yes or no.
@@ -292,16 +301,15 @@ After the game, the table sees the full story:
 
 ## Tuning targets
 
-I would check these with bot simulations, the same way as the current game:
+Checked with bot simulations (`npm run foulplay -- --sim 150 --players 5`):
 
-- The killer wins **35–45%** of games.
+- The killer should win **35–45%** of games between people. Against the
+  baseline bots, which play worse than people, the killer currently wins
+  about 45% at 5 players and 50–63% at 4 and at 6–8.
 - Going into dawn, the evidence the table has made public should usually
-  still allow **2–3 possible answers**. The evidence everyone has privately seen,
-  pooled together, should usually solve the case. The gap between the two
-  is the game.
-- Under 1 in 10 games end at a dawn tie.
-- A turn should take under a minute. Most turns are one tap plus a moment
-  to read a card.
+  still allow **2–3 possible answers**. It does: the median is 2–3.
+- Under 1 in 10 games end at a dawn tie. Currently 0–3%.
+- A turn should take under a minute.
 
 ## Open questions
 
@@ -335,30 +343,3 @@ I would check these with bot simulations, the same way as the current game:
      - Lady Ashcombe: search a room and draw two cards.
      - Colonel Petrov: make a player testify.
      - Mr. Okafor: count how many forgeries are in a player's hand.
-
-## What carries over from the current game
-
-**Kept:**
-
-- The case generator and solver, re-aimed at players instead of a separate
-  suspect list.
-- The looks, weapons, rooms and room features.
-- The automatic notebook and board.
-- Card provenance.
-- Practice mode with bots.
-
-**Dropped:**
-
-- Points, offers and paybacks.
-- The discard and redraw rounds.
-- Co-op mode. The killer is now the opponent.
-
-**New:**
-
-- Roles.
-- Leads, with their own evidence stacks.
-- The public record.
-- Contradiction detection.
-- Tampering, forgeries and the second strike.
-- Inquests and the dawn vote.
-- Chat for online play, reusing Werewolf's.

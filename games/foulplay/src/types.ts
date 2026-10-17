@@ -1,11 +1,11 @@
 /**
- * Core types for Foul Play: a deduction game where someone was murdered during
- * a party, and the players trade evidence to work out who did it, with what,
- * and where.
+ * Core types for Foul Play: Lord Ashcombe has been murdered during his own
+ * party, every player is one of the guests, and one of them did it.
  *
- * The engine itself is theme-agnostic: an "agent" is a suspect, a "device" is
- * the item used (here, the weapon), and the "handoff" is the act (the murder).
- * The words players read come from the content set's `Theme` and evidence.
+ * The solver underneath is theme-agnostic: an "agent" is a suspect, a
+ * "device" is the item used (here, the weapon), and the "handoff" is the act
+ * (the murder). The words players read come from the content set's `Theme`
+ * and evidence.
  *
  * Everything here is plain data so a whole scenario can be serialised, sent
  * over the wire, and replayed from its seed.
@@ -39,6 +39,8 @@ export interface TraitDef {
 export interface Agent {
   id: AgentId;
   name: string;
+  /** Why they might have wanted him dead. Flavour only, never evidence. */
+  motive: string;
   /** trait id → value id. Every agent has a value for every trait. */
   traits: Record<string, string>;
 }
@@ -83,7 +85,6 @@ export interface Device {
   blurb: string;
 }
 
-/** Everything every player knows from the start. */
 /** The words a content set uses for the engine's roles. */
 export interface Theme {
   /** "the killer" */
@@ -97,11 +98,13 @@ export interface Theme {
   story: string;
 }
 
+/** Everything every player knows from the start. */
 export interface Dossier {
   title: string;
   theme: Theme;
   traits: TraitDef[];
   features: FeatureDef[];
+  /** The guests at the table, in seat order: agent i is seat i's character. */
   agents: Agent[];
   rooms: Room[];
   devices: Device[];
@@ -114,14 +117,14 @@ export interface Answer {
   room: RoomId;
 }
 
-/** The ground truth behind a scenario. Never sent to a player mid-game. */
+/** The ground truth behind a scenario. Never sent to an innocent mid-game. */
 export interface Secret {
   answer: Answer;
   /** visits[agent] = the rooms that agent set foot in during the evening. */
   visits: RoomId[][];
 }
 
-/** A single piece of intelligence. Always true of the scenario it came from. */
+/** A single statement about the case. True, unless it's a forgery. */
 export type ClueBody =
   /** "The butler saw X in R." / "The staff swear X never set foot in R." */
   | { kind: "visited"; agent: AgentId; room: RoomId; is: boolean }
@@ -136,32 +139,54 @@ export type ClueBody =
   /** "No trace on D: not the weapon." */
   | { kind: "notDevice"; device: DeviceId }
   /** "X has a solid alibi." */
-  | { kind: "notAgent"; agent: AgentId };
+  | { kind: "notAgent"; agent: AgentId }
+  /** "The staff saw only X and Y in R all evening." Exactly who set foot there. */
+  | { kind: "visitors"; room: RoomId; agents: AgentId[] }
+  /** "X's evening: the Bar and the Library, nowhere else." Exactly where they went. */
+  | { kind: "whereabouts"; agent: AgentId; rooms: RoomId[] }
+  /** "Signs of a struggle: it happened in R." */
+  | { kind: "isRoom"; room: RoomId }
+  /** "D is missing from where it was kept." */
+  | { kind: "isDevice"; device: DeviceId };
 
-/** Printed on every clue: how much it cuts on its own. 3 cuts broadly; 1 is narrow. */
-export type Points = 1 | 2 | 3;
+export type Clue = ClueBody & { id: number };
 
-export type Clue = ClueBody & { id: number; points: Points };
+/**
+ * Somewhere to look for evidence. Each lead has its own small stack of
+ * cards, prepared by the generator; the second body only exists once the
+ * killer strikes again.
+ */
+export type Lead =
+  | { kind: "staff"; room: RoomId }
+  | { kind: "alibi"; agent: AgentId }
+  | { kind: "body" }
+  | { kind: "search"; room: RoomId }
+  | { kind: "body2" };
 
-/** Something a player can ask another player about. */
-export type Subject =
-  | { kind: "agent"; id: AgentId }
-  | { kind: "room"; id: RoomId }
-  | { kind: "device"; id: DeviceId }
-  | { kind: "trait"; id: string }
-  | { kind: "feature"; id: string };
+/** A forgery the killer (or accomplice) can plant, and the lead it fits. */
+export interface Forgery {
+  clue: number;
+  lead: Lead;
+}
 
-/** A complete, solvable game: the world, its truth, and how the clues were dealt. */
+/** A complete, solvable case: the world, its truth, and where the evidence lies. */
 export interface Scenario {
   seed: number;
   dossier: Dossier;
   secret: Secret;
-  /** Every clue in play. `clues[i].id === i`. */
+  /** The killer's seat, and the accomplice's (or null). */
+  killer: number;
+  accomplice: number | null;
+  /** Every card in the case, forgeries included. `clues[i].id === i`. */
   clues: Clue[];
-  /** Clue ids everyone starts with. */
-  publicClues: number[];
-  /** hands[seat] = clue ids that seat starts with (excluding public ones). */
+  /** Ids of the cards that are false. Secret. */
+  forged: number[];
+  /** hands[seat] = the memory cards that seat starts with. */
   hands: number[][];
-  /** The draw pile, top first: replacements dealt at the end of each round. */
-  deck: number[];
+  /** Each lead's stack, top first, keyed by `leadKey`. */
+  stacks: Record<string, number[]>;
+  /** Kept back for the second body, if there is one. */
+  secondBody: number[];
+  /** What the killer and the accomplice can plant. */
+  forgeries: { killer: Forgery[]; accomplice: Forgery[] };
 }

@@ -1,5 +1,5 @@
-import { useMemo } from "react";
-import { Solver, type Analysis, type Dossier, type PlayerView } from "@party/foulplay";
+import { useEffect, useMemo, useState } from "react";
+import { Solver, selfKnowledge, type Analysis, type Clue, type Dossier, type PlayerView } from "@party/foulplay";
 
 /**
  * One solver per dossier. Views arrive as fresh objects on every broadcast, so
@@ -19,11 +19,69 @@ export function solverFor(d: Dossier): Solver {
   return s;
 }
 
-export function useAnalysis(view: PlayerView): { solver: Solver; analysis: Analysis; base: number } {
+/** A short fingerprint of the deal, so doubts from an earlier game don't carry over. */
+function dealKey(view: PlayerView, roomCode: string): string {
+  const text = view.dossier.agents.map((a) => a.name).join("|") + view.dossier.devices.map((x) => x.name + x.location).join("|");
+  let h = 0;
+  for (let i = 0; i < text.length; i++) h = (Math.imul(h, 31) + text.charCodeAt(i)) | 0;
+  return `foulplay.doubts.${roomCode}.${view.you.id}.${(h >>> 0).toString(36)}`;
+}
+
+/** Cards you've set aside as untrustworthy. Kept on this device only. */
+function useDoubts(key: string) {
+  const [doubts, setDoubts] = useState<Set<number>>(() => load(key));
+  useEffect(() => setDoubts(load(key)), [key]);
+  const toggle = (id: number) =>
+    setDoubts((d) => {
+      const next = new Set(d);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      try {
+        localStorage.setItem(key, JSON.stringify([...next]));
+      } catch {
+        /* storage blocked: the doubt still holds for this visit */
+      }
+      return next;
+    });
+  return { doubts, toggle };
+}
+
+function load(key: string): Set<number> {
+  try {
+    return new Set(JSON.parse(localStorage.getItem(key) ?? "[]") as number[]);
+  } catch {
+    return new Set();
+  }
+}
+
+export interface Notes {
+  solver: Solver;
+  /** What your role tells you, and everything you've seen less what you doubt: what the board works from. */
+  trusted: Clue[];
+  analysis: Analysis;
+  /** Answers possible before any evidence. */
+  base: number;
+  /** When the trusted cards can't all be true: a small set that clashes. */
+  clash: Clue[] | null;
+  doubts: Set<number>;
+  toggleDoubt: (id: number) => void;
+}
+
+export function useNotes(view: PlayerView, roomCode: string): Notes {
   const solver = solverFor(view.dossier);
-  const ids = view.you.known.map((c) => c.id).join(",");
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const analysis = useMemo(() => solver.analyze(view.you.known), [solver, ids]);
-  const base = useMemo(() => solver.remaining([]), [solver]);
-  return { solver, analysis, base };
+  const { doubts, toggle } = useDoubts(dealKey(view, roomCode));
+  const key = view.you.known.map((c) => c.id).join(",") + "|" + [...doubts].join(",");
+  return useMemo(() => {
+    const trusted = [...selfKnowledge(view), ...view.you.known.filter((c) => !doubts.has(c.id))];
+    return {
+      solver,
+      trusted,
+      analysis: solver.analyze(trusted),
+      base: solver.remaining([]),
+      clash: solver.conflict(trusted),
+      doubts,
+      toggleDoubt: toggle,
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [solver, key]);
 }

@@ -390,26 +390,30 @@ describe("werewolf in a room", () => {
   });
 });
 
-describe("dead drop in a room", () => {
-  it("plays a bot game to a correct accusation", () => {
-    const { room, clients } = seatPlayers<DropView>(3, "foulplay");
-    expect(() => room.handle(clients[0].playerId, { type: "startGame", config: { mode: "chaos" } })).toThrow(
+describe("foul play in a room", () => {
+  it("plays a bot game through to the verdict", () => {
+    const { room, clients } = seatPlayers<DropView>(5, "foulplay");
+    expect(() => room.handle(clients[0].playerId, { type: "startGame", config: { accomplice: "maybe" } })).toThrow(
       GameError
     );
-    room.handle(clients[0].playerId, { type: "startGame", config: { mode: "competitive" } });
-    const view = clients[0].view!;
-    expect(view.answer).toBeNull();
-    expect(JSON.stringify(view)).not.toContain("schedule");
+    room.handle(clients[0].playerId, { type: "startGame", config: {} });
+    const views = clients.map((c) => c.view!);
+    expect(views.filter((v) => v.you.role === "killer")).toHaveLength(1);
+    // Innocents get no hint of the truth.
+    for (const v of views.filter((v) => v.you.role === "innocent")) {
+      expect(v.guilty).toBeNull();
+      expect(v.reveal).toBeNull();
+    }
 
-    const solver = new Solver(view.dossier);
+    const solver = new Solver(views[0].dossier);
     const rng = makeRng(3);
-    for (let step = 0; step < 2000 && !clients[0].view!.answer; step++) {
+    for (let step = 0; step < 2000 && !clients[0].view!.reveal; step++) {
       const mover = clients.find((c) => botMove(c.view!, solver, rng));
       expect(mover).toBeDefined();
       act(room, mover!, botMove(mover!.view!, solver, rng));
     }
     const end = clients[0].view!;
-    expect(end.phase).toMatchObject({ kind: "over", reason: "solved" });
+    expect(end.phase.kind).toBe("over");
     expect(clients[0].room!.over).toBe(true);
     expect(finished).toEqual([{ game: "foulplay", record: null, ids: clients.map((c) => c.playerId) }]);
   }, 30_000);

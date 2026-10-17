@@ -40,14 +40,18 @@ export class Solver {
     return this.space.dossier;
   }
 
-  /** The candidates a clue allows. Cached when the clue has an id. */
+  /**
+   * The candidates a clue allows. Cached for real cards; negative ids are
+   * what a player's role tells them, which differs from player to player.
+   */
   maskOf(clue: ClueBody & { id?: number }): Bitset {
-    if (clue.id !== undefined) {
-      const hit = this.masks.get(clue.id);
+    const cache = clue.id !== undefined && clue.id >= 0;
+    if (cache) {
+      const hit = this.masks.get(clue.id!);
       if (hit) return hit;
     }
     const m = this.space.mask((i) => holds(this.space, clue, i));
-    if (clue.id !== undefined) this.masks.set(clue.id, m);
+    if (cache) this.masks.set(clue.id!, m);
     return m;
   }
 
@@ -79,6 +83,42 @@ export class Solver {
       marginals,
       solved: keys.length === 1 ? this.space.answerOfKey(keys[0]) : null,
     };
+  }
+
+  /** Can these cards all be true at once? */
+  consistent(clues: readonly ClueBody[]): boolean {
+    return !this.candidates(clues).isEmpty();
+  }
+
+  /**
+   * When cards can't all be true, a smallest-we-can-find set of them that
+   * clashes: drop each card in turn and keep it out if the rest still clash.
+   * Null when they're consistent.
+   */
+  conflict<C extends ClueBody>(clues: readonly C[]): C[] | null {
+    if (this.consistent(clues)) return null;
+    let set = clues.slice();
+    for (const c of clues.slice().reverse()) {
+      const without = set.filter((x) => x !== c);
+      if (!this.consistent(without)) set = without;
+    }
+    return set;
+  }
+
+  /**
+   * The cards to go on when some can't be trusted: take them in order of
+   * trust, and set aside any that would contradict those already taken.
+   */
+  believable<C extends ClueBody>(byTrust: readonly C[]): C[] {
+    const out: C[] = [];
+    let set = this.space.base;
+    for (const c of byTrust) {
+      const next = set.and(this.maskOf(c));
+      if (next.isEmpty()) continue;
+      out.push(c);
+      set = next;
+    }
+    return out;
   }
 
   /** How many distinct answers a set of clues leaves. */

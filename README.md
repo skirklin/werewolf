@@ -30,9 +30,10 @@ the first game and room for more.
   per-player view redaction. This is the single source of truth for the rules
   and is fully unit-tested. The same engine runs in the browser for
   pass-the-device play, so the two modes can never disagree on the rules.
-- **`games/foulplay`** — a second game, still being tuned: a murder-mystery
-  deduction game with generated, solver-verified cases, played each on your own
-  phone or practised on one. See [its design notes](games/foulplay/DESIGN.md).
+- **`games/foulplay`** — a second game, in beta: a hidden-killer murder
+  mystery with generated, solver-verified cases, played each on your own phone
+  or practised on one. See [its rules](games/foulplay/RULES.md) and
+  [design notes](games/foulplay/DESIGN.md).
 
 ### Adding a game
 
