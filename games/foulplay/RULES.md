@@ -115,16 +115,24 @@ A card is one fact, and every card shows where it came from:
 All cards are true, except forgeries. A forgery looks exactly like a true
 card, including its claimed source.
 
-### Knowing versus proving
+### Talk is free; cards are proof
 
-Your notebook automatically records every card you have *seen*. It tracks
-what is still possible, and it flags contradictions.
+You can say anything, to anyone, at any time: what you found, what you
+suspect, who you think is lying. Nothing you say is checked, and the killer
+will lie. Playing apart, you'll need a call; the app has no chat.
 
-Only cards you *hold* can be shown to the table. That's the difference
-between telling the table "I saw an alibi card clearing Petrov" and putting
-the card down where everyone can read it. When the table is down to two or
-three suspects, the argument is about what you can prove and where your
-proof came from.
+A card is proof. Your notebook records every card you have *seen*, but only
+cards you *hold* can be shown, and a shown card carries where it came from.
+That's the difference between "I checked Petrov's alibi and it clears him"
+and putting the card down where everyone can read it. So the real moves are:
+
+- **Claim**, out loud, as much as you like.
+- **Ask for proof.** "Then testify it." Refusing, or burning a card, looks bad.
+- **Prove it**, by testifying or conferring (see below), when it's worth a
+  turn's share.
+
+When the table is down to two or three suspects, the argument is about
+what you can prove and where your proof came from.
 
 ## Setup
 
@@ -179,16 +187,19 @@ body and a room search usually do.
 
 Instead of investigating, you can **call an inquest** (see below).
 
-### 2. Share, if you like
+### 2. Prove something, if you like
 
-Then do one of these, or keep your cards to yourself:
+Talking is free and needs no turn. Proof does. Then do one of these, or
+keep your cards to yourself:
 
 - **Testify.** Put one card from your hand face up in the **public record**.
-  Everyone's notebook takes it in, and the card's source stays printed on it.
-- **Confer.** Choose another player and show them one card; they show you
-  one back. Both cards stay where they were: you each learn the other's fact,
-  but you can't prove it. The table sees who conferred with whom, but not
-  what was shown.
+  Everyone reads the card itself, with its source printed on it. It's the
+  only way to prove something to the whole table, and the card leaves your
+  hand.
+- **Confer.** Prove a card to one player: show it to them, and they show you
+  one back. Both cards stay where they were. The table sees that you
+  conferred, not what was shown, so what either of you says about it
+  afterwards is only your word again.
 
 ### Calling an inquest
 

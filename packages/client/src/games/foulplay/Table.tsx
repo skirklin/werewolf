@@ -126,14 +126,16 @@ function RolePanel({ view }: { view: PlayerView }) {
       </div>
       {!g && (
         <span className="muted small">
-          You know you didn&apos;t do it. Find out who did, with what and where, before dawn.
+          You know you didn&apos;t do it. Find out who did, with what and where, before dawn. Talk freely, and ask
+          for proof: anyone can claim anything.
         </span>
       )}
       {g?.answer && <span>It was you, {answerText(d, g.answer).replace(/^[^,]+, /, "")}.</span>}
       {g && view.you.role === "killer" && (
         <span className="muted small">
           {g.accomplice !== null ? `Your accomplice is ${seatName(view, g.accomplice)}.` : "You have no accomplice."}{" "}
-          You win unless the table names all three at dawn.
+          You win unless the table names all three at dawn. Lie out loud as much as you like; a forgery is a lie
+          that survives &ldquo;show me the card&rdquo;.
         </span>
       )}
       {g && view.you.role === "accomplice" && (
@@ -273,7 +275,8 @@ function InvestigatePanel({ view, act, onInquest }: { view: PlayerView; act: Act
     <div className="card stack">
       <b>Your turn: investigate</b>
       <p className="muted small" style={{ margin: 0 }}>
-        Pick a lead and draw its top card. Only you see what it says; the table sees where you looked.
+        Pick a lead and draw its top card. Only you see it; the table sees where you looked. Tell them what you
+        like about it: only a testified card is proof.
       </p>
       <div className="leads">
         {leadButton({ kind: "body" }, "🩸 Examine the body")}
@@ -435,7 +438,7 @@ function SharePanel({ view, notes, act }: { view: PlayerView; notes: Notes; act:
   return (
     <div className="card stack">
       <LastFinding view={view} notes={notes} />
-      <b>Share something?</b>
+      <b>Prove something?</b>
       <div className="btn-row">
         <button className={mode === "testify" ? "primary" : ""} disabled={!hand.length} onClick={() => setMode("testify")}>
           📜 Testify
@@ -447,8 +450,8 @@ function SharePanel({ view, notes, act }: { view: PlayerView; notes: Notes; act:
       {mode && (
         <p className="muted small" style={{ margin: 0 }}>
           {mode === "testify"
-            ? "Put a card on the public record. Everyone reads it, with where it came from, and it leaves your hand."
-            : "Show one card to one player, and they show you one back. You both keep your cards; the table only sees that you talked."}
+            ? "Put a card on the public record: proof for the whole table, with where it came from. It leaves your hand."
+            : "Prove a card to one player, and see one of theirs. You both keep your cards; the table only sees that you conferred."}
         </p>
       )}
       {mode === "confer" && (
