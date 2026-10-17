@@ -34,9 +34,29 @@ flavour: they never count as evidence.
 | Colonel Petrov | An old army friend who had been paying for his silence for years. |
 | Madame Duval | The medium. Lord Ashcombe had promised to expose her as a fraud. |
 
-Each game deals every guest a random look: hat, coat, height, writing hand,
-glasses and gloves. Who matches the evidence therefore changes from game to
-game.
+Each guest's looks are fixed, the same every game, so you can learn the cast
+like the characters in Clue:
+
+| Guest | Hat | Coat | Height | Writes with | Glasses | Gloves |
+| --- | --- | --- | --- | --- | --- | --- |
+| Lady Ashcombe | none | red | short | right | no | yes |
+| Julian Ashcombe | fedora | black | tall | left | no | no |
+| Dr. Moreau | none | grey | tall | right | yes | yes |
+| Mr. Okafor | fedora | camel | tall | right | no | yes |
+| Miss Tanaka | beret | black | short | left | yes | no |
+| Signor Bellini | beret | camel | short | right | yes | yes |
+| Colonel Petrov | none | grey | tall | left | no | no |
+| Madame Duval | beret | red | short | right | yes | no |
+
+Each trait splits the cast roughly in half, and no two guests share more
+than four of the six traits.
+
+What changes from game to game is the evidence. The generator first picks
+the killer, the weapon and the room, then writes evidence that fits them.
+For example, if Petrov did it, the body might show he was strangled by
+someone tall, or a waiter might remember a grey coat on the Terrace. Only
+the guests actually at the table are suspects, so the evidence only has to
+tell those players apart.
 
 ### What the table is solving
 
@@ -47,10 +67,14 @@ The case has three parts:
 - **Where:** the real scene, one of six rooms. The Hall is never the answer,
   because the body was moved there.
 
-Only *who* is voted on at the end. *With what* and *where* are how you get to
-*who*: the weapon has to fit the room (the revolver needs a crowded room to
+To win, the innocents have to name all three. Catching the right person
+with the wrong weapon or the wrong room isn't enough. The three parts are
+linked, so each helps you find the others. The weapon has to fit the room (the revolver needs a crowded room to
 hide the shot; the garden shears are kept outdoors), and the body carries
-traces of the real scene (mud on his shoes, ash on his sleeve).
+traces of the real scene (mud on his shoes, ash on his sleeve). Some weapons
+also need a particular kind of person: only someone tall could have swung
+the candlestick, and only someone in gloves could have handled the poison
+without leaving a mark.
 
 ## Roles
 
@@ -98,9 +122,12 @@ proof came from.
 
 ## Setup
 
-1. Deal the characters, one per player, with random looks.
-2. Generate the case: the killer, the weapon, the scene, and where every
-   guest went during the evening.
+1. Deal the characters, one per player.
+2. Generate the case:
+   - Pick the killer, the weapon and the scene. The weapon has to fit the
+     killer's looks and the room.
+   - Decide where every guest went during the evening.
+   - Write the evidence to fit all of that.
 3. Prepare a small stack of evidence for each lead (see Investigate below).
    Most leads have 1–3 cards; some leads have nothing.
 4. Deal the starting hands:
@@ -152,9 +179,11 @@ notebook takes it in, and the card's source stays printed on it.
 
 ### 4. Call an inquest
 
-Name a player. Everyone still alive votes yes or no.
+Name the full answer: who, with what, and where. Everyone still alive votes
+yes or no.
 
-- **A majority votes yes:** that player is arrested and the game ends.
+- **A majority votes yes:** the accusation stands and the game ends. It's
+  right only if all three parts are right.
 - **The vote fails:** play carries on. The player who called the inquest
   can never call one again.
 
@@ -186,9 +215,11 @@ for an honest investigation. Tampering is one of two moves:
 ### Forgeries
 
 At the start of the game, the killer chooses 2 forgeries from a menu of
-about 4. Each forgery points toward a different innocent, for example *"The
-cook saw Dr. Moreau carrying something wrapped in a towel towards the
-Terrace."*
+about 4. A forgery can point the table at the wrong person, the wrong
+weapon or the wrong room. Since the innocents need all three, a cheap
+misdirection about the weapon can be as good as framing someone. For
+example: *"The cook saw Dr. Moreau carrying something wrapped in a towel
+towards the Terrace."*
 
 The accomplice gets 1 forgery of their own.
 
@@ -223,20 +254,23 @@ After the third round, the inspector arrives.
 
 1. **Discussion.** The table can argue, testify and show cards. In person
    this is untimed. Online there is a 3-minute timer and a chat.
-2. **Vote.** Each living player secretly names one player. The player with
-   the most votes is arrested.
-   - On a tie, there is one revote among the tied players only.
-   - If it's still tied, nobody is arrested. That counts as the killer
-     getting away.
+2. **Vote.** The table builds one accusation in three votes: first who,
+   then with what, then where. Each is a secret vote by every living
+   player, and the most votes wins.
+   - On a tie, there is one revote among the tied options only.
+   - If it's still tied, the inspector can't make the case. That counts as
+     the killer getting away.
+
+   The killer and the accomplice vote too. Pushing the table toward the
+   wrong weapon is as good for them as pushing it toward the wrong person.
 
 ## Winning
 
-- **The innocents win** if the killer is arrested, either at dawn or by an
-  inquest.
-- **The killer, and the accomplice if there is one, win** if anyone else is
-  arrested, or if nobody is.
-- **If the accomplice is arrested, the killer wins.** The inspector has their
-  arrest and closes the case.
+- **The innocents win** if the accusation, at dawn or by an inquest, gets
+  all three right: the killer, the weapon and the room.
+- **The killer, and the accomplice if there is one, win** if any part is
+  wrong, or if the table can't settle on an accusation. Naming the
+  accomplice is simply a wrong answer.
 
 ### The reveal
 
@@ -262,7 +296,7 @@ I would check these with bot simulations, the same way as the current game:
 
 - The killer wins **35–45%** of games.
 - Going into dawn, the evidence the table has made public should usually
-  still allow **2–3 suspects**. The evidence everyone has privately seen,
+  still allow **2–3 possible answers**. The evidence everyone has privately seen,
   pooled together, should usually solve the case. The gap between the two
   is the game.
 - Under 1 in 10 games end at a dawn tie.
@@ -271,10 +305,12 @@ I would check these with bot simulations, the same way as the current game:
 
 ## Open questions
 
-1. **What an inquest names.**
-   - *Start with:* just the person, the same as the dawn vote.
-   - *Alternative:* the full answer of who, weapon and room. That's harder
-     to get right, so an early win would mean more.
+1. **How the dawn accusation is built.**
+   - *Start with:* three separate votes, for who, then with what, then
+     where.
+   - *Alternative:* everyone writes down a full accusation, and the one
+     written most often stands. That's harder for the innocents, because a
+     split on the weapon splits the whole vote.
 2. **The inquest threshold.**
    - *Start with:* a majority of living players.
    - *Alternative:* everyone except the accused.
