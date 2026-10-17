@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { answerText, clueText, type Answer, type Clue, type Dimension, type PlayerView } from "@party/foulplay";
 import type { Notes } from "./solver.js";
-import { cardText, howText, originText } from "./text.js";
+import { cardText, sourceText } from "./text.js";
 
 /** On your turn, the board is also where you name an accusation for an inquest. */
 export type Picking = { answer: Partial<Answer>; onPick: (dim: Dimension, value: number) => void } | null;
@@ -141,12 +141,7 @@ export function CardView({
       <span className="row">
         <span>{clueText(view.dossier, clue)}</span>
       </span>
-      <span className="src">
-        {originText(view, view.origins[clue.id])}
-        {view.you.how[clue.id] && view.you.how[clue.id].via !== "dealt" && view.you.how[clue.id].via !== "drew"
-          ? ` · ${howText(view, view.you.how[clue.id])}`
-          : ""}
-      </span>
+      <span className="src">{sourceText(view, clue.id)}</span>
     </>
   );
   const cls = `clue ${doubted ? "doubted" : ""} ${clashing ? "clash" : ""}`;
@@ -156,21 +151,10 @@ export function CardView({
         {body}
       </button>
     );
-  return (
-    <div className={cls}>
-      {body}
-      {notes && (
-        <div style={{ marginTop: 6 }}>
-          <button className="ghost mini" onClick={() => notes.toggleDoubt(clue.id)}>
-            {doubted ? "Trust it again" : "🤨 Doubt this"}
-          </button>
-        </div>
-      )}
-    </div>
-  );
+  return <div className={cls}>{body}</div>;
 }
 
-/** Everything you've seen: your hand, the public record, and what you were shown. */
+/** Everything you've seen: your hand, and the public record. Every card is true; the question is who's seen it. */
 export function Evidence({ view, notes }: { view: PlayerView; notes: Notes }) {
   const byId = new Map(view.you.known.map((c) => [c.id, c]));
   const hand = view.you.hand.map((id) => byId.get(id)!).filter(Boolean);
@@ -186,9 +170,9 @@ export function Evidence({ view, notes }: { view: PlayerView; notes: Notes }) {
   );
   return (
     <div className="stack">
-      {section(`🃏 In your hand (${hand.length} of ${view.handLimit})`, hand, "Nothing in your hand.")}
-      {section("📜 The public record", record, "Nobody has testified yet.")}
-      {section("👀 Seen, not held", seen, "Nothing else yet.")}
+      {section(`🃏 In your hand (${hand.length})`, hand, "Nothing in your hand.")}
+      {section("📜 The public record", record, "Nothing on the record yet.")}
+      {seen.length > 0 && section("👀 Seen, not held", seen, "")}
     </div>
   );
 }

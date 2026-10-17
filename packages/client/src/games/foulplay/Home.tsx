@@ -15,7 +15,7 @@ export function FoulPlayHome({ sub, navigate, onBack }: HomeProps) {
         <h1>
           Foul Play <span className="beta-pill">BETA</span>
         </h1>
-        <p className="muted">Lord Ashcombe is dead, and one of you did it. Name who, with what, and where.</p>
+        <p className="muted">Lord Ashcombe is dead, and one of you did it. Find the evidence before the killer destroys it.</p>
       </div>
       <div className="spacer" />
       <div className="stack">
@@ -49,52 +49,40 @@ function Rules({ onBack }: { onBack: () => void }) {
       <div className="stack">
         <h2>How to play</h2>
         <p>
-          Lord Ashcombe promised his guests an announcement at midnight. At a quarter past twelve he was found dead at
-          the foot of the stairs, moved there from wherever he was really killed. Every player is one of the guests, and
-          one of you did it.
+          Lord Ashcombe has been found dead at the foot of the stairs in the Hall, moved there from wherever he was really
+          killed. Every player is one of the guests, and one of you did it. The evidence is still lying around the house,
+          and it&apos;s a race: the innocents search for it, and the killer, who knows where every piece is, destroys it.
         </p>
         <h3>Your role</h3>
         <p className="muted">
           One player is the <b>killer</b> and knows everything. At five or more there may be an <b>accomplice</b>, who
-          knows who the killer is but not how. Everyone else is <b>innocent</b>, and knows only that they didn&apos;t
-          do it.
-        </p>
-        <h3>Talk is free; cards are proof</h3>
-        <p className="muted">
-          Say anything, any time: what you found, who you suspect. Nothing you say is checked, and the killer will lie.
-          A card is proof: it shows where it came from. So claim what you like, ask others to back their claims up, and
-          prove yours when it matters. Playing apart, you&apos;ll need a call.
+          knows who the killer is but not how. Everyone else is <b>innocent</b>. Everyone starts in the Hall with one
+          memory.
         </p>
         <h3>A turn</h3>
         <p className="muted">
-          <b>Investigate</b> one lead and draw its top card: examine the body, question a room&apos;s staff about who
-          was there, check a guest&apos;s alibi, or search a room. Only you see what you find; the table sees where you
-          looked. Then you may prove something: <b>testify</b> (put a card on the public record, for everyone) or{" "}
-          <b>confer</b> (show one player a card and see one of theirs). You can hold four cards: over that, testify one
-          or burn it.
+          <b>Move</b>: stay, go to a room, or join another guest. Then <b>search</b> the room (take the top card of its
+          evidence) or <b>keep watch</b>. If anyone else is in the room, what you find goes straight on the public
+          record. If you&apos;re alone, it goes into your hand, unseen, and you can <b>testify</b> it whenever it&apos;s
+          your turn. Everyone sees where everyone is and how many cards are left in each room.
         </p>
-        <h3>The killer&apos;s tools</h3>
+        <h3>The guilty</h3>
         <p className="muted">
-          The killer can lie out loud like anyone, but a forgery is a lie that survives &ldquo;show me the card&rdquo;.
-          They investigate like anyone, but can <b>tamper</b> instead: bury a lead&apos;s top card, or plant a
-          forgery on it for the next person to find. Once a game they can <b>strike again</b>; the victim is found at the
-          end of the round, with everything they were carrying.
+          The killer and accomplice destroy evidence by searching alone and quietly <b>burning</b> what they find. From
+          outside, that looks just like someone keeping a find to themselves, so ask what people found. At night the
+          device goes round the table and everyone taps through; the killer may murder one guest who was left alone (once
+          a game), or destroy a card in an empty room.
         </p>
-        <h3>Catching a lie</h3>
+        <h3>Talk is free; the record is proof</h3>
         <p className="muted">
-          Every card shows where it came from. If cards you&apos;ve seen can&apos;t all be true, your board says so; doubt
-          one and it works without it. A forgery is drawn by an innocent, but someone else followed that lead first.
-        </p>
-        <h3>Inquests and dawn</h3>
-        <p className="muted">
-          Instead of investigating, you can once call an <b>inquest</b>: name who, with what and where. If most of the
-          living agree, the game ends there. Otherwise, after three rounds the inspector arrives and the table votes
-          who, then with what, then where.
+          Say anything, any time. Nothing you say is checked, and the killer will lie. Playing apart, you&apos;ll need a
+          call. The dead don&apos;t talk.
         </p>
         <h3>Winning</h3>
         <p className="muted">
-          The innocents win only if the accusation gets all three right. Anything else, and the killer (with the
-          accomplice) wins.
+          The innocents win the moment the public record proves who, with what and where. The killer (with the accomplice)
+          wins once too much evidence is gone for that ever to happen, or if the guilty come to outnumber the innocents.
+          If neither has happened after six rounds, the table votes at dawn.
         </p>
       </div>
     </div>

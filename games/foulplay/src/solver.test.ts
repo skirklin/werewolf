@@ -5,7 +5,7 @@ import { meets } from "./space.js";
 
 const s = generateScenario({ seed: 7, players: 5 });
 /** The true cards: everything but the forgeries. */
-const truths = s.clues.filter((c) => !s.forged.includes(c.id));
+const truths = s.clues;
 const solver = new Solver(s.dossier);
 const d = s.dossier;
 
@@ -67,18 +67,10 @@ describe("Solver", () => {
 
   it("finds a small clash among cards that can't all be true", () => {
     expect(solver.conflict(truths)).toBeNull();
-    const lie = s.clues[s.forged[0]];
+    const lie = { kind: "notAgent" as const, agent: s.secret.answer.agent, id: 999 };
     const clash = solver.conflict([...truths, lie])!;
     expect(clash).toContain(lie);
     expect(solver.consistent(clash)).toBe(false);
-    // Every card in it matters: drop any one and the rest can all be true.
     for (const c of clash) expect(solver.consistent(clash.filter((x) => x !== c))).toBe(true);
-  });
-
-  it("sets aside the less trusted card when two clash", () => {
-    const lie = s.clues[s.forged[0]];
-    const kept = solver.believable([...truths, lie]);
-    expect(kept).not.toContain(lie);
-    expect(kept).toHaveLength(truths.length);
   });
 });

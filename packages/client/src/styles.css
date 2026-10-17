@@ -283,3 +283,12 @@ button.has-beta { position: relative; overflow: hidden; }
 .clue.doubted > .row > span:first-child { text-decoration: line-through; }
 .clash-box { border: 1px solid var(--danger); border-radius: 12px; padding: 10px 12px; }
 .mini { font-size: 0.75rem; padding: 4px 10px; min-height: 0; width: auto; }
+.house { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px; }
+.place { border: 1px solid var(--line); border-radius: 12px; padding: 6px; display: flex; flex-direction: column; gap: 4px; background: var(--bg-2); }
+.place.mine { border-color: var(--accent-2); }
+.place .place-name { display: flex; justify-content: space-between; align-items: center; min-height: 0; padding: 6px 8px; font-size: 0.9rem; }
+.place .count { font-size: 0.8rem; color: var(--muted); }
+.place .people { display: flex; flex-wrap: wrap; gap: 4px; min-height: 26px; align-items: center; }
+.place .guest { min-height: 0; padding: 3px 8px; font-size: 0.78rem; border-radius: 999px; width: auto; }
+.place .guest.you { border-color: var(--accent-2); color: var(--accent-2); }
+.place .guest.active { font-weight: 700; }

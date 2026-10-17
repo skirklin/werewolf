@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { generateScenario } from "./generate.js";
 import { Solver } from "./solver.js";
-import { holds, leadsFor, sameLead } from "./clues.js";
+import { holds } from "./clues.js";
 import { CAST } from "./content.js";
 import type { Scenario } from "./types.js";
 
@@ -22,6 +22,7 @@ function truthIndex(solver: Solver, s: Scenario): number {
 }
 
 const cases = [4, 5, 6, 7, 8].flatMap((players) => [1, 2, 3].map((seed) => generateScenario({ seed, players })));
+const innocentMemories = (s: Scenario) => s.memories.flatMap((m, i) => (i === s.killer || i === s.accomplice ? [] : m));
 
 describe("generateScenario", () => {
   it("is reproducible from its seed", () => {
@@ -30,15 +31,12 @@ describe("generateScenario", () => {
 
   it("seats one killer, and an accomplice only at bigger tables", () => {
     for (const s of cases) {
-      const n = s.hands.length;
-      expect(s.killer).toBeGreaterThanOrEqual(0);
-      expect(s.killer).toBeLessThan(n);
+      const n = s.memories.length;
       expect(s.secret.answer.agent).toBe(s.killer);
       if (n >= 6) expect(s.accomplice).not.toBeNull();
       else expect(s.accomplice).toBeNull();
       expect(s.accomplice).not.toBe(s.killer);
     }
-    expect(generateScenario({ seed: 1, players: 5, accomplice: true }).accomplice).not.toBeNull();
   });
 
   it("keeps every guest's looks fixed", () => {
@@ -46,47 +44,44 @@ describe("generateScenario", () => {
       for (const a of s.dossier.agents) expect(a.traits).toEqual(CAST.find((c) => c.name === a.name)!.traits);
   });
 
-  it("deals true cards and false forgeries", () => {
+  it("only deals true cards", () => {
     for (const s of cases) {
       const solver = new Solver(s.dossier);
       const truth = truthIndex(solver, s);
       expect(truth).toBeGreaterThanOrEqual(0);
-      const forged = new Set(s.forged);
-      for (const c of s.clues) expect(holds(solver.space, c, truth)).toBe(!forged.has(c.id));
+      for (const c of s.clues) expect(holds(solver.space, c, truth)).toBe(true);
     }
   });
 
-  it("is solvable from what the innocents can find, but not from their memories alone", () => {
+  it("lays the evidence out through the house: every room and the Hall", () => {
+    for (const s of cases) {
+      expect(s.stacks).toHaveLength(s.dossier.rooms.length + 1);
+      for (const stack of s.stacks.slice(0, -1)) {
+        expect(stack.length).toBeGreaterThanOrEqual(1);
+        expect(stack.length).toBeLessThanOrEqual(3);
+      }
+      expect(s.stacks.at(-1)!.length).toBeGreaterThanOrEqual(2);
+      for (const m of s.memories) expect(m).toHaveLength(1);
+    }
+  });
+
+  it("can be proved from what the innocents could find, even with any one card destroyed", () => {
     for (const s of cases) {
       const solver = new Solver(s.dossier);
       const card = (id: number) => s.clues[id];
-      const innocent = s.hands.flatMap((h, i) => (i === s.killer || i === s.accomplice ? [] : h));
-      const findable = [...innocent, ...Object.values(s.stacks).flat()];
+      const findable = [...s.stacks.flat(), ...innocentMemories(s)];
       expect(solver.analyze(findable.map(card)).solved).toEqual(s.secret.answer);
-      expect(solver.remaining(innocent.map(card))).toBeGreaterThanOrEqual(6);
+      for (const lost of s.stacks.flat())
+        expect(solver.analyze(findable.filter((id) => id !== lost).map(card)).solved).toEqual(s.secret.answer);
     }
   });
 
-  it("gives every forgery a lead it could plausibly turn up under", () => {
-    for (const s of cases) {
-      const all = [...s.forgeries.killer, ...s.forgeries.accomplice];
-      expect(s.forgeries.killer).toHaveLength(4);
-      expect(s.forgeries.accomplice).toHaveLength(s.accomplice === null ? 0 : 2);
-      for (const f of all) {
-        expect(s.forged).toContain(f.clue);
-        expect(leadsFor(s.dossier, s.clues[f.clue]).some((l) => sameLead(l, f.lead))).toBe(true);
-      }
-    }
-  });
-
-  it("doesn't hand the killer or accomplice a memory that names the killer", () => {
+  it("never gives the guilty a memory that names the killer", () => {
     for (const s of cases)
       for (const seat of [s.killer, s.accomplice]) {
         if (seat === null) continue;
-        for (const id of s.hands[seat]) {
-          const c = s.clues[id];
-          if (c.kind === "visited") expect(c.agent).not.toBe(s.killer);
-        }
+        const c = s.clues[s.memories[seat][0]];
+        if (c.kind === "visited") expect(c.agent).not.toBe(s.killer);
       }
   });
 });

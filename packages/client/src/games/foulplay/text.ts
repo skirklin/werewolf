@@ -1,16 +1,4 @@
-import {
-  answerText,
-  clueText,
-  type Clue,
-  leadDone,
-  leadText,
-  type Dossier,
-  type How,
-  type LogEntry,
-  type Origin,
-  type Part,
-  type PlayerView,
-} from "@party/foulplay";
+import { atPlace, clueText, placeName, type Clue, type Dossier, type LogEntry, type Part, type PlayerView } from "@party/foulplay";
 
 export function nameOf(view: PlayerView, id: string): string {
   if (id === view.you.id) return "you";
@@ -37,34 +25,21 @@ export function optionName(d: Dossier, part: Part, value: number): string {
   return d.rooms[value].name;
 }
 
-/** Where a card came from, as printed on it. */
-export function originText(view: PlayerView, o: Origin | undefined): string {
-  if (!o) return "";
+/** Where a card you've seen came from, and how you know it. */
+export function sourceText(view: PlayerView, id: number): string {
   const d = view.dossier;
-  const guest = (id: string) => d.agents[view.players.findIndex((p) => p.id === id)]?.name ?? "someone";
-  switch (o.via) {
-    case "memory":
-      return `${guest(o.who)}'s memory`;
-    case "lead":
-      return `${leadText(d, o.lead)} · found by ${nameOf(view, o.by)}, round ${o.round}`;
-    case "victim":
-      return `Found on ${guest(o.who)}'s body`;
+  const rec = view.record.find((r) => r.clue === id);
+  if (rec) {
+    const who = cap(nameOf(view, rec.by));
+    if (rec.how === "witnessed") return `Found ${atPlace(d, rec.place!)} by ${who}, with others watching · round ${rec.round}`;
+    if (rec.how === "body") return `Found on a body ${atPlace(d, rec.place!)}`;
+    return `Testified by ${who} · round ${rec.round}`;
   }
-}
-
-/** How you came to see a card. */
-export function howText(view: PlayerView, h: How | undefined): string {
-  if (!h) return "";
-  switch (h.via) {
-    case "dealt":
-      return "your memory";
-    case "drew":
-      return "you found it";
-    case "shown":
-      return `${nameOf(view, h.by)} showed you`;
-    case "record":
-      return `on the record, from ${nameOf(view, h.by)}`;
-  }
+  const how = view.you.how[id];
+  if (!how) return "";
+  if (how.via === "memory") return "Your own memory";
+  if (how.via === "found") return `You found it ${atPlace(d, how.place)}, alone · round ${how.round}`;
+  return "";
 }
 
 /** One public log entry, as the table would say it. */
@@ -72,28 +47,30 @@ export function logText(view: PlayerView, e: LogEntry): string {
   const d = view.dossier;
   const n = (id: string) => cap(nameOf(view, id));
   switch (e.t) {
-    case "investigate":
-      return `${n(e.who)} ${leadDone(d, e.lead)}.`;
-    case "confer":
-      return `${n(e.who)} conferred with ${nameOf(view, e.with)}.`;
+    case "move":
+      return e.joined
+        ? `${n(e.who)} joined ${nameOf(view, e.joined)} ${atPlace(d, e.to)}.`
+        : `${n(e.who)} ${e.who === view.you.id ? "are" : "is"} ${atPlace(d, e.to)}.`;
+    case "search":
+      return e.found === "public"
+        ? `${n(e.who)} searched ${placeName(d, e.place)} in company: the find went on the record.`
+        : e.found === "private"
+          ? `${n(e.who)} searched ${placeName(d, e.place)} alone, and took something.`
+          : `${n(e.who)} searched ${placeName(d, e.place)}: nothing left there.`;
+    case "watch":
+      return `${n(e.who)} kept watch ${atPlace(d, e.place)}.`;
     case "testify":
       return `${n(e.who)} testified.`;
-    case "burn":
-      return `${n(e.who)} burned a card.`;
-    case "inquest":
-      return `${n(e.who)} called an inquest: ${answerText(d, e.answer)}.`;
-    case "inquestFailed":
-      return `The inquest failed, ${e.yes} to ${e.no}.`;
-    case "inquestPassed":
-      return `The inquest's verdict stands, ${e.yes} to ${e.no}.`;
-    case "death": {
+    case "night":
+      return `🌙 Night falls after round ${e.round}.`;
+    case "murder": {
       const seat = view.players.findIndex((p) => p.id === e.who);
-      return `☠️ ${d.agents[seat].name} (${nameOf(view, e.who)}) was found dead.`;
+      return `☠️ ${d.agents[seat].name} (${nameOf(view, e.who)}) was found dead ${atPlace(d, e.place)}.`;
     }
-    case "round":
-      return `Round ${e.round} is over.`;
+    case "quiet":
+      return "☀️ Morning. Everyone survived the night.";
     case "dawn":
-      return "🌅 Dawn. The inspector has arrived.";
+      return "🌅 Dawn. The inspector has arrived, and the table must vote.";
     case "voted": {
       const tally = e.tally.map(([v, n]) => `${optionName(d, e.part, v)} ${n}`).join(", ");
       if (e.value === null) return `The vote on ${PART_LABEL[e.part]} was tied (${tally}). Vote again between them.`;
