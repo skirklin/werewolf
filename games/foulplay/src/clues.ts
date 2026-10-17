@@ -81,7 +81,7 @@ export function clueText(d: Dossier, clue: ClueBody): string {
       const names = clue.agents.map(agent);
       const room = `${d.rooms[clue.room].preposition} the ${d.rooms[clue.room].name}`;
       return names.length
-        ? `The staff swear the only guests ${room} all evening were ${list(names)}.`
+        ? `The staff swear that ${list(names)} set foot ${room} this evening, and no other guest did.`
         : `The staff swear no guest set foot ${room} all evening.`;
     }
     case "whereabouts": {

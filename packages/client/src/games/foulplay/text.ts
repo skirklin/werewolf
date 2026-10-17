@@ -94,10 +94,14 @@ export function logText(view: PlayerView, e: LogEntry): string {
       return `Round ${e.round} is over.`;
     case "dawn":
       return "🌅 Dawn. The inspector has arrived.";
-    case "voted":
-      return e.value === null
-        ? `The vote on ${PART_LABEL[e.part]} was tied${e.revote ? " again" : ""}.`
-        : `The table settled ${PART_LABEL[e.part]}: ${optionName(d, e.part, e.value)}.`;
+    case "voted": {
+      const tally = e.tally.map(([v, n]) => `${optionName(d, e.part, v)} ${n}`).join(", ");
+      if (e.value === null) return `The vote on ${PART_LABEL[e.part]} was tied (${tally}). Vote again between them.`;
+      const settled = optionName(d, e.part, e.value);
+      return e.inspector
+        ? `Tied again (${tally}), so the inspector chose ${PART_LABEL[e.part]}: ${settled}.`
+        : `The table settled ${PART_LABEL[e.part]}: ${settled} (${tally}).`;
+    }
   }
 }
 

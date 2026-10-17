@@ -6,7 +6,7 @@ import { makeRng } from "./rng.js";
 
 export interface SimResult {
   turns: number;
-  result: "caught" | "wrong" | "deadlock";
+  result: "caught" | "wrong";
   by: "inquest" | "dawn";
   /** How many answers the public record left at the end. */
   publicLeft: number;

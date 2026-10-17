@@ -236,13 +236,18 @@ function InvestigatePanel({ view, act, onInquest }: { view: PlayerView; act: Act
   const [tamper, setTamper] = useState<Tampering | null>(null);
   const [striking, setStriking] = useState(false);
   const dry = view.you.findings.filter((f) => f.clue === null).map((f) => leadKey(f.lead));
+  // Leads where your last look found something, and you were told there was more.
+  const last = new Map(view.you.findings.map((f) => [leadKey(f.lead), f]));
+  const more = new Set([...last].filter(([, f]) => f.more).map(([k]) => k));
   const plantable = g ? g.forgeries.filter((f) => !f.planted && g.plantsLeft > 0) : [];
 
   const leadButton = (l: Lead, label: string) => {
     const by = lookedBy(view, l);
     const sub = dry.includes(leadKey(l))
       ? "nothing more for you"
-      : by.length
+      : more.has(leadKey(l))
+        ? "you know there's more here"
+        : by.length
         ? `looked at by ${by.map((id) => nameOf(view, id)).join(", ")}`
         : "nobody's looked yet";
     const on = lead && sameLead(lead, l);
@@ -380,7 +385,7 @@ function InquestPanel({
   const d = view.dossier;
   const full = answer.agent !== undefined && answer.device !== undefined && answer.room !== undefined ? (answer as Answer) : null;
   const impossible =
-    full && !notes.clash && !notes.solver.space.answers(notes.analysis.candidates).includes(notes.solver.space.keyOf(full));
+    full && !notes.solver.space.answers(notes.analysis.candidates).includes(notes.solver.space.keyOf(full));
   return (
     <div className="card stack">
       <b>⚖️ Call an inquest</b>
@@ -415,6 +420,7 @@ function LastFinding({ view, notes }: { view: PlayerView; notes: Notes }) {
     <div className="stack" style={{ gap: 4 }}>
       <span className="muted small">You found:</span>
       <CardView view={view} clue={c} notes={notes} />
+      {f.more && <span className="muted small">🔎 There&apos;s more to find there.</span>}
     </div>
   ) : null;
 }
@@ -550,13 +556,15 @@ function VerdictPanel({ view, act }: { view: PlayerView; act: Act }) {
 function DawnPanel({ view, notes, act }: { view: PlayerView; notes: Notes; act: Act }) {
   const phase = view.phase as Extract<PlayerView["phase"], { kind: "vote" }>;
   const d = view.dossier;
-  const counts = notes.clash ? null : notes.analysis.marginals[phase.part];
+  const counts = notes.analysis.marginals[phase.part];
   const so = view.accusation;
   return (
     <div className="card stack">
       <b>🌅 Dawn: {PART_LABEL[phase.part]}?</b>
       <p className="muted small" style={{ margin: 0 }}>
-        {phase.revote ? "That was a tie. Vote again between the tied." : "Argue it out, then vote. The most votes wins."} The
+        {phase.revote
+          ? "That was a tie. Vote again between the tied; if it ties again, the inspector picks."
+          : "Argue it out, then vote. The most votes wins."} The
         innocents need all three right.
       </p>
       {(so.agent !== undefined || so.device !== undefined) && (
@@ -584,9 +592,7 @@ function GameOver({ view, isHost, playAgain, onExit }: { view: PlayerView; isHos
   const headline =
     phase.result === "caught"
       ? "🎉 The killer was caught"
-      : phase.result === "deadlock"
-        ? "💨 The table couldn't agree. The killer walks free"
-        : "💨 The wrong answer stood. The killer walks free";
+      : "💨 The wrong answer stood. The killer walks free";
   const visits = (agent: number) => r.secret.visits[agent].map((x) => d.rooms[x].name).join(", ");
   return (
     <div className="card stack">

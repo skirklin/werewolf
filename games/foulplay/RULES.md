@@ -162,16 +162,20 @@ about the Library". Each lead answers its own question:
 
 - **Examine the body:** the killer's looks, and what kind of room it happened
   in (mud on his shoes: outdoors).
-- **Question the staff** about a room: exactly who set foot there all
-  evening. Not every room's staff have something to say.
+- **Question the staff** about a room: every guest who set foot there all
+  evening, and so also who never did. Not every room's staff have something
+  to say.
 - **Check an alibi:** exactly where that guest went all evening. Not every
   guest's can be checked.
-- **Search a room:** whether this is where it happened, and whether a weapon
-  kept there is missing.
+- **Search a room:** whether this is where it happened, and then, on a
+  second look, whether the weapon kept there is still in its place or
+  missing.
 
 Most leads hold one card, so once someone has followed a lead, the next
 person usually finds nothing: *"Search the Library: nothing more to find
-there."* That's information too.
+there."* That's information too. When a lead still has something left after
+your draw, you're told so (privately): *"There's more to find there."* The
+body and a room search usually do.
 
 Instead of investigating, you can **call an inquest** (see below).
 
@@ -191,8 +195,9 @@ Then do one of these, or keep your cards to yourself:
 Name the full answer: who, with what, and where. Everyone still alive votes
 yes or no.
 
-- **A majority votes yes:** the accusation stands and the game ends. It's
-  right only if all three parts are right.
+- **More than half of the living vote yes:** the accusation stands and the
+  game ends. It's right only if all three parts are right. A split vote (2–2
+  with four alive) fails. The caller votes too.
 - **The vote fails:** play carries on. The player who called the inquest
   can never call one again.
 
@@ -261,14 +266,14 @@ evidence behind.
 
 After the third round, the inspector arrives.
 
-1. **Discussion.** The table can argue, testify and show cards. In person
-   this is untimed. Online there is a 3-minute timer and a chat.
+1. **Discussion.** The table argues it out, out loud. The app has no chat
+   yet, so playing apart needs a call.
 2. **Vote.** The table builds one accusation in three votes: first who,
    then with what, then where. Each is a secret vote by every living
    player, and the most votes wins.
    - On a tie, there is one revote among the tied options only.
-   - If it's still tied, the inspector can't make the case. That counts as
-     the killer getting away.
+   - If it's still tied, the inspector picks one of them at random.
+   - The table sees every vote's count, not just the winner.
 
    The killer and the accomplice vote too. Pushing the table toward the
    wrong weapon is as good for them as pushing it toward the wrong person.
@@ -308,7 +313,6 @@ Checked with bot simulations (`npm run foulplay -- --sim 150 --players 5`):
   about 45% at 5 players and 50–63% at 4 and at 6–8.
 - Going into dawn, the evidence the table has made public should usually
   still allow **2–3 possible answers**. It does: the median is 2–3.
-- Under 1 in 10 games end at a dawn tie. Currently 0–3%.
 - A turn should take under a minute.
 
 ## Open questions

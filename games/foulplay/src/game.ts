@@ -3,6 +3,7 @@ import type { Answer, Clue, Dossier, Forgery, Lead, Scenario, Secret } from "./t
 import { allLeads, leadKey, leadOfKey, sameLead } from "./clues.js";
 import { sameAnswer } from "./solver.js";
 import { PLANTS } from "./generate.js";
+import { makeRng, pick } from "./rng.js";
 
 /**
  * The game. Pure: `reduce` takes a state and returns a new one, so the same
@@ -62,6 +63,8 @@ export interface Finding {
   round: number;
   /** The card drawn, or null if the lead had nothing more. */
   clue: number | null;
+  /** Whether the lead still had something left after this draw. */
+  more: boolean;
 }
 
 export interface PlayerState {
@@ -93,8 +96,8 @@ export type Phase =
   | { kind: "vote"; part: Part; options: number[]; revote: boolean }
   | {
       kind: "over";
-      /** caught: all three right. wrong: an accusation stood, but it was wrong. deadlock: no agreement. */
-      result: "caught" | "wrong" | "deadlock";
+      /** caught: all three right. wrong: an accusation stood, but it was wrong. */
+      result: "caught" | "wrong";
       by: "inquest" | "dawn";
       accusation: Partial<Answer>;
       winners: string[];
@@ -117,7 +120,11 @@ export type LogEntry =
   | { t: "death"; who: string; round: number }
   | { t: "round"; round: number }
   | { t: "dawn" }
-  | { t: "voted"; part: Part; value: number | null; tied: number[]; revote: boolean };
+  /**
+   * A dawn vote's outcome, with every option's count. `value` is null when a
+   * tie sends it to a revote; a second tie is settled by the inspector.
+   */
+  | { t: "voted"; part: Part; value: number | null; tally: [number, number][]; revote: boolean; inspector: boolean };
 
 /** What the killer and the accomplice did in secret. Revealed at the end. */
 export type Tamper =
@@ -277,7 +284,7 @@ export function reduce(state: GameState, actorId: string, action: Action): GameS
         return toShare(s, actor);
       }
       const id = stack.shift();
-      me.findings.push({ lead, round: s.round, clue: id ?? null });
+      me.findings.push({ lead, round: s.round, clue: id ?? null, more: stack.length > 0 });
       if (id !== undefined) {
         s.origins[id] = { via: "lead", lead, by: me.id, round: s.round };
         me.hand.push(id);
@@ -405,17 +412,21 @@ function afterDawnVote(s: GameState): GameState {
   for (const v of s.votes) if (v !== null) tally.set(v, (tally.get(v) ?? 0) + 1);
   const top = Math.max(...tally.values());
   const leaders = [...tally].filter(([, n]) => n === top).map(([v]) => v);
+  const counts = [...tally].sort((a, b) => b[1] - a[1] || a[0] - b[0]);
   s.votes = s.players.map(() => null);
-  if (leaders.length > 1) {
-    s.log.push({ t: "voted", part: p.part, value: null, tied: leaders, revote: p.revote });
-    if (!p.revote) {
-      s.phase = { kind: "vote", part: p.part, options: leaders.sort((a, b) => a - b), revote: true };
-      return s;
-    }
-    return finish(s, "deadlock", "dawn", s.accusation);
+  if (leaders.length > 1 && !p.revote) {
+    s.log.push({ t: "voted", part: p.part, value: null, tally: counts, revote: false, inspector: false });
+    s.phase = { kind: "vote", part: p.part, options: leaders.sort((a, b) => a - b), revote: true };
+    return s;
   }
-  s.log.push({ t: "voted", part: p.part, value: leaders[0], tied: [], revote: p.revote });
-  s.accusation = { ...s.accusation, [p.part]: leaders[0] };
+  // Still tied after the revote: the inspector picks between them, so a split
+  // table can't stall the case (or hand it to the killer) on its own.
+  const inspector = leaders.length > 1;
+  const value = inspector
+    ? pick(leaders.sort((a, b) => a - b), makeRng(s.scenario.seed + PARTS.indexOf(p.part)))
+    : leaders[0];
+  s.log.push({ t: "voted", part: p.part, value, tally: counts, revote: p.revote, inspector });
+  s.accusation = { ...s.accusation, [p.part]: value };
   const next = PARTS[PARTS.indexOf(p.part) + 1];
   if (next) return startVote(s, next);
   const a = s.accusation as Answer;
@@ -435,7 +446,7 @@ function startVote(s: GameState, part: Part): GameState {
   return s;
 }
 
-function finish(s: GameState, result: "caught" | "wrong" | "deadlock", by: "inquest" | "dawn", accusation: Partial<Answer>): GameState {
+function finish(s: GameState, result: "caught" | "wrong", by: "inquest" | "dawn", accusation: Partial<Answer>): GameState {
   const guilty = (p: PlayerState) => p.role !== "innocent";
   const winners = s.players.filter((p) => (result === "caught" ? !guilty(p) : guilty(p))).map((p) => p.id);
   s.phase = { kind: "over", result, by, accusation, winners };
