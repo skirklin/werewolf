@@ -138,8 +138,13 @@ export type ClueBody =
   | { kind: "notRoom"; room: RoomId }
   /** "No trace on D: not the weapon." */
   | { kind: "notDevice"; device: DeviceId }
-  /** "X has a solid alibi." */
-  | { kind: "notAgent"; agent: AgentId }
+  /** "X has a solid alibi." `say` picks which witness tells it. */
+  | { kind: "notAgent"; agent: AgentId; say?: number }
+  /**
+   * "A maid saw X slip out of R." True, and no proof of anything, but it fits
+   * the story the house tells about X: the kind of card X would rather burn.
+   */
+  | { kind: "seen"; agent: AgentId; room: RoomId }
   /** "The staff saw only X and Y in R all evening." Exactly who set foot there. */
   | { kind: "visitors"; room: RoomId; agents: AgentId[] }
   /** "X's evening: the Bar and the Library, nowhere else." Exactly where they went. */
@@ -165,6 +170,12 @@ export interface Scenario {
   /** The killer's seat, and the accomplice's (or null). */
   killer: number;
   accomplice: number | null;
+  /**
+   * The story the house tells about each guest: a weapon they could have
+   * used and a room they were in that fits. The killer's is the truth; every
+   * other one is broken by an alibi or two somewhere in the house.
+   */
+  stories: Answer[];
   /** Every card in the case. `clues[i].id === i`. */
   clues: Clue[];
   /** memories[seat] = the cards that seat starts with in hand. */

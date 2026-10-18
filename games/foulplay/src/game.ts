@@ -1,7 +1,7 @@
 import { GameError, type Seat } from "@party/core";
 import type { Answer, Clue, Dossier, Scenario, Secret } from "./types.js";
 import { hallOf } from "./clues.js";
-import { Solver, sameAnswer } from "./solver.js";
+import { sameAnswer } from "./solver.js";
 import { makeRng, pick } from "./rng.js";
 
 /**
@@ -10,23 +10,28 @@ import { makeRng, pick } from "./rng.js";
  * practice. Every step is one player's, so it also works passing one device.
  *
  * Lord Ashcombe's body lies in the Hall and the evidence is scattered through
- * the house. One of the guests did it and knows where every piece is. It's a
- * race: the innocents search, the killer destroys.
+ * the house. One of the guests did it and knows where every piece is. The
+ * house tells a story about every guest; only the killer's is true, and the
+ * killer wins by getting someone else's to stick.
  *
  * A round is a turn for each living guest, then the night.
  *  - On your turn, move (stay, go to a room, or join another guest), then
- *    act: search the room, or keep watch. Testify cards from your hand onto
- *    the public record whenever it's your turn, and the guilty can quietly
- *    burn theirs.
+ *    act: search the room, or keep watch. Then testify cards from your hand
+ *    onto the public record, or quietly burn them. Anyone can burn: an
+ *    innocent might, to get rid of what fits their own story.
  *  - Searching with anyone else in the room puts the find straight on the
  *    record. Searching alone puts it in your hand, unseen.
  *  - At night the killer can murder a guest who is alone, or destroy a card
  *    in an empty room.
+ *  - Instead of moving, once a game, you can call the Reconstruction: name
+ *    who, with what and where, and the table votes on it. If most agree,
+ *    that's the verdict: right, and the innocents win; wrong, and the killer
+ *    does. If not, play goes on.
  *
- * It ends when the public record proves who, with what and where (the
- * innocents win), or when the case can no longer be proved, or the guilty
- * are no longer outnumbered (the killer wins). If it drags past the last
- * round, the table votes at dawn.
+ * The game never ends just because the evidence adds up: someone has to see
+ * it and convince the table. If nobody has by the last round, the table
+ * votes at dawn. The killer also wins if the guilty come to outnumber the
+ * innocents.
  */
 
 export const MAX_ROUNDS = 6;
@@ -75,15 +80,17 @@ export type Phase =
   | { kind: "turn"; active: number; step: "move" | "act" | "wrap" }
   /** Everyone alive taps through the night in seat order; only the killer's choice counts. */
   | { kind: "night"; active: number }
+  /** The Reconstruction: `by` has named an answer, and everyone alive says yes or no. */
+  | { kind: "trial"; by: number; answer: Answer }
   /** The fallback: the table votes on one part of the accusation. */
   | { kind: "vote"; part: Part; options: number[]; revote: boolean }
   | {
       kind: "over";
       /**
-       * proof: the record proved it. unprovable: too much evidence is gone.
-       * outnumbered: the guilty are as many as the innocents. dawn: the fallback vote.
+       * trial: the table accepted a Reconstruction. outnumbered: the guilty
+       * are as many as the innocents. dawn: the fallback vote.
        */
-      by: "proof" | "unprovable" | "outnumbered" | "dawn";
+      by: "trial" | "outnumbered" | "dawn";
       caught: boolean;
       accusation: Partial<Answer>;
       winners: string[];
@@ -108,6 +115,9 @@ export type LogEntry =
   | { t: "murder"; who: string; place: number }
   | { t: "quiet" }
   | { t: "dawn" }
+  | { t: "accuse"; who: string; answer: Answer }
+  /** How the table voted on a Reconstruction. Votes are open. */
+  | { t: "verdict"; who: string; answer: Answer; yes: string[]; no: string[]; accepted: boolean }
   | { t: "voted"; part: Part; value: number | null; tally: [number, number][]; revote: boolean; inspector: boolean };
 
 /** What the guilty did in secret, revealed at the end. */
@@ -129,6 +139,10 @@ export interface GameState {
   /** The killer's choice for this night, made in turn, carried out at dawn. */
   nightPlan: NightPlan | null;
   votes: (number | null)[];
+  /** Yes or no on the Reconstruction in progress. */
+  verdicts: (boolean | null)[];
+  /** Who has used their one Reconstruction. */
+  called: boolean[];
   accusation: Partial<Answer>;
   round: number;
   turnsTaken: number;
@@ -149,7 +163,11 @@ export type Action =
   | { type: "burn"; card: number }
   /** Night: the killer picks; everyone else just goes to sleep. */
   | { type: "night"; plan?: NightPlan }
-  | { type: "vote"; value: number };
+  | { type: "vote"; value: number }
+  /** Instead of moving: call the Reconstruction, naming the whole answer. */
+  | { type: "accuse"; answer: Answer }
+  /** Agree with the Reconstruction, or not. */
+  | { type: "verdict"; agree: boolean };
 
 export { GameError };
 
@@ -179,6 +197,8 @@ export function createGame(scenario: Scenario, seats: readonly Seat[], config: G
     secretly: [],
     nightPlan: null,
     votes: seats.map(() => null),
+    verdicts: seats.map(() => null),
+    called: seats.map(() => false),
     accusation: {},
     round: 1,
     turnsTaken: 0,
@@ -216,19 +236,8 @@ export function whoMustAct(state: GameState): number[] {
   const p = state.phase;
   if (p.kind === "turn" || p.kind === "night") return [p.active];
   if (p.kind === "vote") return living(state).filter((i) => state.votes[i] === null);
+  if (p.kind === "trial") return living(state).filter((i) => state.verdicts[i] === null);
   return [];
-}
-
-/** One solver per case: building it takes a moment, and reduce runs often. */
-const solvers = new Map<number, Solver>();
-function solverOf(s: GameState): Solver {
-  let solver = solvers.get(s.scenario.seed);
-  if (!solver) {
-    if (solvers.size > 20) solvers.clear();
-    solver = new Solver(s.scenario.dossier);
-    solvers.set(s.scenario.seed, solver);
-  }
-  return solver;
 }
 
 export function reduce(state: GameState, actorId: string, action: Action): GameState {
@@ -312,13 +321,31 @@ export function reduce(state: GameState, actorId: string, action: Action): GameS
     }
     case "burn": {
       if (!myTurn) throw new GameError("You can only do that on your turn.");
-      if (!guilty(me)) throw new GameError("Only the guilty destroy evidence.");
       const id = action.card;
       if (!me.hand.includes(id)) throw new GameError("That card isn't in your hand.");
       me.hand = me.hand.filter((x) => x !== id);
       // Nothing public happens: it's simply gone.
       s.secretly.push({ what: "burn", who: me.id, clue: id, round: s.round });
-      return settle(s);
+      return s;
+    }
+
+    case "accuse": {
+      step("move");
+      if (s.called[actor]) throw new GameError("You've already called the Reconstruction once.");
+      const answer = checkAnswer(s, action.answer);
+      s.called[actor] = true;
+      s.log.push({ t: "accuse", who: me.id, answer });
+      s.verdicts = s.players.map((_, i) => (i === actor ? true : null));
+      s.phase = { kind: "trial", by: actor, answer };
+      return afterVerdict(s);
+    }
+    case "verdict": {
+      if (phase.kind !== "trial") throw new GameError("There's nothing to agree to.");
+      if (!me.alive) throw new GameError("The dead don't vote.");
+      if (s.verdicts[actor] !== null) throw new GameError("You've already said.");
+      if (typeof action.agree !== "boolean") throw new GameError("Yes or no?");
+      s.verdicts[actor] = action.agree;
+      return afterVerdict(s);
     }
 
     case "night": {
@@ -367,24 +394,34 @@ function learn(p: PlayerState, id: number, how: How) {
   p.how[id] = how;
 }
 
-/** What could still be put on the record: what's there, what's lying about, and what innocents hold. */
-function provable(s: GameState): Clue[] {
-  const ids = new Set<number>([
-    ...s.record.map((r) => r.clue),
-    ...s.stacks.flat(),
-    ...s.players.filter((p) => p.alive && !guilty(p)).flatMap((p) => p.hand),
-  ]);
-  return [...ids].map((id) => s.scenario.clues[id]);
+/** A whole answer, with a living guest: what a Reconstruction has to name. */
+function checkAnswer(s: GameState, a: Answer | undefined): Answer {
+  const d = s.scenario.dossier;
+  const ok = (v: unknown, n: number) => Number.isInteger(v) && (v as number) >= 0 && (v as number) < n;
+  if (!a || !ok(a.agent, d.agents.length) || !ok(a.device, d.devices.length) || !ok(a.room, d.rooms.length))
+    throw new GameError("Name who, with what, and where.");
+  if (!s.players[a.agent].alive) throw new GameError("The dead can't be arrested.");
+  return { agent: a.agent, device: a.device, room: a.room };
+}
+
+/** Once everyone alive has said: a majority makes it the verdict; otherwise play goes on. */
+function afterVerdict(s: GameState): GameState {
+  const p = s.phase;
+  if (p.kind !== "trial" || whoMustAct(s).length) return s;
+  const said = (v: boolean) => s.players.filter((x, i) => x.alive && s.verdicts[i] === v).map((x) => x.id);
+  const yes = said(true);
+  const no = said(false);
+  const accepted = yes.length > (yes.length + no.length) / 2;
+  s.log.push({ t: "verdict", who: s.players[p.by].id, answer: p.answer, yes, no, accepted });
+  s.verdicts = s.players.map(() => null);
+  if (accepted) return finish(s, "trial", sameAnswer(p.answer, s.scenario.secret.answer), p.answer);
+  // Calling it took the turn.
+  return endTurn(s, p.by);
 }
 
 /** Check whether anyone has won. Called after anything that could change it. */
 function settle(s: GameState): GameState {
   if (s.phase.kind === "over") return s;
-  const solver = solverOf(s);
-  const truth = s.scenario.secret.answer;
-  const proved = solver.analyze(s.record.map((r) => s.scenario.clues[r.clue])).solved;
-  if (proved && sameAnswer(proved, truth)) return finish(s, "proof", true, proved);
-  if (!solver.analyze(provable(s)).solved) return finish(s, "unprovable", false, {});
   const alive = s.players.filter((p) => p.alive);
   if (alive.filter(guilty).length >= alive.filter((p) => !guilty(p)).length) return finish(s, "outnumbered", false, {});
   return s;
@@ -494,7 +531,7 @@ function startVote(s: GameState, part: Part): GameState {
   return s;
 }
 
-function finish(s: GameState, by: "proof" | "unprovable" | "outnumbered" | "dawn", caught: boolean, accusation: Partial<Answer>): GameState {
+function finish(s: GameState, by: "trial" | "outnumbered" | "dawn", caught: boolean, accusation: Partial<Answer>): GameState {
   const winners = s.players.filter((p) => (caught ? !guilty(p) : guilty(p))).map((p) => p.id);
   s.phase = { kind: "over", by, caught, accusation, winners };
   return s;
@@ -509,6 +546,8 @@ function clone(s: GameState): GameState {
     spare: [...s.spare],
     secretly: [...s.secretly],
     votes: [...s.votes],
+    verdicts: [...s.verdicts],
+    called: [...s.called],
     accusation: { ...s.accusation },
     log: [...s.log],
   };
@@ -516,16 +555,17 @@ function clone(s: GameState): GameState {
 
 /**
  * What a player knows from their role alone, as cards with negative ids that
- * never go into play: an innocent knows it wasn't them; the accomplice knows
- * who it was; the killer knows everything.
+ * never go into play: an innocent knows it wasn't them, and nobody suspects
+ * the dead; the guilty know everything.
  */
 export function selfKnowledge(view: PlayerView): Clue[] {
   const d = view.dossier;
   const others = (keep: number) =>
     d.agents.filter((a) => a.id !== keep).map((a, i): Clue => ({ kind: "notAgent", agent: a.id, id: -2 - i }));
-  if (view.you.role === "innocent") return [{ kind: "notAgent", agent: view.you.seat, id: -1 }];
+  // The dead didn't do it: the killer never dies.
+  const dead = view.players.flatMap((p, i): Clue[] => (p.alive ? [] : [{ kind: "notAgent", agent: i, id: -300 - i }]));
+  if (view.you.role === "innocent") return [{ kind: "notAgent", agent: view.you.seat, id: -1 }, ...dead];
   const g = view.guilty!;
-  if (!g.answer) return others(g.killer);
   return [
     ...others(g.killer),
     { kind: "isDevice", device: g.answer.device, id: -100 },
@@ -544,13 +584,21 @@ export interface PlayerView {
     /** Every card you've seen. */
     known: Clue[];
     how: Record<number, How>;
+    /** The story the house tells about you. The killer's is the truth. */
+    story: Answer;
+    /** The rooms you went into this evening. */
+    evening: number[];
+    /** Whether you've used your Reconstruction. */
+    called: boolean;
   };
   /** Only for the killer and the accomplice. */
   guilty: {
-    /** The killer sees the whole truth; the accomplice only who. */
-    answer: Answer | null;
+    answer: Answer;
     killer: number;
     accomplice: number | null;
+    /** Everyone's story and evening: who could be framed, and with what. */
+    stories: Answer[];
+    evenings: number[][];
     /** The killer sees what's left in every room, top first. */
     stacks: Clue[][] | null;
   } | null;
@@ -562,8 +610,12 @@ export interface PlayerView {
   phase: Phase;
   round: number;
   rounds: number;
-  /** While the table votes: who has voted yet (never how). */
+  /** While the table votes, at dawn or on a Reconstruction: who has voted yet (never how, until it's done). */
   voted: boolean[] | null;
+  /** Your yes or no on the Reconstruction in progress. */
+  yourVerdict: boolean | null;
+  /** Who has used their Reconstruction. */
+  called: boolean[];
   yourVote: number | null;
   accusation: Partial<Answer>;
   log: LogEntry[];
@@ -571,7 +623,7 @@ export interface PlayerView {
   /** For the killer at night: who is alone, and which rooms are empty with something in them. */
   night: { alone: string[]; emptyRooms: number[] } | null;
   /** Everything, once it's over. */
-  reveal: { secret: Secret; killer: number; accomplice: number | null; secretly: Secretly[]; clues: Clue[] } | null;
+  reveal: { secret: Secret; killer: number; accomplice: number | null; stories: Answer[]; secretly: Secretly[]; clues: Clue[] } | null;
 }
 
 export function projectView(state: GameState, playerId: string): PlayerView {
@@ -591,14 +643,19 @@ export function projectView(state: GameState, playerId: string): PlayerView {
       hand: [...me.hand],
       known: me.known.map(clue),
       how: { ...me.how },
+      story: sc.stories[seat],
+      evening: [...sc.secret.visits[seat]],
+      called: state.called[seat],
     },
     guilty:
       me.role === "innocent"
         ? null
         : {
-            answer: me.role === "killer" ? sc.secret.answer : null,
+            answer: sc.secret.answer,
             killer: sc.killer,
-            accomplice: me.role === "killer" ? sc.accomplice : seat,
+            accomplice: sc.accomplice,
+            stories: sc.stories,
+            evenings: sc.secret.visits,
             stacks: me.role === "killer" ? state.stacks.map((st) => st.map(clue)) : null,
           },
     dossier: sc.dossier,
@@ -608,8 +665,15 @@ export function projectView(state: GameState, playerId: string): PlayerView {
     phase,
     round: state.round,
     rounds: state.config.rounds ?? MAX_ROUNDS,
-    voted: phase.kind === "vote" ? state.votes.map((v, i) => v !== null || !state.players[i].alive) : null,
+    voted:
+      phase.kind === "vote"
+        ? state.votes.map((v, i) => v !== null || !state.players[i].alive)
+        : phase.kind === "trial"
+          ? state.verdicts.map((v, i) => v !== null || !state.players[i].alive)
+          : null,
     yourVote: phase.kind === "vote" ? state.votes[seat] : null,
+    yourVerdict: phase.kind === "trial" ? state.verdicts[seat] : null,
+    called: [...state.called],
     accusation: { ...state.accusation },
     log: state.log,
     turnsTaken: state.turnsTaken,
@@ -624,7 +688,7 @@ export function projectView(state: GameState, playerId: string): PlayerView {
       : null,
     reveal:
       phase.kind === "over"
-        ? { secret: sc.secret, killer: sc.killer, accomplice: sc.accomplice, secretly: state.secretly, clues: sc.clues }
+        ? { secret: sc.secret, killer: sc.killer, accomplice: sc.accomplice, stories: sc.stories, secretly: state.secretly, clues: sc.clues }
         : null,
   };
 }

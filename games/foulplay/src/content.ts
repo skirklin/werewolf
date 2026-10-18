@@ -338,3 +338,23 @@ export const CAST: { name: string; motive: string; traits: Record<string, string
     traits: { headwear: "beret", coat: "red", height: "short", hand: "right", glasses: "yes", gloves: "no" },
   },
 ];
+
+/**
+ * Alibis: who swears a guest was nowhere near the murder. `{who}` is the
+ * guest. Each is a different witness, so a guest can have two.
+ */
+export const ALIBIS: string[] = [
+  "The cook swears {who} was in the kitchen with her from eleven until the body was found: not the killer.",
+  "The chauffeur was playing cards with {who} the whole time: not the killer.",
+  "{who} was on the telephone to London through the murder, and the exchange kept a record: not the killer.",
+  "The band leader saw {who} dancing right up until the scream: not the killer.",
+  "The butler was helping {who} look for a dropped ring when it happened: not the killer.",
+];
+
+/** Suspicion: true sightings that fit a guest's story. `{who}` is the guest, `{at}` "in the Library". */
+export const SIGHTINGS: string[] = [
+  "A maid saw {who} slip out {of} just before midnight, looking flustered.",
+  "{who}'s cufflink was found {at}, under a chair.",
+  "The footman noticed {who} {at} alone, around half past eleven.",
+  "Someone heard {who} arguing with Lord Ashcombe {at} earlier in the evening.",
+];

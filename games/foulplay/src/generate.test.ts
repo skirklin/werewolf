@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { generateScenario } from "./generate.js";
 import { Solver } from "./solver.js";
-import { holds } from "./clues.js";
+import { breaks, holds } from "./clues.js";
 import { CAST } from "./content.js";
 import type { Scenario } from "./types.js";
 
@@ -56,23 +56,41 @@ describe("generateScenario", () => {
   it("lays the evidence out through the house: every room and the Hall", () => {
     for (const s of cases) {
       expect(s.stacks).toHaveLength(s.dossier.rooms.length + 1);
-      for (const stack of s.stacks.slice(0, -1)) {
-        expect(stack.length).toBeGreaterThanOrEqual(1);
-        expect(stack.length).toBeLessThanOrEqual(3);
-      }
-      expect(s.stacks.at(-1)!.length).toBeGreaterThanOrEqual(2);
+      for (const stack of s.stacks.slice(0, -1)) expect(stack.length).toBeGreaterThanOrEqual(1);
+      expect(s.stacks.at(-1)!.length).toBeGreaterThanOrEqual(1);
       for (const m of s.memories) expect(m).toHaveLength(1);
     }
   });
 
-  it("can be proved from what the innocents could find, even with any one card destroyed", () => {
+  it("can be proved from what the innocents could find", () => {
     for (const s of cases) {
       const solver = new Solver(s.dossier);
-      const card = (id: number) => s.clues[id];
-      const findable = [...s.stacks.flat(), ...innocentMemories(s)];
-      expect(solver.analyze(findable.map(card)).solved).toEqual(s.secret.answer);
-      for (const lost of s.stacks.flat())
-        expect(solver.analyze(findable.filter((id) => id !== lost).map(card)).solved).toEqual(s.secret.answer);
+      const findable = [...s.stacks.flat(), ...innocentMemories(s)].map((id) => s.clues[id]);
+      expect(solver.analyze(findable).solved).toEqual(s.secret.answer);
+    }
+  });
+
+  it("tells a story about every guest, and only the killer's is true", () => {
+    for (const s of cases) {
+      const d = s.dossier;
+      expect(s.stories).toHaveLength(s.memories.length);
+      expect(s.stories[s.killer]).toEqual(s.secret.answer);
+      const hall = s.stacks.at(-1)!;
+      const memories = s.memories.flat();
+      s.stories.forEach((story, g) => {
+        expect(story.agent).toBe(g);
+        const breakers = s.clues.filter((c) => breaks(d, c, story, s.secret.visits[g])).map((c) => c.id);
+        const inHouse = breakers.filter((id) => s.stacks.flat().includes(id));
+        if (g === s.killer) {
+          expect(breakers).toEqual([]);
+          return;
+        }
+        // Two or three cards to destroy, none of them already public or in someone's head.
+        expect(inHouse.length).toBeGreaterThanOrEqual(2);
+        expect(inHouse.length).toBeLessThanOrEqual(3);
+        for (const id of inHouse) expect(hall).not.toContain(id);
+        for (const id of memories) expect(breakers).not.toContain(id);
+      });
     }
   });
 

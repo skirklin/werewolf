@@ -83,19 +83,19 @@ describe("searching", () => {
     for (const p of g.players) expect(p.known).toContain(top);
   });
 
-  it("you can testify what you hold, and the guilty can burn it", () => {
+  it("you can testify what you hold, or burn it, and nobody sees a burn", () => {
     let g = fresh();
     const memory = g.players[0].hand[0];
     g = reduce(g, "a", { type: "testify", card: memory });
     expect(g.record.at(-1)).toMatchObject({ clue: memory, how: "testified" });
     expect(() => reduce(g, "a", { type: "burn", card: memory })).toThrow(GameError);
 
-    let k = until(fresh(), killer);
-    const theirs = k.players[killer].hand[0];
+    let k = until(fresh(), innocents[1]);
+    const theirs = k.players[innocents[1]].hand[0];
     expect(() => reduce(k, ids[innocents[0]], { type: "burn", card: theirs })).toThrow(GameError);
-    k = reduce(k, ids[killer], { type: "burn", card: theirs });
-    expect(k.players[killer].hand).toEqual([]);
-    expect(k.secretly.at(-1)).toMatchObject({ what: "burn", who: ids[killer] });
+    k = reduce(k, ids[innocents[1]], { type: "burn", card: theirs });
+    expect(k.players[innocents[1]].hand).toEqual([]);
+    expect(k.secretly.at(-1)).toMatchObject({ what: "burn", who: ids[innocents[1]] });
     // Nothing public happens.
     expect(k.log.at(-1)?.t).not.toBe("burn");
   });
@@ -170,39 +170,60 @@ describe("the night", () => {
 });
 
 describe("how it ends", () => {
-  it("the innocents win the moment the record proves the answer", () => {
+  const truth = scenario.secret.answer;
+  /** Call the Reconstruction as `seat`, and have everyone answer `agree(seat)`. */
+  function reconstruct(g: GameState, seat: number, answer: typeof truth, agree: (i: number) => boolean): GameState {
+    g = until(g, seat);
+    g = reduce(g, ids[seat], { type: "accuse", answer });
+    expect(g.phase).toMatchObject({ kind: "trial", by: seat });
+    expect(whoMustAct(g)).not.toContain(seat); // calling it is a yes
+    for (const i of whoMustAct(g)) g = reduce(g, ids[i], { type: "verdict", agree: agree(i) });
+    return g;
+  }
+
+  it("never ends just because the record proves it", () => {
     let g = fresh();
     const all = [...g.stacks.flat()];
-    // Put everything on the record through testimony, as if it had been found.
     g.players[0].hand.push(...all);
-    for (const id of all) g.stacks = g.stacks.map((s) => s.filter((x) => x !== id));
-    for (const id of g.players[0].hand) {
-      if (g.phase.kind === "over") break;
-      g = reduce(g, "a", { type: "testify", card: id });
-    }
-    expect(g.phase).toMatchObject({ kind: "over", by: "proof", caught: true });
-    expect(projectView(g, "b").reveal?.secret.answer).toEqual(scenario.secret.answer);
+    g.stacks = g.stacks.map(() => []);
+    for (const id of all) g = reduce(g, "a", { type: "testify", card: id });
+    expect(g.phase.kind).toBe("turn");
   });
 
-  it("the killer wins once too much is destroyed to prove it", () => {
-    let g = until(fresh(), killer);
-    // Hand the killer every card in the house, then let them burn it.
-    const all = g.stacks.flat();
-    g.stacks = g.stacks.map(() => []);
-    g.players[killer].hand.push(...all);
-    for (const id of all) {
-      if (g.phase.kind === "over") break;
-      g = reduce(g, ids[killer], { type: "burn", card: id });
-    }
-    expect(g.phase).toMatchObject({ kind: "over", by: "unprovable", caught: false });
-    expect((g.phase as { winners: string[] }).winners).toEqual([ids[killer]]);
+  it("a Reconstruction the table accepts is the verdict: right, and the innocents win", () => {
+    const g = reconstruct(fresh(), innocents[0], truth, () => true);
+    expect(g.phase).toMatchObject({ kind: "over", by: "trial", caught: true });
+    expect((g.phase as { winners: string[] }).winners.sort()).toEqual(innocents.map((i) => ids[i]).sort());
+  });
+
+  it("...and wrong, the killer wins", () => {
+    const framed = innocents[0];
+    const g = reconstruct(fresh(), killer, scenario.stories[framed], () => true);
+    expect(g.phase).toMatchObject({ kind: "over", by: "trial", caught: false, accusation: scenario.stories[framed] });
+  });
+
+  it("a rejected one costs the caller their turn, and their call", () => {
+    const seat = innocents[0];
+    let g = reconstruct(fresh(), seat, truth, (i) => i === seat);
+    expect(g.log.at(-1)).toMatchObject({ t: "verdict", accepted: false });
+    expect(g.phase).toMatchObject({ kind: "turn", step: "move" });
+    expect((g.phase as { active: number }).active).not.toBe(seat);
+    g = until(g, seat);
+    expect(() => reduce(g, ids[seat], { type: "accuse", answer: truth })).toThrow(GameError);
+  });
+
+  it("can only be called instead of moving, and only on the living", () => {
+    let g = reduce(fresh(), "a", { type: "stay" });
+    expect(() => reduce(g, "a", { type: "accuse", answer: truth })).toThrow(GameError);
+    g = fresh();
+    g.players[innocents[1]].alive = false;
+    expect(() => reduce(g, "a", { type: "accuse", answer: scenario.stories[innocents[1]] })).toThrow(GameError);
   });
 
   it("falls back to a dawn vote after the last round", () => {
     let g = createGame(scenario, seats, { rounds: 1 });
     for (let i = 0; i < 5; i++) g = quietTurn(g);
     expect(g.phase).toMatchObject({ kind: "vote", part: "agent" });
-    const truth = scenario.secret.answer;
     for (const part of ["agent", "device", "room"] as const)
       for (const id of ids) g = reduce(g, id, { type: "vote", value: truth[part] });
     expect(g.phase).toMatchObject({ kind: "over", by: "dawn", caught: true });
@@ -218,9 +239,11 @@ describe("views", () => {
     const i = projectView(g, ids[innocents[0]]);
     expect(i.guilty).toBeNull();
     expect(i.counts).toEqual(g.stacks.map((s) => s.length));
+    expect(i.you.story).toEqual(scenario.stories[innocents[0]]);
     const text = JSON.stringify(i);
     expect(text).not.toContain("secret");
     expect(text).not.toContain("stacks");
+    expect(text).not.toContain("stories");
   });
 });
 
@@ -228,7 +251,7 @@ describe("simulation", () => {
   it("plays bot games to the end at every table size", () => {
     for (const players of [4, 5, 6, 7, 8]) {
       const r = simulateGame(players * 17, players);
-      expect(["proof", "unprovable", "outnumbered", "dawn"]).toContain(r.by);
+      expect(["trial", "outnumbered", "dawn"]).toContain(r.by);
     }
   }, 60_000);
 });

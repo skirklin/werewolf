@@ -8,7 +8,9 @@ export interface SimResult {
   rounds: number;
   turns: number;
   caught: boolean;
-  by: "proof" | "unprovable" | "outnumbered" | "dawn";
+  by: "trial" | "outnumbered" | "dawn";
+  /** Reconstructions called, and by whom. */
+  calls: { innocent: number; guilty: number };
   murders: number;
   burned: number;
 }
@@ -44,5 +46,9 @@ export function simulateGame(
     by: state.phase.by,
     murders: state.log.filter((e) => e.t === "murder").length,
     burned: state.secretly.length,
+    calls: {
+      innocent: state.log.filter((e) => e.t === "accuse" && state.players.find((p) => p.id === e.who)!.role === "innocent").length,
+      guilty: state.log.filter((e) => e.t === "accuse" && state.players.find((p) => p.id === e.who)!.role !== "innocent").length,
+    },
   };
 }

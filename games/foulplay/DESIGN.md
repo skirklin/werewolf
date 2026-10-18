@@ -2,8 +2,8 @@
 
 A hidden-killer deduction game. Lord Ashcombe has been murdered during his
 own party; every player is one of the guests, and one of them did it. The
-evidence is scattered through the house, and it's a race: the innocents
-search for it, the killer destroys it. The full rules are in
+house tells a believable story about every guest, and only the killer's is
+true; the killer wins by getting someone else's to stick. The full rules are in
 [RULES.md](RULES.md).
 
 This package is the engine: content, case generator, solver, turn rules and
@@ -25,21 +25,24 @@ npm run foulplay -- --sim 100 --players 6 --accomplice no --rounds 4
   and the killer's evening), filtered by bitsets. The solver says what's
   still possible, why something was ruled out, and whether a set of cards
   proves one answer.
-- **`generate.ts`**: builds a case. It picks the killer, weapon and room,
-  writes evidence to fit, and leaves it around the house: on the body in the
-  Hall (the killer's looks, the kind of room), and in each room (was it here,
-  is the weapon kept here missing, sometimes who came and went or a guest's
-  evening). Each player gets one memory. It checks that the innocents could
-  prove the case even with any one card destroyed.
+- **`generate.ts`**: builds a case. It picks the killer and their real
+  story (weapon, room, evening), then a believable story for every other
+  guest, and gives each guest the evening their story needs. Then it deals
+  the evidence: alibis, "not here" and "not the weapon" cards (the cards
+  that break false stories), sightings that fit each story, and sometimes
+  who came and went. It checks that everything findable proves the answer,
+  and that every false story takes two or three destroyable cards to break.
 - **`game.ts`**: the rules as a pure reducer, and `projectView`, which is
   all a player is ever sent. Turns are one player at a time, the night
-  included, so the game works passing one device. The solver decides the
-  end: the record proves the answer (innocents), or what's left can't
-  (killer).
+  included, so the game works passing one device. The game ends when the
+  table accepts a Reconstruction, at the dawn vote, or when the guilty are
+  no longer outnumbered. It never ends on its own because the evidence adds
+  up.
 - **`bot.ts`**: a baseline player for simulations and practice. Innocents
-  head for the most evidence or tag along with someone; the killer goes
-  after the most damaging card it can reach unwatched and burns it, and
-  murders a lone guest at night.
+  head for the most evidence or tag along with someone, burn sightings of
+  themselves, and call the Reconstruction when what they know leaves one
+  answer. The guilty pick someone to frame, burn the cards that break that
+  story, and call it once the record can't tell it from the truth.
 
 ## Things the engine leans on
 
@@ -49,10 +52,13 @@ npm run foulplay -- --sim 100 --players 6 --accomplice no --rounds 4
   its count dropped" is the deduction, and joining someone is both
   protection and surveillance. Any company counts, not just innocent
   company, or a find staying private would give a guilty companion away.
+- **Stories.** `breaks(dossier, card, story, evening)` says whether a card
+  rules out a story. The client marks cards that break or fit your own
+  story, and the bots use it to choose whom to frame.
 - **Role knowledge.** `selfKnowledge` turns a role into cards with negative
-  ids: an innocent knows it wasn't them, the accomplice knows who, the killer
-  knows everything. The board and the bots reason with these; they never go
-  into play.
+  ids: an innocent knows it wasn't them, the guilty know everything. The bots
+  reason with these; they never go into play. The board players see does no
+  reasoning: it's a sheet they mark themselves.
 - **Generated, never sorted.** Every case is built from its seed and checked.
 
 ## History
@@ -60,6 +66,6 @@ npm run foulplay -- --sim 100 --players 6 --accomplice no --rounds 4
 Foul Play began as Dead Drop, a spy game in the style of Awkward Guests:
 players traded scored evidence cards on asks to the whole table, with rounds
 of discards and redraws. It became a murder mystery, then a hidden-killer
-game with leads and forgeries, and then this version: a race through the
-house, where where you are matters. Some identifiers (`agent`, `device`,
+game with leads and forgeries, then a race through the house, where where
+you are matters, and then this version, where every guest has a story. Some identifiers (`agent`, `device`,
 `moleTrait`, `handoffFeature`) are left over from the spy draft.

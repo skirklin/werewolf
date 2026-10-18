@@ -292,3 +292,6 @@ button.has-beta { position: relative; overflow: hidden; }
 .place .guest { min-height: 0; padding: 3px 8px; font-size: 0.78rem; border-radius: 999px; width: auto; }
 .place .guest.you { border-color: var(--accent-2); color: var(--accent-2); }
 .place .guest.active { font-weight: 700; }
+.pill.good { background: color-mix(in srgb, var(--good) 22%, transparent); color: var(--good); white-space: nowrap; }
+.pill.bad { background: color-mix(in srgb, var(--danger) 22%, transparent); color: var(--danger); white-space: nowrap; }
+.verdict-list { display: flex; flex-wrap: wrap; gap: 6px; }

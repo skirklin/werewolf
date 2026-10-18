@@ -1,4 +1,4 @@
-import { atPlace, clueText, placeName, type Clue, type Dossier, type LogEntry, type Part, type PlayerView } from "@party/foulplay";
+import { answerText, atPlace, clueText, placeName, type Clue, type Dossier, type LogEntry, type Part, type PlayerView } from "@party/foulplay";
 
 export function nameOf(view: PlayerView, id: string): string {
   if (id === view.you.id) return "you";
@@ -71,6 +71,14 @@ export function logText(view: PlayerView, e: LogEntry): string {
       return "☀️ Morning. Everyone survived the night.";
     case "dawn":
       return "🌅 Dawn. The inspector has arrived, and the table must vote.";
+    case "accuse":
+      return `🕯️ ${n(e.who)} called the Reconstruction: ${answerText(d, e.answer)}.`;
+    case "verdict": {
+      const said = (ids: string[]) => (ids.length ? ids.map((id) => cap(nameOf(view, id))).join(", ") : "nobody");
+      return e.accepted
+        ? `The table agreed (yes: ${said(e.yes)}; no: ${said(e.no)}).`
+        : `The table wasn't convinced (yes: ${said(e.yes)}; no: ${said(e.no)}). Play goes on.`;
+    }
     case "voted": {
       const tally = e.tally.map(([v, n]) => `${optionName(d, e.part, v)} ${n}`).join(", ");
       if (e.value === null) return `The vote on ${PART_LABEL[e.part]} was tied (${tally}). Vote again between them.`;

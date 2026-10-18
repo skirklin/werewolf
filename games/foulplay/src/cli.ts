@@ -37,10 +37,12 @@ if (values.sim) {
   const median = (xs: number[]) => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)];
   console.log(`${games} games, ${players} baseline bots`);
   console.log(`killer wins: ${share((r) => !r.caught)}`);
-  for (const by of ["proof", "unprovable", "outnumbered", "dawn"] as const) {
+  for (const by of ["trial", "outnumbered", "dawn"] as const) {
     console.log(`  ended by ${by.padEnd(12)} caught ${share((r) => r.by === by && r.caught)}, got away ${share((r) => r.by === by && !r.caught)}`);
   }
   console.log(`median rounds: ${median(results.map((r) => r.rounds))}, turns: ${median(results.map((r) => r.turns))}`);
+  const mean = (xs: number[]) => (xs.reduce((a, b) => a + b, 0) / xs.length).toFixed(2);
+  console.log(`reconstructions a game: innocents ${mean(results.map((r) => r.calls.innocent))}, guilty ${mean(results.map((r) => r.calls.guilty))}`);
   console.log(`median murders: ${median(results.map((r) => r.murders))}, cards destroyed: ${median(results.map((r) => r.burned))}`);
 } else {
   const s = generateScenario({ seed, players, accomplice });
@@ -49,6 +51,9 @@ if (values.sim) {
   console.log(`${d.title} — seed ${seed}, ${players} players\n`);
   console.log("GUESTS (and their one memory)");
   for (const a of d.agents) console.log(`  ${(a.name + role(a.id)).padEnd(30)} ${s.memories[a.id].map((id) => clueText(d, s.clues[id])).join(" ")}`);
+  console.log("\nSTORIES (and evenings)");
+  for (const a of d.agents)
+    console.log(`  ${a.name.padEnd(18)} ${answerText(d, s.stories[a.id])}. Went to: ${s.secret.visits[a.id].map((r) => d.rooms[r].name).join(", ")}`);
   console.log("\nWEAPONS");
   for (const x of d.devices)
     console.log(`  ${x.name.padEnd(16)} kept ${atPlace(d, x.location)}. ${requirementText(d, x.requirement)}`);

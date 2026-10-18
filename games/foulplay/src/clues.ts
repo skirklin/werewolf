@@ -1,12 +1,18 @@
-import type { Answer, ClueBody, Dossier, Requirement, Secret } from "./types.js";
+import type { Answer, ClueBody, Dossier, Requirement, RoomId, Secret } from "./types.js";
 import type { Space } from "./space.js";
+import { ALIBIS, SIGHTINGS } from "./content.js";
 
 /** Is a clue consistent with candidate `i`? */
 export function holds(space: Space, clue: ClueBody, i: number): boolean {
-  const d = space.dossier;
-  const agent = space.agent[i];
-  const room = space.room[i];
-  const visited = space.visitSets[space.visits[i]];
+  return holdsIn(space.dossier, clue, space.answerAt(i), space.visitSets[space.visits[i]]);
+}
+
+/**
+ * Is a clue consistent with this answer, and this evening for the culprit?
+ * `breaks` is the other way round: the card shows the story can't be true.
+ */
+export function holdsIn(d: Dossier, clue: ClueBody, a: Answer, visited: readonly RoomId[]): boolean {
+  const { agent, room, device } = a;
   switch (clue.kind) {
     case "visited":
       // Only says something about the culprit's evening if this is the culprit.
@@ -20,7 +26,7 @@ export function holds(space: Space, clue: ClueBody, i: number): boolean {
     case "notRoom":
       return room !== clue.room;
     case "notDevice":
-      return space.device[i] !== clue.device;
+      return device !== clue.device;
     case "notAgent":
       return agent !== clue.agent;
     case "visitors":
@@ -31,8 +37,16 @@ export function holds(space: Space, clue: ClueBody, i: number): boolean {
     case "isRoom":
       return room === clue.room;
     case "isDevice":
-      return space.device[i] === clue.device;
+      return device === clue.device;
+    case "seen":
+      // A sighting: says where the guest went, nothing more.
+      return agent !== clue.agent || visited.includes(clue.room);
   }
+}
+
+/** Does this card break the story told about a guest who spent the evening in `evening`? */
+export function breaks(d: Dossier, clue: ClueBody, story: Answer, evening: readonly RoomId[]): boolean {
+  return !holdsIn(d, clue, story, evening);
 }
 
 function sameRooms(a: readonly number[], b: readonly number[]): boolean {
@@ -76,7 +90,18 @@ export function clueText(d: Dossier, clue: ClueBody): string {
     case "notDevice":
       return `No trace on the ${d.devices[clue.device].name.toLowerCase()}: not the ${item}.`;
     case "notAgent":
-      return `${agent(clue.agent)} has a solid alibi: not ${culprit}.`;
+      return clue.say === undefined
+        ? `${agent(clue.agent)} has a solid alibi: not ${culprit}.`
+        : ALIBIS[clue.say % ALIBIS.length].replace("{who}", agent(clue.agent));
+    case "seen": {
+      const text = SIGHTINGS[(clue.agent + clue.room) % SIGHTINGS.length];
+      return cap(
+        text
+          .replace("{who}", agent(clue.agent))
+          .replace("{at}", at(clue.room))
+          .replace("{of}", `of the ${d.rooms[clue.room].name}`)
+      );
+    }
     case "visitors": {
       const names = clue.agents.map(agent);
       const room = `${d.rooms[clue.room].preposition} the ${d.rooms[clue.room].name}`;
