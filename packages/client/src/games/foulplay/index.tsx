@@ -18,7 +18,7 @@ function Settings({ config, players, onChange }: LobbySettingsProps<GameConfig>)
             </button>
           </div>
           <p className="muted small" style={{ margin: 0 }}>
-            The accomplice knows who the killer is, but not how, and can plant one forgery of their own.
+            The accomplice knows the whole truth, and helps the killer pin it on someone else.
           </p>
         </>
       ) : (
@@ -32,7 +32,7 @@ export const foulplay: ClientGame<GameConfig, PlayerView, Action> = {
   id: "foulplay",
   name: "Foul Play",
   emoji: "🔍",
-  tagline: "One of you is the killer. Find out who, with what, and where.",
+  tagline: "Every guest has a story that fits. One of them is true.",
   beta: true,
   Home: FoulPlayHome,
 

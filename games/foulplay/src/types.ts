@@ -124,7 +124,7 @@ export interface Secret {
   visits: RoomId[][];
 }
 
-/** A single statement about the case. True, unless it's a forgery. */
+/** A single statement about the case. Every card in play is true. */
 export type ClueBody =
   /** "The butler saw X in R." / "The staff swear X never set foot in R." */
   | { kind: "visited"; agent: AgentId; room: RoomId; is: boolean }
@@ -138,8 +138,13 @@ export type ClueBody =
   | { kind: "notRoom"; room: RoomId }
   /** "No trace on D: not the weapon." */
   | { kind: "notDevice"; device: DeviceId }
-  /** "X has a solid alibi." */
-  | { kind: "notAgent"; agent: AgentId }
+  /** "X has a solid alibi." `say` picks which witness tells it. */
+  | { kind: "notAgent"; agent: AgentId; say?: number }
+  /**
+   * "A maid saw X slip out of R." True, and no proof of anything, but it fits
+   * the story the house tells about X: the kind of card X would rather burn.
+   */
+  | { kind: "seen"; agent: AgentId; room: RoomId }
   /** "The staff saw only X and Y in R all evening." Exactly who set foot there. */
   | { kind: "visitors"; room: RoomId; agents: AgentId[] }
   /** "X's evening: the Bar and the Library, nowhere else." Exactly where they went. */
@@ -152,22 +157,10 @@ export type ClueBody =
 export type Clue = ClueBody & { id: number };
 
 /**
- * Somewhere to look for evidence. Each lead has its own small stack of
- * cards, prepared by the generator; the second body only exists once the
- * killer strikes again.
+ * Where a player can be: one of the dossier's rooms, or the Hall, where the
+ * body was found and everyone starts. The Hall is never the scene.
  */
-export type Lead =
-  | { kind: "staff"; room: RoomId }
-  | { kind: "alibi"; agent: AgentId }
-  | { kind: "body" }
-  | { kind: "search"; room: RoomId }
-  | { kind: "body2" };
-
-/** A forgery the killer (or accomplice) can plant, and the lead it fits. */
-export interface Forgery {
-  clue: number;
-  lead: Lead;
-}
+export type Place = number;
 
 /** A complete, solvable case: the world, its truth, and where the evidence lies. */
 export interface Scenario {
@@ -177,16 +170,18 @@ export interface Scenario {
   /** The killer's seat, and the accomplice's (or null). */
   killer: number;
   accomplice: number | null;
-  /** Every card in the case, forgeries included. `clues[i].id === i`. */
+  /**
+   * The story the house tells about each guest: a weapon they could have
+   * used and a room they were in that fits. The killer's is the truth; every
+   * other one is broken by an alibi or two somewhere in the house.
+   */
+  stories: Answer[];
+  /** Every card in the case. `clues[i].id === i`. */
   clues: Clue[];
-  /** Ids of the cards that are false. Secret. */
-  forged: number[];
-  /** hands[seat] = the memory cards that seat starts with. */
-  hands: number[][];
-  /** Each lead's stack, top first, keyed by `leadKey`. */
-  stacks: Record<string, number[]>;
-  /** Kept back for the second body, if there is one. */
-  secondBody: number[];
-  /** What the killer and the accomplice can plant. */
-  forgeries: { killer: Forgery[]; accomplice: Forgery[] };
+  /** memories[seat] = the cards that seat starts with in hand. */
+  memories: number[][];
+  /** stacks[place] = the face-down evidence there, top first. The Hall is the last place. */
+  stacks: number[][];
+  /** Fresh evidence about the killer, left on a body if they murder again. */
+  spare: number[];
 }

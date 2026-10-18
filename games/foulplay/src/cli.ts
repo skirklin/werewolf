@@ -1,7 +1,6 @@
 import { parseArgs } from "node:util";
 import { generateScenario } from "./generate.js";
-import { Solver } from "./solver.js";
-import { answerText, clueText, leadOfKey, leadText, requirementText } from "./clues.js";
+import { answerText, atPlace, clueText, placeName, requirementText } from "./clues.js";
 import { simulateGame, type SimResult } from "./simulate.js";
 
 /**
@@ -18,8 +17,6 @@ const { values } = parseArgs({
     sim: { type: "string" },
     accomplice: { type: "string" },
     rounds: { type: "string" },
-    witness: { type: "string" },
-    "hand-size": { type: "string" },
   },
 });
 const seed = Number(values.seed);
@@ -29,61 +26,41 @@ const accomplice = values.accomplice === undefined ? undefined : values.accompli
 if (values.sim) {
   const games = Number(values.sim);
   const results: SimResult[] = [];
-  for (let g = 0; g < games; g++) results.push(
+  for (let g = 0; g < games; g++)
+    results.push(
       simulateGame(seed + g, players, {
         accomplice,
         rounds: values.rounds ? Number(values.rounds) : undefined,
-        gen: {
-          ...(values.witness ? { witnessChance: Number(values.witness) } : {}),
-          ...(values["hand-size"] ? { handSize: Number(values["hand-size"]) } : {}),
-        },
       })
     );
   const share = (f: (r: SimResult) => boolean) => `${Math.round((100 * results.filter(f).length) / games)}%`;
   const median = (xs: number[]) => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)];
   console.log(`${games} games, ${players} baseline bots`);
-  console.log(`killer wins: ${share((r) => r.result !== "caught")}`);
-  console.log(`  caught at an inquest: ${share((r) => r.result === "caught" && r.by === "inquest")}`);
-  console.log(`  caught at dawn:       ${share((r) => r.result === "caught" && r.by === "dawn")}`);
-  console.log(`  wrong at an inquest:  ${share((r) => r.result === "wrong" && r.by === "inquest")}`);
-  console.log(`  wrong at dawn:        ${share((r) => r.result === "wrong" && r.by === "dawn")}`);
-  console.log(`second strike used: ${share((r) => r.struck)}`);
-  console.log(`median answers left on the public record: ${median(results.map((r) => r.publicLeft))}`);
-  console.log(`median answers left from all the innocents saw: ${median(results.map((r) => r.pooledLeft))}`);
-  console.log(`median turns: ${median(results.map((r) => r.turns))}`);
+  console.log(`killer wins: ${share((r) => !r.caught)}`);
+  for (const by of ["trial", "outnumbered", "dawn"] as const) {
+    console.log(`  ended by ${by.padEnd(12)} caught ${share((r) => r.by === by && r.caught)}, got away ${share((r) => r.by === by && !r.caught)}`);
+  }
+  console.log(`median rounds: ${median(results.map((r) => r.rounds))}, turns: ${median(results.map((r) => r.turns))}`);
+  const mean = (xs: number[]) => (xs.reduce((a, b) => a + b, 0) / xs.length).toFixed(2);
+  console.log(`reconstructions a game: innocents ${mean(results.map((r) => r.calls.innocent))}, guilty ${mean(results.map((r) => r.calls.guilty))}`);
+  console.log(`median murders: ${median(results.map((r) => r.murders))}, cards destroyed: ${median(results.map((r) => r.burned))}`);
 } else {
   const s = generateScenario({ seed, players, accomplice });
   const d = s.dossier;
-  const solver = new Solver(d);
-  const clue = (id: number) => s.clues[id];
-  const left = (ids: number[]) => solver.remaining(ids.map(clue));
   const role = (i: number) => (i === s.killer ? " (KILLER)" : i === s.accomplice ? " (accomplice)" : "");
-
   console.log(`${d.title} — seed ${seed}, ${players} players\n`);
-  console.log("GUESTS");
-  for (const a of d.agents) {
-    const traits = d.traits.map((t) => t.values.find((v) => v.id === a.traits[t.id])!.label);
-    console.log(`  ${(a.name + role(a.id)).padEnd(30)} ${traits.join(", ")}`);
-  }
-  console.log("\nROOMS");
-  for (const r of d.rooms) console.log(`  ${r.name.padEnd(10)} [${r.features.join(", ")}]`);
+  console.log("GUESTS (and their one memory)");
+  for (const a of d.agents) console.log(`  ${(a.name + role(a.id)).padEnd(30)} ${s.memories[a.id].map((id) => clueText(d, s.clues[id])).join(" ")}`);
+  console.log("\nSTORIES (and evenings)");
+  for (const a of d.agents)
+    console.log(`  ${a.name.padEnd(18)} ${answerText(d, s.stories[a.id])}. Went to: ${s.secret.visits[a.id].map((r) => d.rooms[r].name).join(", ")}`);
   console.log("\nWEAPONS");
   for (const x of d.devices)
-    console.log(`  ${x.name.padEnd(16)} kept ${d.rooms[x.location].preposition} the ${d.rooms[x.location].name}. ${requirementText(d, x.requirement)}`);
-
-  console.log(`\nBefore any evidence: ${solver.remaining([])} possible answers.`);
-  s.hands.forEach((hand, p) => {
-    console.log(`\n${d.agents[p].name}${role(p)} remembers (alone: ${left(hand)} answers left)`);
-    for (const id of hand) console.log(`  ${clueText(d, clue(id))}`);
+    console.log(`  ${x.name.padEnd(16)} kept ${atPlace(d, x.location)}. ${requirementText(d, x.requirement)}`);
+  console.log("\nTHE HOUSE");
+  s.stacks.forEach((stack, place) => {
+    console.log(`  ${placeName(d, place)}`);
+    for (const id of stack) console.log(`    ${clueText(d, s.clues[id])}`);
   });
-  console.log("\nLEADS");
-  for (const [key, ids] of Object.entries(s.stacks)) {
-    const lead = leadOfKey(key);
-    console.log(`  ${lead ? leadText(d, lead) : key}`);
-    for (const id of ids) console.log(`    ${clueText(d, clue(id))}`);
-  }
-  console.log("\nFORGERIES");
-  for (const f of s.forgeries.killer) console.log(`  killer, ${leadText(d, f.lead)}: ${clueText(d, clue(f.clue))}`);
-  for (const f of s.forgeries.accomplice) console.log(`  accomplice, ${leadText(d, f.lead)}: ${clueText(d, clue(f.clue))}`);
   console.log(`\nSOLUTION: ${answerText(d, s.secret.answer)}`);
 }

@@ -1,19 +1,7 @@
-import { useEffect, useState } from "react";
-import {
-  answerText,
-  clueText,
-  leadKey,
-  leadText,
-  sameLead,
-  type Action,
-  type Answer,
-  type Dimension,
-  type Lead,
-  type PlayerView,
-  type Tampering,
-} from "@party/foulplay";
+import { useState } from "react";
+import { answerText, atPlace, clueText, hallOf, placeName, type Action, type Answer, type PlayerView } from "@party/foulplay";
 import type { TableProps } from "../../shell/game.js";
-import { Board, CardView, Evidence, type Picking } from "./Notebook.js";
+import { Board, CardView, Evidence } from "./Notebook.js";
 import { Dossier } from "./Dossier.js";
 import { useNotes, type Notes } from "./solver.js";
 import { PART_LABEL, cap, cards, logText, nameOf, optionName, seatName } from "./text.js";
@@ -21,81 +9,84 @@ import { PART_LABEL, cap, cards, logText, nameOf, optionName, seatName } from ".
 type Act = (a: Action) => void;
 type Tab = "board" | "evidence" | "case" | "log";
 
-/** A Foul Play game in progress, on one player's own device. */
+/** A Foul Play game in progress, on one player's own device (or the one being passed round). */
 export function FoulPlayTable({ view, room, isHost, act, playAgain, onExit }: TableProps<PlayerView, Action>) {
   const notes = useNotes(view, room.code);
   const [tab, setTab] = useState<Tab>("board");
   const phase = view.phase;
-  const choosing = phase.kind === "turn" && phase.active === view.you.seat && phase.step === "investigate";
-  // Calling an inquest: the accusation is picked on the board.
-  const [inquest, setInquest] = useState<Partial<Answer> | null>(null);
-  useEffect(() => {
-    if (!choosing) setInquest(null);
-  }, [choosing]);
-
-  const picking: Picking = inquest
-    ? {
-        answer: inquest,
-        onPick: (dim: Dimension, value: number) =>
-          setInquest((a) => a && { ...a, [dim]: a[dim] === value ? undefined : value }),
-      }
-    : null;
+  const moving = phase.kind === "turn" && phase.active === view.you.seat && phase.step === "move";
 
   return (
     <div className="stack">
-      <Seats view={view} />
       <RolePanel view={view} />
-      <ActionPanel
-        view={view}
-        notes={notes}
-        act={act}
-        isHost={isHost}
-        playAgain={playAgain}
-        onExit={onExit}
-        inquest={inquest}
-        startInquest={() => {
-          setInquest(notes.analysis.solved ?? {});
-          setTab("board");
-        }}
-        stopInquest={() => setInquest(null)}
-      />
+      <ActionPanel view={view} notes={notes} act={act} isHost={isHost} playAgain={playAgain} onExit={onExit} />
+      <House view={view} act={moving ? act : null} />
       <div className="tabs">
         {(["board", "evidence", "case", "log"] as const).map((t) => (
           <button key={t} className={tab === t ? "on" : ""} onClick={() => setTab(t)}>
-            {t === "board" ? "🗂️ Board" : t === "evidence" ? `🃏 Evidence` : t === "case" ? "📁 Case" : "📜 Log"}
+            {t === "board" ? "🗂️ Board" : t === "evidence" ? "🃏 Evidence" : t === "case" ? "📁 Case" : "📜 Log"}
           </button>
         ))}
       </div>
-      {tab === "board" && <Board view={view} notes={notes} picking={picking} />}
-      {tab === "evidence" && <Evidence view={view} notes={notes} />}
+      {tab === "board" && <Board view={view} notes={notes} picking={null} />}
+      {tab === "evidence" && <Evidence view={view} />}
       {tab === "case" && <Dossier view={view} />}
       {tab === "log" && <Log view={view} />}
     </div>
   );
 }
 
-/** Who's at the table, whose turn it is, and who's still to vote. */
-function Seats({ view }: { view: PlayerView }) {
-  const phase = view.phase;
-  const active = "active" in phase ? phase.active : -1;
+/**
+ * The house: every room and the Hall, how much evidence is left in each, and
+ * who's there. On your move, tap a room to go there or a guest to join them.
+ */
+function House({ view, act }: { view: PlayerView; act: Act | null }) {
+  const d = view.dossier;
+  const me = view.you.seat;
+  const hall = hallOf(d);
+  const active = "active" in view.phase ? view.phase.active : -1;
+  const places = [hall, ...d.rooms.map((r) => r.id)];
   return (
     <div className="stack" style={{ gap: 6 }}>
-      <div className="seats">
-        {view.players.map((p, i) => {
-          const mark = !p.alive ? "☠️" : i === active ? "▶" : view.voted ? (view.voted[i] ? "✓" : "…") : "🕴️";
+      <div className="spread">
+        <b>🏚️ The house</b>
+        <span className="muted small">
+          {view.phase.kind === "vote" || view.phase.kind === "over" ? "Dawn" : `Round ${view.round} of ${view.rounds}`}
+        </span>
+      </div>
+      <div className="house">
+        {places.map((place) => {
+          const here = view.players.map((p, i) => ({ p, i })).filter(({ p }) => p.alive && p.place === place);
+          const mine = view.players[me].place === place;
           return (
-            <span key={p.id} className={`seat ${i === active ? "active" : ""} ${p.alive ? "" : "out"}`}>
-              {mark} {seatName(view, i)}
-              <span className="muted"> · 🂠{p.handSize}</span>
-            </span>
+            <div key={place} className={`place ${mine ? "mine" : ""}`}>
+              <button
+                className="place-name"
+                disabled={!act}
+                onClick={() => act?.(mine ? { type: "stay" } : { type: "move", to: place })}
+              >
+                <b>{place === hall ? "Hall" : d.rooms[place].name}</b>
+                <span className="count" title="Evidence left here">🂠 {view.counts[place]}</span>
+              </button>
+              <div className="people">
+                {here.length === 0 && <span className="muted small">empty</span>}
+                {here.map(({ p, i }) => (
+                  <button
+                    key={p.id}
+                    className={`guest ${i === active ? "active" : ""} ${i === me ? "you" : ""}`}
+                    disabled={!act || i === me}
+                    onClick={() => act?.({ type: "join", who: p.id })}
+                  >
+                    {i === active ? "▶ " : ""}
+                    {p.id === view.you.id ? "You" : p.name}
+                  </button>
+                ))}
+              </div>
+            </div>
           );
         })}
       </div>
-      <span className="muted small">
-        {phase.kind === "vote" || (phase.kind === "over" && phase.by === "dawn")
-          ? "Dawn"
-          : `Night, round ${view.round} of ${view.rounds}`}
-      </span>
+      {act && <p className="muted small center" style={{ margin: 0 }}>Tap a room to go there, or a guest to join them.</p>}
     </div>
   );
 }
@@ -109,59 +100,78 @@ function RolePanel({ view }: { view: PlayerView }) {
   if (!open)
     return (
       <button className="ghost full" onClick={() => setOpen(true)}>
-        🔒 You are {me}. Tap to see your role.
+        🔒 You are {me}
+        {view.you.alive ? "" : " (dead)"}. Tap to see your role.
       </button>
     );
   return (
     <div className={`card stack role ${g ? "guilty" : ""}`} style={{ gap: 6 }}>
       <div className="spread">
         <b>
-          {view.you.role === "killer"
-            ? "🔪 You are the killer"
-            : view.you.role === "accomplice"
-              ? "🤝 You are the accomplice"
-              : "🕊️ You are innocent"}
+          {view.you.role === "killer" ? "🔪 You are the killer" : view.you.role === "accomplice" ? "🤝 You are the accomplice" : "🕊️ You are innocent"}
         </b>
         <button className="ghost mini" onClick={() => setOpen(false)}>Hide</button>
       </div>
       {!g && (
-        <span className="muted small">
-          You know you didn&apos;t do it. Find out who did, with what and where, before dawn.
-        </span>
+        <>
+          <span>
+            The story the house tells about you: <b>{answerText(d, view.you.story).replace(/^[^,]+, /, "")}</b>. It
+            isn&apos;t true, but it could look it.
+          </span>
+          <span className="muted small">
+            You didn&apos;t do it. Somewhere there&apos;s an alibi that breaks your story: get it on the record. Burn what
+            fits your story if you like. Then help the table name the real killer, with what and where.
+          </span>
+        </>
       )}
-      {g?.answer && <span>It was you, {answerText(d, g.answer).replace(/^[^,]+, /, "")}.</span>}
       {g && view.you.role === "killer" && (
-        <span className="muted small">
-          {g.accomplice !== null ? `Your accomplice is ${seatName(view, g.accomplice)}.` : "You have no accomplice."}{" "}
-          You win unless the table names all three at dawn.
-        </span>
+        <>
+          <span>It was you, {answerText(d, g.answer).replace(/^[^,]+, /, "")}.</span>
+          <span className="muted small">
+            {g.accomplice !== null ? `Your accomplice is ${seatName(view, g.accomplice)}.` : "You have no accomplice."}{" "}
+            Pin it on someone else: destroy the cards that break their story (search alone and burn them; at night,
+            destroy a card in an empty room, or murder a guest who&apos;s alone), then get the table to agree to it. You
+            win if the wrong answer is accepted.
+          </span>
+        </>
       )}
       {g && view.you.role === "accomplice" && (
-        <span className="muted small">
-          {seatName(view, g.killer)} did it. You don&apos;t know with what or where. You win with them.
-        </span>
+        <>
+          <span>
+            {seatName(view, g.killer)} did it, {answerText(d, g.answer).replace(/^[^,]+, /, "")}.
+          </span>
+          <span className="muted small">
+            Help them pin it on someone else: burn what breaks an innocent&apos;s story, and back the wrong answer. You win
+            with them.
+          </span>
+        </>
       )}
+      <span className="muted small">
+        Your evening: {view.you.evening.map((r) => d.rooms[r].name).join(", ")}.
+      </span>
       {g && (
         <div className="stack" style={{ gap: 4 }}>
-          <span className="muted small">
-            Forgeries ({g.plantsLeft} left to plant). Plant one by following its lead and tampering instead of drawing.
-          </span>
-          {g.forgeries.map(({ forgery, planted, card }) => {
-            return (
-              <div key={forgery.clue} className={`clue ${planted ? "doubted" : ""}`}>
-                <span className="row">
-                  <span>{clueText(d, card)}</span>
-                </span>
-                <span className="src">
-                  {planted ? "✓ Planted · " : ""}
-                  {leadText(d, forgery.lead)}
-                </span>
-              </div>
-            );
-          })}
+          <span className="muted small">The story the house tells about each guest:</span>
+          {g.stories.map((st, i) => (
+            <div key={i} className="small">
+              {i === g.killer ? "🔪 " : "• "}
+              {answerText(d, st)}
+            </div>
+          ))}
         </div>
       )}
-      {g?.marked && <span className="small">☠️ You&apos;ve marked {nameOf(view, g.marked)}. They&apos;ll be found at the end of the round.</span>}
+      {g?.stacks && (
+        <div className="stack" style={{ gap: 4 }}>
+          <span className="muted small">What&apos;s left in the house (top card first):</span>
+          {g.stacks.map((stack, place) =>
+            stack.length ? (
+              <div key={place} className="small">
+                <b>{cap(placeName(d, place))}:</b> {stack.map((c) => clueText(d, c)).join(" | ")}
+              </div>
+            ) : null
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -173,9 +183,6 @@ function ActionPanel({
   isHost,
   playAgain,
   onExit,
-  inquest,
-  startInquest,
-  stopInquest,
 }: {
   view: PlayerView;
   notes: Notes;
@@ -183,380 +190,214 @@ function ActionPanel({
   isHost: boolean;
   playAgain: () => void;
   onExit: () => void;
-  inquest: Partial<Answer> | null;
-  startInquest: () => void;
-  stopInquest: () => void;
 }) {
   const phase = view.phase;
   const me = view.you.seat;
   if (phase.kind === "over") return <GameOver view={view} isHost={isHost} playAgain={playAgain} onExit={onExit} />;
-  if (phase.kind === "confer" && phase.with === me) return <ShowPanel view={view} notes={notes} act={act} />;
-  if (phase.kind === "trim" && phase.active === me) return <TrimPanel view={view} notes={notes} act={act} />;
-  if ((phase.kind === "inquest" || phase.kind === "vote") && view.voted && !view.voted[me])
-    return phase.kind === "inquest" ? <VerdictPanel view={view} act={act} /> : <DawnPanel view={view} notes={notes} act={act} />;
-  if (phase.kind === "turn" && phase.active === me) {
-    if (phase.step === "share") return <SharePanel view={view} notes={notes} act={act} />;
-    if (inquest) return <InquestPanel view={view} notes={notes} act={act} answer={inquest} onCancel={stopInquest} />;
-    return <InvestigatePanel view={view} act={act} onInquest={startInquest} />;
-  }
+  if (phase.kind === "night" && phase.active === me) return <NightPanel view={view} act={act} />;
+  if (phase.kind === "vote" && view.voted && !view.voted[me]) return <DawnPanel view={view} notes={notes} act={act} />;
+  if (phase.kind === "trial" && view.voted && !view.voted[me]) return <TrialPanel view={view} act={act} />;
+  if (phase.kind === "turn" && phase.active === me) return <TurnPanel view={view} notes={notes} act={act} />;
 
   const name = (i: number) => cap(nameOf(view, view.players[i].id));
-  let waiting: string;
-  if (!view.you.alive && phase.kind !== "turn") waiting = "You're dead. The living are deciding.";
-  else if (phase.kind === "turn") waiting = `${name(phase.active)} is ${phase.step === "investigate" ? "investigating" : "deciding what to share"}.`;
-  else if (phase.kind === "confer") waiting = `${name(phase.active)} is conferring with ${nameOf(view, view.players[phase.with].id)}.`;
-  else if (phase.kind === "trim") waiting = `${name(phase.active)} is over the hand limit, and choosing what to give up.`;
-  else waiting = `Waiting for ${view.voted!.filter((v) => !v).length} more to vote.`;
+  const waiting =
+    !view.you.alive && phase.kind !== "vote"
+      ? "You're dead. You can watch, but not talk."
+      : phase.kind === "turn"
+        ? `${name(phase.active)} ${phase.step === "move" ? "is deciding where to go" : "is deciding what to do"}.`
+        : phase.kind === "night"
+          ? `Night. ${name(phase.active)} has the device.`
+          : phase.kind === "trial"
+            ? `${name(phase.by)} called the Reconstruction: ${answerText(view.dossier, phase.answer)}. Waiting for ${view.voted!.filter((v) => !v).length} more to say.`
+            : `Waiting for ${view.voted!.filter((v) => !v).length} more to vote.`;
   const last = view.log.at(-1);
   return (
     <div className="card stack">
       {last && <span className="muted small">{logText(view, last)}</span>}
-      {phase.kind === "inquest" && <b className="center">{inquestLine(view)}</b>}
       <p className="muted center" style={{ margin: 0 }}>{waiting}</p>
     </div>
   );
 }
 
-function inquestLine(view: PlayerView): string {
-  const p = view.phase as Extract<PlayerView["phase"], { kind: "inquest" }>;
-  return `${cap(nameOf(view, view.players[p.active].id))} accuses ${answerText(view.dossier, p.answer)}.`;
-}
-
-/** Who has followed a lead so far, from the public log. */
-function lookedBy(view: PlayerView, lead: Lead): string[] {
-  const who = view.log.flatMap((e) => (e.t === "investigate" && sameLead(e.lead, lead) ? [e.who] : []));
-  return [...new Set(who)];
-}
-
-/** Step one of your turn: pick a lead. The guilty may tamper with it instead. */
-function InvestigatePanel({ view, act, onInquest }: { view: PlayerView; act: Act; onInquest: () => void }) {
+/** Your turn: move, then search or keep watch. Testifying and burning are free. Or call the Reconstruction. */
+function TurnPanel({ view, notes, act }: { view: PlayerView; notes: Notes; act: Act }) {
+  const phase = view.phase as Extract<PlayerView["phase"], { kind: "turn" }>;
+  const [calling, setCalling] = useState(false);
   const d = view.dossier;
-  const g = view.guilty;
-  const [lead, setLead] = useState<Lead | null>(null);
-  const [tamper, setTamper] = useState<Tampering | null>(null);
-  const [striking, setStriking] = useState(false);
-  const dry = view.you.findings.filter((f) => f.clue === null).map((f) => leadKey(f.lead));
-  // Leads where your last look found something, and you were told there was more.
-  const last = new Map(view.you.findings.map((f) => [leadKey(f.lead), f]));
-  const more = new Set([...last].filter(([, f]) => f.more).map(([k]) => k));
-  const plantable = g ? g.forgeries.filter((f) => !f.planted && g.plantsLeft > 0) : [];
-
-  const leadButton = (l: Lead, label: string) => {
-    const by = lookedBy(view, l);
-    const sub = dry.includes(leadKey(l))
-      ? "nothing more for you"
-      : more.has(leadKey(l))
-        ? "you know there's more here"
-        : by.length
-        ? `looked at by ${by.map((id) => nameOf(view, id)).join(", ")}`
-        : "nobody's looked yet";
-    const on = lead && sameLead(lead, l);
-    return (
-      <button
-        key={leadKey(l)}
-        className={on ? "selected" : ""}
-        onClick={() => {
-          setLead(l);
-          if (tamper?.how === "plant" && !plantable.some((f) => f.forgery.clue === tamper.clue && sameLead(f.forgery.lead, l)))
-            setTamper(null);
-        }}
-      >
-        {label}
-        <span className="src">{sub}</span>
-      </button>
-    );
-  };
-  const has = (l: Lead) => view.leads.some((x) => sameLead(x, l));
-  const label = lead ? leadText(d, lead) : null;
-
-  return (
-    <div className="card stack">
-      <b>Your turn: investigate</b>
-      <p className="muted small" style={{ margin: 0 }}>
-        Pick a lead and draw its top card. Only you see what it says; the table sees where you looked.
-      </p>
-      <div className="leads">
-        {leadButton({ kind: "body" }, "🩸 Examine the body")}
-        {has({ kind: "body2" }) && leadButton({ kind: "body2" }, "🩸 Examine the second body")}
-      </div>
-      <div className="muted small group-label">🚪 The rooms</div>
-      <div className="leads">
-        {d.rooms.flatMap((r) => [
-          leadButton({ kind: "staff", room: r.id }, `🗣️ Staff: ${r.name}`),
-          leadButton({ kind: "search", room: r.id }, `🔦 Search: ${r.name}`),
-        ])}
-      </div>
-      <div className="muted small group-label">🕴️ Alibis</div>
-      <div className="leads">
-        {d.agents.map((a) => leadButton({ kind: "alibi", agent: a.id }, `🧾 ${a.name}${a.id === view.you.seat ? " (you)" : ""}`))}
-      </div>
-
-      {g && (
-        <div className="stack" style={{ gap: 6 }}>
-          <div className="muted small group-label">🤫 Tamper instead (looks the same to the table)</div>
-          <div className="choices">
-            <button className={`choice ${!tamper ? "selected" : ""}`} onClick={() => setTamper(null)}>Draw honestly</button>
-            <button className={`choice ${tamper?.how === "bury" ? "selected" : ""}`} onClick={() => setTamper({ how: "bury" })}>
-              Bury the top card
-            </button>
-          </div>
-          {plantable.map((f) => {
-            const on = tamper?.how === "plant" && tamper.clue === f.forgery.clue;
-            return (
-              <button
-                key={f.forgery.clue}
-                className={`clue pickable ${on ? "selected" : ""}`}
-                onClick={() => {
-                  setTamper({ how: "plant", clue: f.forgery.clue });
-                  setLead(f.forgery.lead);
-                }}
-              >
-                <span className="row">
-                  <span>Plant: {clueText(d, f.card)}</span>
-                </span>
-                <span className="src">{leadText(d, f.forgery.lead)}</span>
-              </button>
-            );
-          })}
-        </div>
-      )}
-
-      <button
-        className="primary full lg"
-        disabled={!lead}
-        onClick={() => lead && act({ type: "investigate", lead: leadKey(lead), ...(tamper ? { tamper } : {}) })}
-      >
-        {!label
-          ? "Pick a lead above"
-          : tamper?.how === "bury"
-            ? `${label}, and bury what's there`
-            : tamper?.how === "plant"
-              ? `${label}, and plant the forgery`
-              : label}
-      </button>
-
-      {g?.canStrike && (
-        <div className="stack" style={{ gap: 6 }}>
-          {!striking ? (
-            <button className="ghost full" onClick={() => setStriking(true)}>☠️ Strike again (once a game)</button>
-          ) : (
-            <>
-              <span className="muted small">
-                Pick a victim. They&apos;ll be found at the end of this round, with everything they were carrying.
-              </span>
-              <div className="choices">
-                {view.players.map((p, i) =>
-                  p.alive && i !== view.you.seat ? (
-                    <button key={p.id} className="choice danger" onClick={() => act({ type: "strike", target: p.id })}>
-                      {seatName(view, i)}
-                    </button>
-                  ) : null
-                )}
-              </div>
-              <button className="ghost small" onClick={() => setStriking(false)}>Not now</button>
-            </>
-          )}
-        </div>
-      )}
-
-      {!view.you.inquestUsed && (
-        <button className="ghost full" onClick={onInquest}>
-          ⚖️ Call an inquest instead
-        </button>
-      )}
-    </div>
-  );
-}
-
-/** Naming who, with what and where, for the table to vote on. Picked on the board below. */
-function InquestPanel({
-  view,
-  notes,
-  act,
-  answer,
-  onCancel,
-}: {
-  view: PlayerView;
-  notes: Notes;
-  act: Act;
-  answer: Partial<Answer>;
-  onCancel: () => void;
-}) {
-  const d = view.dossier;
-  const full = answer.agent !== undefined && answer.device !== undefined && answer.room !== undefined ? (answer as Answer) : null;
-  const impossible =
-    full && !notes.solver.space.answers(notes.analysis.candidates).includes(notes.solver.space.keyOf(full));
-  return (
-    <div className="card stack">
-      <b>⚖️ Call an inquest</b>
-      <p className="muted small" style={{ margin: 0 }}>
-        Tap who, with what and where on the board below. Everyone alive votes; if most say yes, the game ends there, right
-        or wrong. You only get one.
-      </p>
-      <div className="pick-summary">
-        <span className="pill">{answer.agent !== undefined ? d.agents[answer.agent].name : "who?"}</span>
-        <span className="pill">{answer.device !== undefined ? d.devices[answer.device].name : "with what?"}</span>
-        <span className="pill">{answer.room !== undefined ? d.rooms[answer.room].name : "where?"}</span>
-      </div>
-      {impossible && <p className="err" style={{ margin: 0 }}>Your board says it can&apos;t be that.</p>}
-      <div className="btn-row">
-        <button onClick={onCancel}>Back</button>
-        <button className="danger" disabled={!full} onClick={() => full && act({ type: "inquest", answer: full })}>
-          Call it
-        </button>
-      </div>
-    </div>
-  );
-}
-
-/** What your investigation just turned up, if anything. */
-function LastFinding({ view, notes }: { view: PlayerView; notes: Notes }) {
-  const f = view.you.findings.at(-1);
-  if (!f || f.round !== view.round) return null;
-  if (f.clue === null)
-    return <p className="muted small" style={{ margin: 0 }}>{leadText(view.dossier, f.lead)}: nothing more to find there.</p>;
-  const c = view.you.known.find((x) => x.id === f.clue);
-  return c ? (
-    <div className="stack" style={{ gap: 4 }}>
-      <span className="muted small">You found:</span>
-      <CardView view={view} clue={c} notes={notes} />
-      {f.more && <span className="muted small">🔎 There&apos;s more to find there.</span>}
-    </div>
-  ) : null;
-}
-
-/** Step two of your turn: testify, confer, or keep your cards to yourself. */
-function SharePanel({ view, notes, act }: { view: PlayerView; notes: Notes; act: Act }) {
-  const [mode, setMode] = useState<"testify" | "confer" | null>(null);
-  const [card, setCard] = useState<number | null>(null);
-  const [withId, setWith] = useState<string | null>(null);
+  const here = view.players[view.you.seat].place;
+  const company = view.players.filter((p, i) => p.alive && i !== view.you.seat && p.place === here);
   const hand = view.you.hand.map((id) => view.you.known.find((c) => c.id === id)!).filter(Boolean);
-  const others = view.players.filter((p, i) => p.alive && i !== view.you.seat);
+  const last = view.log.at(-1);
+  const justFound =
+    last?.t === "search" && last.who === view.you.id && last.found === "private" ? hand.at(-1) : null;
+
   return (
     <div className="card stack">
-      <LastFinding view={view} notes={notes} />
-      <b>Share something?</b>
-      <div className="btn-row">
-        <button className={mode === "testify" ? "primary" : ""} disabled={!hand.length} onClick={() => setMode("testify")}>
-          📜 Testify
-        </button>
-        <button className={mode === "confer" ? "primary" : ""} disabled={!hand.length || !others.length} onClick={() => setMode("confer")}>
-          🤫 Confer
-        </button>
-      </div>
-      {mode && (
-        <p className="muted small" style={{ margin: 0 }}>
-          {mode === "testify"
-            ? "Put a card on the public record. Everyone reads it, with where it came from, and it leaves your hand."
-            : "Show one card to one player, and they show you one back. You both keep your cards; the table only sees that you talked."}
-        </p>
-      )}
-      {mode === "confer" && (
-        <div className="choices">
-          {others.map((p) => (
-            <button key={p.id} className={`choice ${withId === p.id ? "selected" : ""}`} onClick={() => setWith(p.id)}>
-              {seatName(view, view.players.indexOf(p))}
+      <b>
+        Your turn
+        {phase.step === "move" ? ": where to?" : phase.step === "act" ? `: ${atPlace(d, here)}` : ": anything to testify?"}
+      </b>
+      {phase.step === "move" ? (
+        <>
+          <p className="muted small" style={{ margin: 0 }}>
+            You&apos;re {atPlace(d, here)}. Go to a room, join a guest, or stay. Then you&apos;ll search or keep watch.
+          </p>
+          <button className="full" onClick={() => act({ type: "stay" })}>Stay {atPlace(d, here)}</button>
+          {!view.you.called && !calling && (
+            <button className="ghost full" onClick={() => setCalling(true)}>
+              🕯️ Call the Reconstruction (once a game, instead of moving)
             </button>
+          )}
+          {calling && <Reconstruction view={view} notes={notes} act={act} onCancel={() => setCalling(false)} />}
+        </>
+      ) : phase.step === "wrap" ? (
+        <button className="primary full lg" onClick={() => act({ type: "end" })}>
+          End my turn
+        </button>
+      ) : (
+        <>
+          <p className="muted small" style={{ margin: 0 }}>
+            {company.length
+              ? `${company.map((p) => p.name).join(", ")} ${company.length === 1 ? "is" : "are"} here, so anything you find goes on the record.`
+              : "You're alone: anything you find goes into your hand, unseen. Testify it to prove it."}{" "}
+            {cards(view.counts[here])} left here.
+          </p>
+          <div className="btn-row">
+            <button className="primary" disabled={!view.counts[here]} onClick={() => act({ type: "search" })}>
+              🔦 Search
+            </button>
+            <button onClick={() => act({ type: "watch" })}>👁️ Keep watch</button>
+          </div>
+        </>
+      )}
+      {justFound && (
+        <div className="stack" style={{ gap: 4 }}>
+          <span className="muted small">You just found:</span>
+          <CardView view={view} clue={justFound} />
+        </div>
+      )}
+      {hand.length > 0 && (
+        <div className="stack" style={{ gap: 6 }}>
+          <span className="muted small">
+            In your hand. Testifying puts a card on the public record; burning destroys it, unseen. Both are free.
+          </span>
+          {hand.map((c) => (
+            <div key={c.id} className="stack" style={{ gap: 4 }}>
+              <CardView view={view} clue={c} />
+              <div className="btn-row">
+                <button className="small" onClick={() => act({ type: "testify", card: c.id })}>📜 Testify</button>
+                <button className="small danger" onClick={() => act({ type: "burn", card: c.id })}>🔥 Burn</button>
+              </div>
+            </div>
           ))}
         </div>
       )}
-      {mode && hand.map((c) => <CardView key={c.id} view={view} clue={c} selected={card === c.id} onClick={() => setCard(c.id)} />)}
-      {mode === "testify" && (
-        <button className="primary full lg" disabled={card === null} onClick={() => card !== null && act({ type: "testify", card })}>
-          {card === null ? "Pick a card" : "Testify"}
-        </button>
-      )}
-      {mode === "confer" && (
-        <button
-          className="primary full lg"
-          disabled={card === null || !withId}
-          onClick={() => card !== null && withId && act({ type: "confer", with: withId, card })}
-        >
-          {!withId ? "Pick someone" : card === null ? "Pick a card to show" : `Confer with ${nameOf(view, withId)}`}
-        </button>
-      )}
-      <button className="ghost full" onClick={() => act({ type: "pass" })}>
-        Keep my cards to myself
-      </button>
     </div>
   );
 }
 
-/** Over the hand limit: one card goes on the record, or in the fire. */
-function TrimPanel({ view, notes, act }: { view: PlayerView; notes: Notes; act: Act }) {
-  const [card, setCard] = useState<number | null>(null);
-  const hand = view.you.hand.map((id) => view.you.known.find((c) => c.id === id)!).filter(Boolean);
-  return (
-    <div className="card stack">
-      <b>You&apos;re holding {cards(hand.length)}; the limit is {view.handLimit}</b>
-      <p className="muted small" style={{ margin: 0 }}>
-        Testify one, or burn it. Burning destroys it for good, and the table sees that you burned something. Your notes
-        keep everything you&apos;ve seen either way.
-      </p>
-      {hand.map((c) => (
-        <CardView key={c.id} view={view} clue={c} notes={undefined} selected={card === c.id} onClick={() => setCard(c.id)} />
-      ))}
-      <div className="btn-row">
-        <button className="danger" disabled={card === null} onClick={() => card !== null && act({ type: "burn", card })}>
-          🔥 Burn it
-        </button>
-        <button className="primary" disabled={card === null} onClick={() => card !== null && act({ type: "testify", card })}>
-          📜 Testify
-        </button>
+/**
+ * The night: the device goes round the table and everyone taps through, so
+ * nobody can tell who made a choice. Only the killer's counts.
+ */
+function NightPanel({ view, act }: { view: PlayerView; act: Act }) {
+  const d = view.dossier;
+  const n = view.night;
+  if (view.you.role !== "killer" || !n)
+    return (
+      <div className="card stack center">
+        <h2 style={{ margin: 0 }}>🌙 Night</h2>
+        <p className="muted small" style={{ margin: 0 }}>The house is dark. Close your eyes and pass it on.</p>
+        <button className="primary full lg" onClick={() => act({ type: "night" })}>Sleep</button>
       </div>
-      {notes.clash && <span className="muted small">Your board has a contradiction; see the Board tab.</span>}
-    </div>
-  );
-}
-
-/** Someone conferred with you: see their card, show one back. */
-function ShowPanel({ view, notes, act }: { view: PlayerView; notes: Notes; act: Act }) {
-  const phase = view.phase as Extract<PlayerView["phase"], { kind: "confer" }>;
-  const [card, setCard] = useState<number | null>(null);
-  const shown = view.you.known.find((c) => c.id === view.shownYou);
-  const hand = view.you.hand.map((id) => view.you.known.find((c) => c.id === id)!).filter(Boolean);
-  const who = nameOf(view, view.players[phase.active].id);
+    );
   return (
     <div className="card stack">
-      <b>{cap(who)} wants a word</b>
-      {shown && (
+      <h2 style={{ margin: 0 }}>🌙 Night</h2>
+      <p className="muted small" style={{ margin: 0 }}>
+        Everyone else just taps through. Choose quickly and pass it on.
+      </p>
+      {n.alone.length > 0 && (
         <>
-          <span className="muted small">{cap(who)} showed you:</span>
-          <CardView view={view} clue={shown} notes={notes} />
+          <span className="muted small">☠️ Murder a guest who&apos;s alone (once a game). Their body leaves fresh evidence.</span>
+          <div className="choices">
+            {n.alone.map((id) => {
+              const seat = view.players.findIndex((p) => p.id === id);
+              return (
+                <button key={id} className="choice danger" onClick={() => act({ type: "night", plan: { murder: id } })}>
+                  {seatName(view, seat)} {atPlace(d, view.players[seat].place)}
+                </button>
+              );
+            })}
+          </div>
         </>
       )}
-      <span className="muted small">Show {who} one of yours:</span>
-      {hand.map((c) => (
-        <CardView key={c.id} view={view} clue={c} selected={card === c.id} onClick={() => setCard(c.id)} />
-      ))}
-      <button className="primary full lg" disabled={card === null} onClick={() => card !== null && act({ type: "show", card })}>
-        {card === null ? "Pick a card" : `Show ${who}`}
-      </button>
+      {n.emptyRooms.length > 0 && view.guilty?.stacks && (
+        <>
+          <span className="muted small">🔥 Or destroy the top card in an empty room:</span>
+          {n.emptyRooms.map((place) => (
+            <button key={place} className="clue pickable" onClick={() => act({ type: "night", plan: { destroy: place } })}>
+              <span className="row">
+                <span>{clueText(d, view.guilty!.stacks![place][0])}</span>
+              </span>
+              <span className="src">{cap(placeName(d, place))}</span>
+            </button>
+          ))}
+        </>
+      )}
+      <button className="ghost full" onClick={() => act({ type: "night", plan: { rest: true } })}>Do nothing tonight</button>
     </div>
   );
 }
 
-/** An inquest: does the accusation stand? */
-function VerdictPanel({ view, act }: { view: PlayerView; act: Act }) {
+/** Name the whole answer, then put it to the table. */
+function Reconstruction({ view, notes, act, onCancel }: { view: PlayerView; notes: Notes; act: Act; onCancel: () => void }) {
+  const [answer, setAnswer] = useState<Partial<Answer>>({});
+  const whole = answer.agent !== undefined && answer.device !== undefined && answer.room !== undefined;
   return (
-    <div className="card stack center">
-      <b>⚖️ {inquestLine(view)}</b>
+    <div className="stack" style={{ gap: 8 }}>
+      <b>🕯️ The Reconstruction</b>
       <p className="muted small" style={{ margin: 0 }}>
-        If most of the living say yes, the game ends now: the innocents win only if all three are right.
+        Name who, with what and where, and everyone alive says yes or no. If most say yes, that&apos;s the verdict: right,
+        and the innocents win; wrong, and the killer does. If not, play goes on, and your turn is spent. You only get one.
       </p>
+      <Board view={view} notes={notes} picking={{ answer, onPick: (dim, v) => setAnswer({ ...answer, [dim]: v }) }} />
       <div className="btn-row">
-        <button onClick={() => act({ type: "vote", value: 0 })}>No, not yet</button>
-        <button className="danger" onClick={() => act({ type: "vote", value: 1 })}>Yes, that&apos;s it</button>
+        <button className="primary" disabled={!whole} onClick={() => act({ type: "accuse", answer: answer as Answer })}>
+          {whole ? `Accuse: ${answerText(view.dossier, answer as Answer)}` : "Pick all three"}
+        </button>
+        <button className="ghost" onClick={onCancel}>Not yet</button>
       </div>
     </div>
   );
 }
 
-/** Dawn: vote who, then with what, then where. */
+/** Someone has called the Reconstruction: agree, or not. Votes are shown once everyone has said. */
+function TrialPanel({ view, act }: { view: PlayerView; act: Act }) {
+  const phase = view.phase as Extract<PlayerView["phase"], { kind: "trial" }>;
+  const d = view.dossier;
+  return (
+    <div className="card stack">
+      <b>🕯️ {cap(nameOf(view, view.players[phase.by].id))} calls the Reconstruction</b>
+      <p style={{ margin: 0 }}>
+        &ldquo;It was <b>{answerText(d, phase.answer)}</b>.&rdquo;
+      </p>
+      <p className="muted small" style={{ margin: 0 }}>
+        Do you agree? If most of the table does, that&apos;s the verdict, right or wrong. Everyone&apos;s answer is shown
+        afterwards.
+      </p>
+      <div className="btn-row">
+        <button className="primary" onClick={() => act({ type: "verdict", agree: true })}>✅ Yes, that&apos;s it</button>
+        <button onClick={() => act({ type: "verdict", agree: false })}>❌ No</button>
+      </div>
+    </div>
+  );
+}
+
+/** Dawn, if it comes to it: vote who, then with what, then where. */
 function DawnPanel({ view, notes, act }: { view: PlayerView; notes: Notes; act: Act }) {
   const phase = view.phase as Extract<PlayerView["phase"], { kind: "vote" }>;
   const d = view.dossier;
-  const counts = notes.analysis.marginals[phase.part];
   const so = view.accusation;
   return (
     <div className="card stack">
@@ -564,8 +405,8 @@ function DawnPanel({ view, notes, act }: { view: PlayerView; notes: Notes; act: 
       <p className="muted small" style={{ margin: 0 }}>
         {phase.revote
           ? "That was a tie. Vote again between the tied; if it ties again, the inspector picks."
-          : "Argue it out, then vote. The most votes wins."} The
-        innocents need all three right.
+          : "Nobody convinced the table in time, so it votes. The most votes wins."}{" "}
+        The innocents need all three right.
       </p>
       {(so.agent !== undefined || so.device !== undefined) && (
         <div className="pick-summary">
@@ -575,7 +416,7 @@ function DawnPanel({ view, notes, act }: { view: PlayerView; notes: Notes; act: 
       )}
       <div className="choices">
         {phase.options.map((v) => (
-          <button key={v} className={`choice ${counts && counts[v] === 0 ? "ruled-out" : ""}`} onClick={() => act({ type: "vote", value: v })}>
+          <button key={v} className={`choice ${notes.markOf(phase.part, v) === "out" ? "ruled-out" : ""}`} onClick={() => act({ type: "vote", value: v })}>
             {optionName(d, phase.part, v)}
           </button>
         ))}
@@ -590,9 +431,15 @@ function GameOver({ view, isHost, playAgain, onExit }: { view: PlayerView; isHos
   const d = view.dossier;
   const won = phase.winners.includes(view.you.id);
   const headline =
-    phase.result === "caught"
-      ? "🎉 The killer was caught"
-      : "💨 The wrong answer stood. The killer walks free";
+    phase.by === "trial"
+      ? phase.caught
+        ? "🎉 The Reconstruction was right. The killer is arrested"
+        : `🎭 The table convicted ${d.agents[phase.accusation.agent!].name}. The killer walks free`
+      : phase.by === "outnumbered"
+          ? "☠️ The guilty took over the house"
+          : phase.caught
+            ? "🎉 The table named the killer at dawn"
+            : "💨 The wrong answer stood at dawn. The killer walks free";
   const visits = (agent: number) => r.secret.visits[agent].map((x) => d.rooms[x].name).join(", ");
   return (
     <div className="card stack">
@@ -602,31 +449,24 @@ function GameOver({ view, isHost, playAgain, onExit }: { view: PlayerView; isHos
         It was <b>{answerText(d, r.secret.answer)}</b>. {seatName(view, r.killer)} did it
         {r.accomplice !== null ? `, with ${seatName(view, r.accomplice)} as accomplice` : ""}.
       </p>
-      {phase.accusation.agent !== undefined && (
-        <span className="muted small">
-          The {phase.by === "inquest" ? "inquest" : "table"} named:{" "}
-          {(["agent", "device", "room"] as const)
-            .filter((p) => phase.accusation[p] !== undefined)
-            .map((p) => optionName(d, p, phase.accusation[p]!))
-            .join(", ")}
-          .
-        </span>
-      )}
-      <div className="muted small group-label">🤫 What the guilty did</div>
-      {r.tampers.length ? (
-        r.tampers.map((t, i) => (
+      <div className="muted small group-label">🔥 What was destroyed</div>
+      {r.secretly.length ? (
+        r.secretly.map((t, i) => (
           <div key={i} className="clue">
-            {cap(nameOf(view, t.by))} {t.how === "bury" ? "buried the top card at" : "planted a forgery at"}: {leadText(d, t.lead)}
-            {t.how === "plant" && <span className="src">{clueText(d, r.clues[t.clue])}</span>}
+            {t.what === "burn"
+              ? `${cap(nameOf(view, t.who))} (${t.who === view.players[r.killer].id ? "the killer" : r.accomplice !== null && t.who === view.players[r.accomplice].id ? "the accomplice" : "innocent"}) burned, in round ${t.round}:`
+              : `Destroyed in the night, ${atPlace(d, t.place)}:`}
+            <span className="src">{clueText(d, r.clues[t.clue])}</span>
           </div>
         ))
       ) : (
-        <span className="muted small">No tampering at all.</span>
+        <span className="muted small">Nothing at all.</span>
       )}
-      <div className="muted small group-label">🕰️ Everyone&apos;s evening</div>
+      <div className="muted small group-label">🕰️ Everyone&apos;s story, and evening</div>
       {d.agents.map((a) => (
         <div key={a.id} className="small">
-          <b>{a.name}</b>: {visits(a.id)}
+          <b>{a.name}</b>
+          {a.id === r.killer ? " 🔪" : ""}: {answerText(d, r.stories[a.id]).replace(/^[^,]+, /, "")}. Went to {visits(a.id)}.
         </div>
       ))}
       {isHost ? (
@@ -646,7 +486,7 @@ function Log({ view }: { view: PlayerView }) {
       {[...view.log].reverse().map((e, i) => {
         const card = e.t === "testify" ? view.you.known.find((c) => c.id === e.clue) : null;
         return (
-          <div key={view.log.length - i} className={`entry ${e.t === "death" || e.t === "dawn" ? "big" : ""}`}>
+          <div key={view.log.length - i} className={`entry ${e.t === "murder" || e.t === "dawn" ? "big" : ""}`}>
             {logText(view, e)}
             {card && <div className="small">“{clueText(view.dossier, card)}”</div>}
           </div>

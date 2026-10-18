@@ -1,12 +1,18 @@
-import type { Answer, ClueBody, Dossier, Lead, Requirement, Secret } from "./types.js";
+import type { Answer, ClueBody, Dossier, Requirement, RoomId, Secret } from "./types.js";
 import type { Space } from "./space.js";
+import { ALIBIS, SIGHTINGS } from "./content.js";
 
 /** Is a clue consistent with candidate `i`? */
 export function holds(space: Space, clue: ClueBody, i: number): boolean {
-  const d = space.dossier;
-  const agent = space.agent[i];
-  const room = space.room[i];
-  const visited = space.visitSets[space.visits[i]];
+  return holdsIn(space.dossier, clue, space.answerAt(i), space.visitSets[space.visits[i]]);
+}
+
+/**
+ * Is a clue consistent with this answer, and this evening for the culprit?
+ * `breaks` is the other way round: the card shows the story can't be true.
+ */
+export function holdsIn(d: Dossier, clue: ClueBody, a: Answer, visited: readonly RoomId[]): boolean {
+  const { agent, room, device } = a;
   switch (clue.kind) {
     case "visited":
       // Only says something about the culprit's evening if this is the culprit.
@@ -20,7 +26,7 @@ export function holds(space: Space, clue: ClueBody, i: number): boolean {
     case "notRoom":
       return room !== clue.room;
     case "notDevice":
-      return space.device[i] !== clue.device;
+      return device !== clue.device;
     case "notAgent":
       return agent !== clue.agent;
     case "visitors":
@@ -31,8 +37,16 @@ export function holds(space: Space, clue: ClueBody, i: number): boolean {
     case "isRoom":
       return room === clue.room;
     case "isDevice":
-      return space.device[i] === clue.device;
+      return device === clue.device;
+    case "seen":
+      // A sighting: says where the guest went, nothing more.
+      return agent !== clue.agent || visited.includes(clue.room);
   }
+}
+
+/** Does this card break the story told about a guest who spent the evening in `evening`? */
+export function breaks(d: Dossier, clue: ClueBody, story: Answer, evening: readonly RoomId[]): boolean {
+  return !holdsIn(d, clue, story, evening);
 }
 
 function sameRooms(a: readonly number[], b: readonly number[]): boolean {
@@ -76,7 +90,18 @@ export function clueText(d: Dossier, clue: ClueBody): string {
     case "notDevice":
       return `No trace on the ${d.devices[clue.device].name.toLowerCase()}: not the ${item}.`;
     case "notAgent":
-      return `${agent(clue.agent)} has a solid alibi: not ${culprit}.`;
+      return clue.say === undefined
+        ? `${agent(clue.agent)} has a solid alibi: not ${culprit}.`
+        : ALIBIS[clue.say % ALIBIS.length].replace("{who}", agent(clue.agent));
+    case "seen": {
+      const text = SIGHTINGS[(clue.agent + clue.room) % SIGHTINGS.length];
+      return cap(
+        text
+          .replace("{who}", agent(clue.agent))
+          .replace("{at}", at(clue.room))
+          .replace("{of}", `of the ${d.rooms[clue.room].name}`)
+      );
+    }
     case "visitors": {
       const names = clue.agents.map(agent);
       const room = `${d.rooms[clue.room].preposition} the ${d.rooms[clue.room].name}`;
@@ -104,107 +129,19 @@ function list(xs: string[]): string {
 
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
-/** A stable key for a lead, used to index its stack. */
-export function leadKey(l: Lead): string {
-  switch (l.kind) {
-    case "staff":
-    case "search":
-      return `${l.kind}:${l.room}`;
-    case "alibi":
-      return `alibi:${l.agent}`;
-    case "body":
-    case "body2":
-      return l.kind;
-  }
+/** The Hall, where the body was found: a place to be, never the scene. */
+export function hallOf(d: Dossier): number {
+  return d.rooms.length;
 }
 
-export function leadOfKey(key: string): Lead | null {
-  const [kind, id] = key.split(":");
-  const n = Number(id);
-  if (kind === "body" || kind === "body2") return id === undefined ? { kind } : null;
-  if (!Number.isInteger(n) || n < 0) return null;
-  if (kind === "staff" || kind === "search") return { kind, room: n };
-  if (kind === "alibi") return { kind, agent: n };
-  return null;
+/** "the Library", "the Hall". */
+export function placeName(d: Dossier, place: number): string {
+  return place === hallOf(d) ? "the Hall" : `the ${d.rooms[place].name}`;
 }
 
-export function sameLead(a: Lead, b: Lead): boolean {
-  return leadKey(a) === leadKey(b);
-}
-
-/** "Question the staff about the Library", as a thing to do. */
-export function leadText(d: Dossier, l: Lead): string {
-  switch (l.kind) {
-    case "staff":
-      return `Question the staff about the ${d.rooms[l.room].name}`;
-    case "alibi":
-      return `Check ${d.agents[l.agent].name}'s alibi`;
-    case "body":
-      return "Examine the body";
-    case "search":
-      return `Search the ${d.rooms[l.room].name}`;
-    case "body2":
-      return "Examine the second body";
-  }
-}
-
-/** "questioned the staff about the Library", as something someone did. */
-export function leadDone(d: Dossier, l: Lead): string {
-  switch (l.kind) {
-    case "staff":
-      return `questioned the staff about the ${d.rooms[l.room].name}`;
-    case "alibi":
-      return `checked ${d.agents[l.agent].name}'s alibi`;
-    case "body":
-      return "examined the body";
-    case "search":
-      return `searched the ${d.rooms[l.room].name}`;
-    case "body2":
-      return "examined the second body";
-  }
-}
-
-/**
- * The leads a statement could turn up under. A sighting can come from the
- * staff who work that room or from checking that guest's alibi; a weapon
- * ruled out can show on the body or be found still where it was kept.
- */
-export function leadsFor(d: Dossier, c: ClueBody): Lead[] {
-  switch (c.kind) {
-    case "visited":
-      return [
-        { kind: "staff", room: c.room },
-        { kind: "alibi", agent: c.agent },
-      ];
-    case "never":
-      return [{ kind: "staff", room: c.room }];
-    case "moleTrait":
-    case "handoffFeature":
-      return [{ kind: "body" }];
-    case "notRoom":
-      return [{ kind: "search", room: c.room }];
-    case "notDevice":
-      return [{ kind: "body" }, { kind: "search", room: d.devices[c.device].location }];
-    case "notAgent":
-    case "whereabouts":
-      return [{ kind: "alibi", agent: c.agent }];
-    case "visitors":
-      return [{ kind: "staff", room: c.room }];
-    case "isRoom":
-      return [{ kind: "search", room: c.room }];
-    case "isDevice":
-      return [{ kind: "search", room: d.devices[c.device].location }];
-  }
-}
-
-/** Every lead that exists from the start of a case. */
-export function allLeads(d: Dossier): Lead[] {
-  return [
-    { kind: "body" },
-    ...d.rooms.map((r): Lead => ({ kind: "staff", room: r.id })),
-    ...d.rooms.map((r): Lead => ({ kind: "search", room: r.id })),
-    ...d.agents.map((a): Lead => ({ kind: "alibi", agent: a.id })),
-  ];
+/** "in the Library", "on the Terrace". */
+export function atPlace(d: Dossier, place: number): string {
+  return place === hallOf(d) ? "in the Hall" : `${d.rooms[place].preposition} the ${d.rooms[place].name}`;
 }
 
 /**
@@ -264,24 +201,4 @@ export function requirementText(d: Dossier, r: Requirement): string {
 export function answerText(d: Dossier, a: Answer): string {
   const room = d.rooms[a.room];
   return `${d.agents[a.agent].name}, with the ${d.devices[a.device].name.toLowerCase()}, ${room.preposition} the ${room.name}`;
-}
-
-/**
- * Every statement a card could make, true or not, for the kinds a forger
- * would write. The generator picks forgeries from the false ones.
- */
-export function possibleClues(d: Dossier): ClueBody[] {
-  const out: ClueBody[] = [];
-  for (const a of d.agents) {
-    for (const r of d.rooms) {
-      out.push({ kind: "visited", agent: a.id, room: r.id, is: true });
-      out.push({ kind: "visited", agent: a.id, room: r.id, is: false });
-    }
-    out.push({ kind: "notAgent", agent: a.id });
-  }
-  for (const t of d.traits) for (const v of t.values) out.push({ kind: "moleTrait", trait: t.id, value: v.id, is: true });
-  for (const f of d.features) for (const is of [true, false]) out.push({ kind: "handoffFeature", feature: f.id, is });
-  for (const r of d.rooms) out.push({ kind: "notRoom", room: r.id });
-  for (const x of d.devices) out.push({ kind: "notDevice", device: x.id });
-  return out;
 }

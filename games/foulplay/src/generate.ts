@@ -1,9 +1,9 @@
-import type { Agent, ClueBody, Device, Dossier, Lead, Room, Scenario, Secret } from "./types.js";
-import { CAST, DEVICES, FEATURES, ROOMS, THEME, TITLE, TRAITS, type DeviceTemplate } from "./content.js";
+import type { Agent, ClueBody, Device, Dossier, Room, Scenario, Secret } from "./types.js";
+import { ALIBIS, CAST, DEVICES, FEATURES, ROOMS, THEME, TITLE, TRAITS, type DeviceTemplate } from "./content.js";
 import { makeRng, pick, shuffle, type Rng } from "./rng.js";
-import { holds, leadKey, possibleClues, trueClues } from "./clues.js";
+import { trueClues } from "./clues.js";
 import { Solver } from "./solver.js";
-import type { Bitset, Space } from "./space.js";
+import type { Bitset } from "./space.js";
 
 export const MIN_PLAYERS = 4;
 export const MAX_PLAYERS = CAST.length;
@@ -13,44 +13,49 @@ export interface GenerateOptions {
   players: number;
   /** Seat an accomplice. Defaults to on at six or more players. */
   accomplice?: boolean;
-  /** Memory cards each innocent starts with. */
-  handSize?: number;
-  /** Looks the body gives away, before any second body. */
-  bodyTraits?: number;
-  /** Chance that the staff of a room, or a guest's alibi, has anything to say. */
-  witnessChance?: number;
+  /** Chance that an innocent's story shares the real room, and the real weapon. */
+  shareChance?: number;
+  /** Chance that a room also holds a record of who set foot in it. */
+  visitorsChance?: number;
+  /** Chance that a guest's evening is written down somewhere in the house. */
+  whereaboutsChance?: number;
+  /** Chance of a second sighting, where the weapon in a guest's story is kept. */
+  secondSighting?: number;
   /** Weapons in play. */
   devices?: number;
 }
 
 export const defaultAccomplice = (players: number) => players >= 6;
 
-/** How many forgeries each can plant, and how many they get to choose from. */
-export const PLANTS = { killer: 2, accomplice: 1 };
-const MENU = { killer: 4, accomplice: 2 };
-
 /**
- * Build a case. The killer, weapon and room come first; the evidence is then
- * written to fit them, and laid out so the case is fair:
- *  - all the true evidence together names exactly one answer;
- *  - it does so without anything the killer or accomplice holds;
- *  - the innocents' starting memories alone don't come close;
- *  - every forgery contradicts the truth, so it can be caught.
- * Any attempt that misses is thrown away and dealt again.
+ * Build a case. Every guest gets a story first: a weapon they could have
+ * used and a room they were in that fits it. The killer's story is the
+ * truth. Then the evidence goes round the house:
+ *  - for every other guest, an alibi (sometimes two witnesses), and the
+ *    cards that rule out their story's weapon and room when those aren't the
+ *    real ones. These are what break a false story, and what the killer
+ *    wants gone;
+ *  - in each room, whether it happened there and whether the weapon kept
+ *    there was used (said only when the answer is no);
+ *  - sightings that fit each guest's story: true, proving nothing, and what
+ *    a guest would rather burn;
+ *  - sometimes who came and went, or a guest's evening.
+ * Each player also starts with one memory.
  *
- * Each lead answers its own question, so a player picks where to look:
- *  - the body: the killer's looks, and what kind of room it happened in;
- *  - a room's staff: exactly who set foot there;
- *  - a guest's alibi: exactly where they went;
- *  - searching a room: whether it happened there, and whether a weapon kept
- *    there is missing.
+ * The case is fair:
+ *  - everything the innocents could find names exactly one answer;
+ *  - every false story is broken by two or three cards, none of them in the
+ *    Hall (searched in company from the start) or in anyone's memory, so the
+ *    killer can frame someone by destroying them, but has to work for it;
+ *  - the guilty's own memories are never needed.
+ * Any attempt that misses is thrown away and dealt again.
  */
 export function generateScenario(opts: GenerateOptions): Scenario {
   const players = opts.players;
   if (players < MIN_PLAYERS || players > MAX_PLAYERS)
     throw new Error(`Foul Play needs ${MIN_PLAYERS}–${MAX_PLAYERS} players.`);
   const rng = makeRng(opts.seed);
-  for (let attempt = 0; attempt < 300; attempt++) {
+  for (let attempt = 0; attempt < 500; attempt++) {
     const scenario = attemptScenario(opts, rng);
     if (scenario) return scenario;
   }
@@ -64,9 +69,10 @@ interface Measured {
 
 function attemptScenario(opts: GenerateOptions, rng: Rng): Scenario | null {
   const players = opts.players;
-  const handSize = opts.handSize ?? 3;
-  const bodyTraits = opts.bodyTraits ?? 2;
-  const witnessChance = opts.witnessChance ?? 0.75;
+  const shareChance = opts.shareChance ?? 0.4;
+  const visitorsChance = opts.visitorsChance ?? 0.15;
+  const whereaboutsChance = opts.whereaboutsChance ?? 0.15;
+  const secondSighting = opts.secondSighting ?? 0.25;
   const withAccomplice = opts.accomplice ?? defaultAccomplice(players);
 
   const dossier = buildDossier(rng, players, opts.devices ?? 6);
@@ -81,219 +87,153 @@ function attemptScenario(opts: GenerateOptions, rng: Rng): Scenario | null {
   const accomplice = withAccomplice ? pick(others, rng) : null;
   const innocents = others.filter((i) => i !== accomplice);
 
-  // One of the weapons, rooms and evenings that would have let the killer do it.
-  const options: number[] = [];
-  space.base.forEach((i) => {
-    if (space.agent[i] === killer) options.push(i);
-  });
-  if (!options.length) return null;
-  const truth = pick(options, rng);
-  const visits = dossier.agents.map((a) =>
-    a.id === killer ? space.visitSets[space.visits[truth]] : pick(space.visitSets, rng)
-  );
-  const secret: Secret = { answer: space.answerAt(truth), visits };
-  const { answer } = secret;
-  const culprit = dossier.agents[killer];
-
-  // The body: a few of the killer's looks that tell guests apart, and one
-  // thing about the room it happened in. Some are held back for a second body.
-  const looks = shuffle(
-    dossier.traits
-      .map((t) => measure({ kind: "moleTrait", trait: t.id, value: culprit.traits[t.id], is: true }))
-      .filter(informative),
-    rng
-  );
-  if (looks.length < bodyTraits + 1) return null;
-  const scene = dossier.rooms[answer.room];
-  const roomSigns = shuffle(
-    dossier.features.map((f) => measure({ kind: "handoffFeature", feature: f.id, is: scene.features.includes(f.id) })).filter(informative),
-    rng
-  );
-  const body = [...looks.slice(0, bodyTraits), ...roomSigns.slice(0, 1)];
-  const secondBody = looks.slice(bodyTraits, bodyTraits + 2);
-
-  const stacks = new Map<string, Measured[]>();
-  stacks.set("body", shuffle(body, rng));
-  for (const r of dossier.rooms) {
-    if (rng() < witnessChance) {
-      const seen = dossier.agents.filter((a) => visits[a.id].includes(r.id)).map((a) => a.id);
-      stacks.set(leadKey({ kind: "staff", room: r.id }), [measure({ kind: "visitors", room: r.id, agents: seen })]);
+  // Everyone's story: a world in which they did it. The killer's is the truth.
+  const worldsOf = (agent: number) => {
+    const out: number[] = [];
+    space.base.forEach((i) => {
+      if (space.agent[i] === agent) out.push(i);
+    });
+    return out;
+  };
+  const mine = worldsOf(killer);
+  if (!mine.length) return null;
+  const truth = pick(mine, rng);
+  const answer = space.answerAt(truth);
+  const storyWorld: number[] = [];
+  for (let g = 0; g < players; g++) {
+    if (g === killer) {
+      storyWorld.push(truth);
+      continue;
     }
-    const found: Measured[] = [measure(r.id === answer.room ? { kind: "isRoom", room: r.id } : { kind: "notRoom", room: r.id })];
-    for (const x of dossier.devices)
-      if (x.location === r.id) found.push(measure(x.id === answer.device ? { kind: "isDevice", device: x.id } : { kind: "notDevice", device: x.id }));
-    stacks.set(leadKey({ kind: "search", room: r.id }), found);
+    let worlds = worldsOf(g);
+    const narrow = (keep: (i: number) => boolean) => {
+      const n = worlds.filter(keep);
+      if (n.length) worlds = n;
+    };
+    // Some stories borrow the real room or weapon; they're the hardest to tell apart.
+    narrow(rng() < shareChance ? (i) => space.room[i] === answer.room : (i) => space.room[i] !== answer.room);
+    narrow(rng() < shareChance ? (i) => space.device[i] === answer.device : (i) => space.device[i] !== answer.device);
+    if (!worlds.length) return null;
+    storyWorld.push(pick(worlds, rng));
   }
-  for (const a of dossier.agents)
-    if (rng() < witnessChance)
-      stacks.set(leadKey({ kind: "alibi", agent: a.id }), [measure({ kind: "whereabouts", agent: a.id, rooms: [...visits[a.id]] })]);
+  const stories = storyWorld.map((i) => space.answerAt(i));
+  // Each guest's evening is the one their story needs.
+  const visits = storyWorld.map((i) => [...space.visitSets[space.visits[i]]]);
+  const secret: Secret = { answer, visits };
+  const rooms = dossier.rooms.length;
+  const hall = rooms;
+  const stacks: Measured[][] = Array.from({ length: rooms + 1 }, () => []);
+  const anyRoom = () => Math.floor(rng() * rooms);
+  const alibi = (agent: number, say: number) => measure({ kind: "notAgent", agent, say });
 
-  // Memories are sightings: what each guest saw (or didn't) around the house.
+  // Each room: was it the scene? Each weapon: was it used? Only the "no"s are written down.
+  for (const r of dossier.rooms) if (r.id !== answer.room) stacks[r.id].push(measure({ kind: "notRoom", room: r.id }));
+  for (const x of dossier.devices)
+    if (x.id !== answer.device) stacks[x.location].push(measure({ kind: "notDevice", device: x.id }));
+
+  // An alibi for everyone but the killer, somewhere in the house.
+  const witnesses = shuffle([...ALIBIS.keys()], rng);
+  let w = 0;
+  for (const g of others) stacks[anyRoom()].push(alibi(g, witnesses[w++ % witnesses.length]));
+
+  // Sightings that fit each story, in the story's room, and sometimes where its weapon is kept.
+  for (let g = 0; g < players; g++) {
+    const s = stories[g];
+    stacks[s.room].push(measure({ kind: "seen", agent: g, room: s.room }));
+    const kept = dossier.devices[s.device].location;
+    if (kept !== s.room && rng() < secondSighting) stacks[kept].push(measure({ kind: "seen", agent: g, room: kept }));
+  }
+
+  // Now and then, a record of who came and went, or of a guest's whole evening.
+  for (const r of dossier.rooms)
+    if (rng() < visitorsChance) {
+      const seen = dossier.agents.filter((a) => visits[a.id].includes(r.id)).map((a) => a.id);
+      stacks[r.id].push(measure({ kind: "visitors", room: r.id, agents: seen }));
+    }
+  for (const a of dossier.agents)
+    if (rng() < whereaboutsChance) stacks[pick(visits[a.id], rng)].push(measure({ kind: "whereabouts", agent: a.id, rooms: [...visits[a.id]] }));
+
+  // The body, in the Hall. It's searched in company from the start, so it
+  // only holds what fits every story: no story can be broken there.
+  const fitsAll = (c: Measured) => storyWorld.every((i) => c.mask.has(i));
+  // The body's own evidence first, then the staff's word on who went where.
+  const fitting = (bodies: ClueBody[]) => shuffle(bodies.map(measure).filter((c) => informative(c) && fitsAll(c)), rng);
+  const body = [
+    ...fitting(trueClues(dossier, secret).filter((b) => b.kind === "moleTrait" || b.kind === "handoffFeature")),
+    ...fitting(
+      dossier.rooms.map((r) => ({ kind: "visitors", room: r.id, agents: dossier.agents.filter((a) => visits[a.id].includes(r.id)).map((a) => a.id) }))
+    ),
+  ];
+  stacks[hall] = body.slice(0, 2);
+
+  // One memory each: a sighting. The guilty's never name the killer.
   const sightings = shuffle(
     trueClues(dossier, secret)
       .filter((b) => b.kind === "visited" || b.kind === "never")
       .map(measure)
-      .filter(informative),
+      .filter((c) => informative(c) && fitsAll(c)),
     rng
   );
+  const memories: Measured[][] = Array.from({ length: players }, () => []);
   const used = new Set<Measured>();
-  const take = (n: number, ok: (c: Measured) => boolean = () => true) => {
-    const out: Measured[] = [];
-    for (const c of sightings) {
-      if (out.length >= n) break;
-      if (!used.has(c) && ok(c)) {
-        out.push(c);
-        used.add(c);
-      }
-    }
-    return out.length === n ? out : null;
-  };
-  const hands: Measured[][] = Array.from({ length: players }, () => []);
-  // The killer's and accomplice's memories don't name the killer: nothing
-  // they'd never want to show.
-  const harmless = (c: Measured) => !mentions(c.body, killer);
-  const killerHand = take(2, harmless);
-  if (!killerHand) return null;
-  hands[killer] = killerHand;
-  if (accomplice !== null) {
-    const h = take(handSize, harmless);
-    if (!h) return null;
-    hands[accomplice] = h;
-  }
-  for (const seat of innocents) {
-    const h = take(handSize);
-    if (!h) return null;
-    hands[seat] = h;
+  for (let seat = 0; seat < players; seat++) {
+    const guilty = seat === killer || seat === accomplice;
+    const m = sightings.find((c) => !used.has(c) && (!guilty || !mentions(c.body, killer)));
+    if (!m) return null;
+    used.add(m);
+    memories[seat] = [m];
   }
 
-  // Fairness: memories alone leave plenty open, and everything an innocent
-  // could find names one answer.
-  const innocentHands = innocents.flatMap((s) => hands[s]);
-  if (space.countAnswers(intersect(space.base, innocentHands)) < 6) return null;
-  const findable = [...innocentHands, ...[...stacks.values()].flat()];
+  // Every false story takes two or three cards to break: a second witness
+  // for an alibi that would otherwise stand alone.
+  const inPlay = () => stacks.flat();
+  for (const g of others) {
+    const breakers = inPlay().filter((c) => !c.mask.has(storyWorld[g]));
+    if (breakers.length < 2) stacks[anyRoom()].push(alibi(g, witnesses[w++ % witnesses.length]));
+  }
+  for (const g of others) {
+    const breakers = inPlay().filter((c) => !c.mask.has(storyWorld[g]));
+    if (breakers.length < 2 || breakers.length > 3) return null;
+    if (stacks[hall].some((c) => breakers.includes(c))) return null;
+  }
+
+  // Fairness: the innocents could prove it from what's in the house.
+  const findable = [...inPlay(), ...innocents.flatMap((s) => memories[s])];
   if (space.countAnswers(intersect(space.base, findable)) !== 1) return null;
+  // ...but nobody's memory alone comes close.
+  if (innocents.some((s) => space.countAnswers(intersect(space.base, memories[s])) < baseAnswers / 4)) return null;
 
-  const forgeries = chooseForgeries(dossier, space, truth, secret, killer, accomplice, rng);
-  if (!forgeries) return null;
+  for (let p = 0; p <= rooms; p++) stacks[p] = shuffle(stacks[p], rng);
+  // Held back for a body, if there's a murder: the killer's looks.
+  const culprit = dossier.agents[killer];
+  const spare = shuffle(
+    dossier.traits.map((t) => measure({ kind: "moleTrait", trait: t.id, value: culprit.traits[t.id], is: true })).filter(informative),
+    rng
+  ).slice(0, 2);
 
   // Number the cards in a shuffled order, so an id says nothing about a card.
-  const cards: { body: ClueBody; forged: boolean }[] = [];
-  const idOf = new Map<Measured | ClueBody, number>();
-  const all: (Measured | ClueBody)[] = shuffle(
-    [
-      ...hands.flat(),
-      ...[...stacks.values()].flat(),
-      ...secondBody,
-      ...forgeries.killer.map((f) => f.body),
-      ...forgeries.accomplice.map((f) => f.body),
-    ],
-    rng
-  );
-  for (const x of all) {
-    idOf.set(x, cards.length);
-    cards.push("mask" in x ? { body: x.body, forged: false } : { body: x, forged: true });
-  }
-  const ids = (xs: (Measured | ClueBody)[]) => xs.map((x) => idOf.get(x)!);
-
+  const all = shuffle([...stacks.flat(), ...memories.flat(), ...spare], rng);
+  const idOf = new Map(all.map((c, i) => [c, i]));
+  const ids = (xs: Measured[]) => xs.map((x) => idOf.get(x)!);
   return {
     seed: Math.floor(rng() * 2 ** 31),
     dossier,
     secret,
     killer,
     accomplice,
-    clues: cards.map((c, id) => ({ ...c.body, id })),
-    forged: cards.flatMap((c, id) => (c.forged ? [id] : [])),
-    hands: hands.map((h) => ids(h)),
-    stacks: Object.fromEntries([...stacks].map(([k, v]) => [k, ids(v)])),
-    secondBody: ids(secondBody),
-    forgeries: {
-      killer: forgeries.killer.map((f) => ({ clue: idOf.get(f.body)!, lead: f.lead })),
-      accomplice: forgeries.accomplice.map((f) => ({ clue: idOf.get(f.body)!, lead: f.lead })),
-    },
+    stories,
+    clues: all.map((c, id) => ({ ...c.body, id })),
+    memories: memories.map(ids),
+    stacks: stacks.map(ids),
+    spare: ids(spare),
   };
 }
 
 /** Does a statement name this guest? */
 function mentions(c: ClueBody, agent: number): boolean {
-  if (c.kind === "visited" || c.kind === "notAgent" || c.kind === "whereabouts") return c.agent === agent;
+  if (c.kind === "visited" || c.kind === "notAgent" || c.kind === "whereabouts" || c.kind === "seen") return c.agent === agent;
   if (c.kind === "visitors") return c.agents.includes(agent);
   return false;
-}
-
-type Draft = { body: ClueBody; lead: Lead };
-
-/**
- * The forgers' menus. Each forgery is false, fits a particular lead, and
- * points away from the truth: a look the killer doesn't have, a room or a
- * weapon that's really not the one, the killer left off a list of who was
- * there. The accomplice only knows who the killer is, so theirs are about
- * the killer alone.
- */
-function chooseForgeries(
-  d: Dossier,
-  space: Space,
-  truth: number,
-  secret: Secret,
-  killer: number,
-  accomplice: number | null,
-  rng: Rng
-): { killer: Draft[]; accomplice: Draft[] } | null {
-  const { answer, visits } = secret;
-  const killerAgent = d.agents[killer];
-  const lies = possibleClues(d).filter((c) => !holds(space, c, truth));
-  // A false look should still describe someone at the table, so it frames them.
-  const looks = shuffle(
-    lies.filter(
-      (c) =>
-        c.kind === "moleTrait" &&
-        killerAgent.traits[c.trait] !== c.value &&
-        d.agents.some((a) => a.id !== killer && a.traits[c.trait] === c.value)
-    ),
-    rng
-  );
-  const others = d.agents.filter((a) => a.id !== killer).map((a) => a.id);
-  // The killer's evening, with the scene swapped for somewhere they weren't.
-  const elsewhere = d.rooms.filter((r) => !visits[killer].includes(r.id)).map((r) => r.id);
-  const falseEvening: Draft | null = elsewhere.length
-    ? {
-        body: {
-          kind: "whereabouts",
-          agent: killer,
-          rooms: [...visits[killer].filter((r) => r !== answer.room), pick(elsewhere, rng)].sort((a, b) => a - b),
-        },
-        lead: { kind: "alibi", agent: killer },
-      }
-    : null;
-
-  const accompliceMenu: Draft[] = [];
-  if (accomplice !== null) {
-    if (falseEvening) accompliceMenu.push(falseEvening);
-    const look = looks.shift();
-    if (look) accompliceMenu.push({ body: look, lead: { kind: "body" } });
-    if (accompliceMenu.length < MENU.accomplice) return null;
-  }
-
-  const killerMenu: Draft[] = [];
-  const look = looks.shift();
-  if (look) killerMenu.push({ body: look, lead: { kind: "body" } });
-  // The scene's visitors, with the killer swapped for someone who wasn't there.
-  const seen = others.filter((a) => visits[a].includes(answer.room));
-  const absent = others.filter((a) => !visits[a].includes(answer.room));
-  killerMenu.push({
-    body: { kind: "visitors", room: answer.room, agents: [...seen, ...(absent.length ? [pick(absent, rng)] : [])].sort((a, b) => a - b) },
-    lead: { kind: "staff", room: answer.room },
-  });
-  killerMenu.push({ body: { kind: "notRoom", room: answer.room }, lead: { kind: "search", room: answer.room } });
-  const decoy = pick(d.rooms.filter((r) => r.id !== answer.room), rng).id;
-  killerMenu.push({ body: { kind: "isRoom", room: decoy }, lead: { kind: "search", room: decoy } });
-  killerMenu.push({
-    body: { kind: "notDevice", device: answer.device },
-    lead: { kind: "search", room: d.devices[answer.device].location },
-  });
-  if (accomplice === null && falseEvening) killerMenu.push(falseEvening);
-  const menu = shuffle(killerMenu, rng).slice(0, MENU.killer);
-  if (menu.length < MENU.killer) return null;
-  return { killer: menu, accomplice: accompliceMenu.slice(0, MENU.accomplice) };
 }
 
 function intersect(start: Bitset, clues: { mask: Bitset }[]): Bitset {
