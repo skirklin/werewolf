@@ -82,8 +82,9 @@ comes.
 The device goes round the table and everyone taps through, so nobody can
 tell who chose. The killer may:
 
-- **murder** a guest who is alone (once a game). The body leaves new
-  evidence about the killer, plus whatever the victim carried;
+- **murder** a guest who is alone (once a game). The killer needn't be in
+  the room and needs no weapon: being alone is all it takes. The body leaves
+  new evidence about the killer, plus whatever the victim carried;
 - **destroy** the top card in an empty room;
 - or do nothing.
 

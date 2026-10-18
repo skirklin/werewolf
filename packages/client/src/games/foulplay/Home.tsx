@@ -73,7 +73,7 @@ function Rules({ onBack }: { onBack: () => void }) {
         <h3>The night</h3>
         <p className="muted">
           The device goes round the table and everyone taps through. The killer may murder one guest who was left alone
-          (once a game; the body leaves new evidence), or destroy a card in an empty room.
+          (once a game; no weapon or presence needed, and the body leaves new evidence), or destroy a card in an empty room.
         </p>
         <h3>The Reconstruction</h3>
         <p className="muted">
