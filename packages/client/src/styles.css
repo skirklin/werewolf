@@ -295,3 +295,44 @@ button.has-beta { position: relative; overflow: hidden; }
 .pill.good { background: color-mix(in srgb, var(--good) 22%, transparent); color: var(--good); white-space: nowrap; }
 .pill.bad { background: color-mix(in srgb, var(--danger) 22%, transparent); color: var(--danger); white-space: nowrap; }
 .verdict-list { display: flex; flex-wrap: wrap; gap: 6px; }
+
+/* Foul Play: the manor floor plan */
+.manor {
+  display: grid; gap: 4px; padding: 6px; border-radius: 14px; background: #2a2440;
+  grid-template-columns: 1.2fr 1fr 1fr;
+  grid-template-areas: "ballroom bar library" "hall hall study" "terrace garden garden";
+}
+.manor .room {
+  display: flex; flex-direction: column; align-items: stretch; gap: 3px; text-align: left;
+  min-height: 92px; padding: 6px; border-radius: 8px; width: auto;
+  background: #f1e6cf; color: #2b2233; border: 2px solid #c9b48a; font-weight: 400;
+}
+.manor .room.hall { background: #e6d3ae; }
+.manor .room.outdoors { background: #cfe3b8; border-color: #8fb072; border-style: dashed; }
+.manor .room.mine { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
+.manor .room.selected { outline: 3px solid #f5c84b; outline-offset: 1px; }
+.room-head { display: flex; justify-content: space-between; align-items: center; gap: 4px; font-size: 0.85rem; }
+.room-tags { display: flex; flex-wrap: wrap; gap: 3px; font-size: 0.72rem; align-items: center; }
+.room-tags .kept { background: rgba(43,34,51,0.12); border-radius: 6px; padding: 0 4px; }
+.room-marks { display: flex; flex-wrap: wrap; gap: 3px; }
+.room-marks .mark { font-size: 0.68rem; border-radius: 6px; padding: 1px 4px; background: rgba(255,255,255,0.7); }
+.room-marks .mark.story { background: #ffe08a; }
+.room-marks .mark.target { background: #ffb3b3; font-weight: 700; }
+.tokens { display: flex; flex-wrap: wrap; gap: 3px; margin-top: auto; }
+.token { display: inline-flex; align-items: center; gap: 3px; font-size: 0.72rem; background: #2b2233; color: #f1e6cf; border-radius: 999px; padding: 1px 6px 1px 3px; }
+.token .dot { width: 9px; height: 9px; }
+.token.you { outline: 2px solid var(--accent-2); }
+.token.active { font-weight: 800; }
+.pile { display: inline-flex; align-items: center; gap: 1px; }
+.pile .back { width: 6px; height: 10px; border-radius: 2px; background: #6b4f9e; border: 1px solid #3d2d5c; }
+.pile .n { font-size: 0.72rem; margin-left: 3px; font-variant-numeric: tabular-nums; }
+.room-detail .tie { background: color-mix(in srgb, #ffe08a 18%, transparent); border-radius: 8px; padding: 4px 6px; }
+.chips { display: inline-flex; flex-wrap: wrap; gap: 4px; }
+.check.done { color: var(--good); }
+.frame-row { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.tip { display: block; background: color-mix(in srgb, var(--accent) 14%, transparent); border-radius: 8px; padding: 6px 8px; }
+.steps { display: flex; gap: 4px; flex-wrap: wrap; }
+.steps .step { font-size: 0.75rem; padding: 2px 8px; border-radius: 999px; background: var(--panel-2); color: var(--muted); }
+.steps .step.on { background: var(--accent); color: #fff; font-weight: 700; }
+.steps .step.done { text-decoration: line-through; }
+@media (max-width: 380px) { .manor .room { min-height: 84px; padding: 4px; } .room-head { font-size: 0.78rem; } }
