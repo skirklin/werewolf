@@ -84,8 +84,8 @@ export function HouseMap({ view, act, secrets }: { view: PlayerView; act: Act | 
               </span>
               {(isStoryRoom || isStoryWeapon || went) && (
                 <span className="room-marks">
-                  {isStoryRoom && <span className="mark story">📌 {g ? "the real scene" : "your story's room"}</span>}
-                  {isStoryWeapon && <span className="mark story">🗡️ {g ? "the real weapon's home" : "your story's weapon"}</span>}
+                  {isStoryRoom && <span className="mark story">📌 {g ? "the real scene" : "your opportunity"}</span>}
+                  {isStoryWeapon && <span className="mark story">🗡️ {g ? "the real weapon's home" : "your means"}</span>}
                   {went && <span className="mark went">👣 you went here</span>}
                 </span>
               )}
@@ -154,8 +154,8 @@ function RoomDetail({
   };
 
   const ties: string[] = [];
-  if (secrets && place === story.room) ties.push(g ? "📌 The real scene." : "📌 Your story's room.");
-  if (secrets && kept.some((x) => x.id === story.device)) ties.push(g ? "🗡️ The real weapon is kept here." : "🗡️ Your story's weapon is kept here.");
+  if (secrets && place === story.room) ties.push(g ? "📌 The real scene." : "📌 Your opportunity: you were here, and it could have happened here.");
+  if (secrets && kept.some((x) => x.id === story.device)) ties.push(g ? "🗡️ The real weapon is kept here." : "🗡️ Your means: the weapon you could have used is kept here.");
   if (secrets && view.you.evening.includes(place)) ties.push("👣 You went in here this evening.");
 
   return (

@@ -55,7 +55,7 @@ export function Board({ view, notes, picking }: { view: PlayerView; notes: Notes
       ))}
       {!picking && (
         <p className="muted small center" style={{ margin: 0 }}>
-          Tap to cross off (✗), tap again to suspect (?), again to clear. • is your own story. Only you see this.
+          Tap to cross off (✗), tap again to suspect (?), again to clear. • marks the case against you. Only you see this.
         </p>
       )}
     </div>

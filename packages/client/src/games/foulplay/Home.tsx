@@ -16,7 +16,7 @@ export function FoulPlayHome({ sub, navigate, onBack }: HomeProps) {
         <h1>
           Foul Play <span className="beta-pill">BETA</span>
         </h1>
-        <p className="muted">Lord Ashcombe is dead, and the house tells a story about every one of you. Only one is true.</p>
+        <p className="muted">Lord Ashcombe is dead. Every one of you had means, motive and opportunity. Only one of you did it.</p>
       </div>
       <div className="spacer" />
       <div className="stack">
@@ -54,33 +54,34 @@ function Rules({ onBack }: { onBack: () => void }) {
           evidence is still lying around the house, face down, room by room.
         </p>
 
-        <h3>1. Everyone has a story</h3>
+        <h3>1. Means, motive and opportunity</h3>
         <p className="muted">
-          The house tells a story about every guest: a <b>weapon</b> they could have used and a <b>room</b> they were in.
-          You&apos;re told your own at the start. Only the killer&apos;s story is true. The killer wins by getting the
-          table to believe someone else&apos;s.
+          Anyone could have done it. Every guest has a <b>motive</b>, the <b>means</b> (a weapon they could have used) and
+          the <b>opportunity</b> (a room they were in where it could have happened). You&apos;re told the case against you
+          at the start. Only the killer actually did it, and wins by getting the table to convict someone else.
         </p>
 
         <h3>2. The cards</h3>
         <p className="muted">Every card is true. Each one says what kind it is:</p>
         <div className="stack" style={{ gap: 6 }}>
-          <KindRow kind="clear" icon="🛡️" label="Alibi">A witness swears a guest was elsewhere. Breaks that guest&apos;s story.</KindRow>
+          <KindRow kind="clear" icon="🛡️" label="Alibi">A witness swears a guest was elsewhere. Clears that guest outright.</KindRow>
           <KindRow kind="clear" icon="🚪" label="Room cleared">
-            The murder didn&apos;t happen in this room. Kept in that room. Breaks every story set there.
+            The murder didn&apos;t happen in this room, so nobody had the opportunity there. Kept in that room.
           </KindRow>
           <KindRow kind="clear" icon="🔪" label="Weapon cleared">
-            This weapon wasn&apos;t used. Kept where the weapon is kept. Breaks every story that uses it.
+            This weapon wasn&apos;t used, so it&apos;s nobody&apos;s means. Kept where the weapon is kept.
           </KindRow>
           <KindRow kind="point" icon="👁️" label="Sighting">
-            A guest was seen in a room. It fits their story, but proves nothing.
+            A guest was seen in a room. It makes the case against them look stronger, but proves nothing.
           </KindRow>
           <KindRow kind="plain" icon="📋" label="Staff record · A guest's evening · From the body · Memory">
             Who went where, and what the body shows. Everyone starts with one memory.
           </KindRow>
         </div>
         <p className="muted">
-          So a false story is broken by an alibi, a room-cleared card and a weapon-cleared card. If a story borrows the
-          real room or weapon, there&apos;s no card for that part, and a second alibi instead.
+          So an innocent guest is cleared by an alibi, a room-cleared card for their opportunity and a weapon-cleared
+          card for their means. Where their means or opportunity is the real weapon or room, there&apos;s no card for
+          that part, and a second alibi instead.
         </p>
 
         <h3>3. Your role</h3>

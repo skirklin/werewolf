@@ -3,7 +3,7 @@ import { answerText, atPlace, clueText, placeName, type Action, type Answer, typ
 import type { TableProps } from "../../shell/game.js";
 import { Board, CardView, Evidence } from "./Notebook.js";
 import { HouseMap } from "./HouseMap.js";
-import { Briefing, StoryChips } from "./Briefing.js";
+import { Briefing, CaseChips } from "./Briefing.js";
 import { Dossier } from "./Dossier.js";
 import { useNotes, type Notes } from "./solver.js";
 import { PART_LABEL, cap, cards, logText, nameOf, optionName, seatName } from "./text.js";
@@ -93,7 +93,7 @@ function YouPanel({
     return (
       <button className="ghost full" onClick={() => setOpen(true)}>
         🔒 You are {myName}
-        {view.you.alive ? "" : " (dead)"}. Tap to show your role and story.
+        {view.you.alive ? "" : " (dead)"}. Tap to show your role and the case against you.
       </button>
     );
   const role =
@@ -111,12 +111,12 @@ function YouPanel({
       </div>
       {!g ? (
         <div className="frame-row small">
-          Your story (false): <StoryChips view={view} story={view.you.story} />
+          The case against you: <CaseChips view={view} against={view.you.story} />
         </div>
       ) : (
         <>
           <div className="frame-row small">
-            The truth: <StoryChips view={view} story={g.answer} />
+            The truth: <CaseChips view={view} against={g.answer} short />
             {view.you.role === "accomplice" ? ` (by ${d.agents[g.killer].name})` : ""}
           </div>
           {view.you.role === "killer" && g.accomplice !== null && (
@@ -127,7 +127,7 @@ function YouPanel({
               i === g.killer ? null : (
                 <div key={p.id} className="small frame-row">
                   {p.alive ? "" : "☠️ "}
-                  {d.agents[i].name}&apos;s story: <StoryChips view={view} story={g.stories[i]} />
+                  Against {d.agents[i].name}: <CaseChips view={view} against={g.stories[i]} short />
                 </div>
               )
             )}
@@ -435,7 +435,7 @@ function GameOver({ view, isHost, playAgain, onExit }: { view: PlayerView; isHos
       ) : (
         <span className="muted small">Nothing at all.</span>
       )}
-      <div className="muted small group-label">🕰️ Everyone&apos;s story, and evening</div>
+      <div className="muted small group-label">🕰️ The case against each guest, and their evening</div>
       {d.agents.map((a) => (
         <div key={a.id} className="small">
           <b>{a.name}</b>

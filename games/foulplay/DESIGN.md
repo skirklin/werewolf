@@ -2,8 +2,8 @@
 
 A hidden-killer deduction game. Lord Ashcombe has been murdered during his
 own party; every player is one of the guests, and one of them did it. The
-house tells a believable story about every guest, and only the killer's is
-true; the killer wins by getting someone else's to stick. The full rules are in
+every guest had means, motive and opportunity, and the killer wins by getting
+someone else convicted. The full rules are in
 [RULES.md](RULES.md).
 
 This package is the engine: content, case generator, solver, turn rules and
@@ -52,9 +52,10 @@ npm run foulplay -- --sim 100 --players 6 --accomplice no --rounds 4
   its count dropped" is the deduction, and joining someone is both
   protection and surveillance. Any company counts, not just innocent
   company, or a find staying private would give a guilty companion away.
-- **Stories.** `breaks(dossier, card, story, evening)` says whether a card
-  rules out a story. The client marks cards that break or fit your own
-  story, and the bots use it to choose whom to frame.
+- **The case against each guest** is called a story in the code
+  (`scenario.stories`): their means (weapon) and opportunity (room).
+  `breaks(dossier, card, story, evening)` says whether a card clears them of
+  it; the bots use it to choose whom to frame.
 - **Role knowledge.** `selfKnowledge` turns a role into cards with negative
   ids: an innocent knows it wasn't them, the guilty know everything. The bots
   reason with these; they never go into play. The board players see does no
@@ -67,5 +68,5 @@ Foul Play began as Dead Drop, a spy game in the style of Awkward Guests:
 players traded scored evidence cards on asks to the whole table, with rounds
 of discards and redraws. It became a murder mystery, then a hidden-killer
 game with leads and forgeries, then a race through the house, where where
-you are matters, and then this version, where every guest has a story. Some identifiers (`agent`, `device`,
+you are matters, and then this version, where every guest had means, motive and opportunity. Some identifiers (`agent`, `device`,
 `moleTrait`, `handoffFeature`) are left over from the spy draft.

@@ -1,4 +1,4 @@
-# Foul Play: rules (every guest has a story)
+# Foul Play: rules (means, motive and opportunity)
 
 These are the rules as built, in beta.
 
@@ -9,52 +9,64 @@ record proved the answer, and the killer won once it no longer could.
 Playtests of the third showed the problems with that. The game could end
 before anyone at the table had worked anything out. A killer who sees every
 card could make the case unprovable in a single round. And anyone burning a
-card was obviously guilty. Inspired by the film *Clue*, this version gives
-every guest a believable story, lets everyone destroy evidence, and leaves
-the verdict to the table.
+card was obviously guilty. Inspired by the film *Clue*, in this version
+anyone could have done it, everyone can destroy evidence, and the table
+gives the verdict.
 
 ## The idea
 
 Lord Ashcombe is dead, one of you did it, and the evidence is still lying
-around the house. **The house tells a story about every guest**: a weapon
-they could have used, and a room they were in that fits. Only the killer's
-story is true.
+around the house. As in *Clue*, **anyone could have done it: every guest had
+means, motive and opportunity.**
+
+- **Motive:** each character's own reason to want him dead. It's fixed, and
+  printed in the case file.
+- **Means:** a weapon they could have used. They went where it's kept, and
+  fit what it demands.
+- **Opportunity:** a room they were in where it could have happened.
+
+Only the killer actually did it.
 
 - **The killer** knows everything, including where every card is. They win
-  by pinning the murder on someone else: they destroy the cards that break
-  an innocent's story, then get the table to accept that story.
-- **The innocents** each know their own story and that it isn't true.
-  Somewhere in the house are the cards that break it. They want those on the
-  record, and they want the real story found.
-- **Anyone can burn a card.** An innocent might burn a sighting that fits
-  their own story. So a card that goes missing is no longer proof of guilt.
+  by getting someone else convicted: they destroy the cards that clear an
+  innocent, then get the table to accept the case against them.
+- **The innocents** each know the case against them and that it's wrong.
+  Somewhere in the house are the cards that show it. They want those on the
+  record, and they want the real killer found.
+- **Anyone can burn a card.** An innocent might burn a sighting that makes
+  the case against them look worse. So a card that goes missing is no longer
+  proof of guilt.
 
 Every step is taken by one player at a time, so the game works when you pass
 a single device around.
 
-## Stories and evidence
+## The case against you, and the evidence
 
-- **Your story** is shown on your role card, along with where you went this
-  evening. For example: "Mr. Okafor, with the rope, in the Library". Every
-  story is consistent with the guest's looks, the weapon's demands and where
-  that guest really went.
-- **Cards that break a story.** Each innocent's story is broken by two or
-  three cards:
+- **The case against you** is on your role card, along with where you went
+  this evening. For example: Mr. Okafor, with the means (the rope) and the
+  opportunity (the Library). It always fits the guest's looks, the weapon's
+  demands and where that guest really went.
+- **Cards that clear a guest.** Each innocent is cleared by two or three
+  cards:
   - an **alibi** ("The chauffeur was playing cards with Mr. Okafor the whole
     time"), sometimes from two witnesses;
-  - "the murder didn't happen in the Library", if that isn't the real room;
-  - "no trace on the rope", if that isn't the real weapon.
+  - **room cleared**: "the murder didn't happen in the Library", so no
+    opportunity there, if that isn't the real room. It's kept in that room;
+  - **weapon cleared**: "no trace on the rope", so no means, if that isn't
+    the real weapon. It's kept where the weapon is kept.
 
   None of these are in the Hall or in anyone's memory, so all of them can be
-  destroyed. The true story is broken by nothing.
-- **Cards that fit a story.** Sightings, such as "A maid saw Mr. Okafor
-  slip out of the Library just before midnight". They're true and prove
-  nothing, but they look bad. These are the cards an innocent may want to
-  burn.
+  destroyed. Nothing clears the killer.
+- **Cards that make a case look stronger.** Sightings, such as "A maid saw
+  Mr. Okafor slip out of the Library earlier in the evening". They're true
+  and prove nothing, but they look bad. These are the cards an innocent may
+  want to burn.
 - **Other evidence.** Who set foot where, a guest's whole evening, and the
   body's evidence in the Hall.
 - **All of it is true.** Every card in the game is true. Players can lie;
   cards can't.
+- **Every card says what kind it is**: alibi, room cleared, weapon cleared,
+  sighting, staff record, a guest's evening, memory, or from the body.
 
 ## Playing a round
 
@@ -117,15 +129,15 @@ it and convince the table. The killer can call one too, to frame someone.
 - **Where you are is evidence.** "You were alone in the Library and its
   count dropped, and you testified nothing." Joining someone protects you
   and keeps an eye on them.
-- **Burning is no longer a confession.** Innocents burn sightings that fit
-  their own story, so the killer's burns hide among theirs. What still
+- **Burning is no longer a confession.** Innocents burn sightings that make
+  the case against them look worse, so the killer's burns hide among theirs. What still
   stands out is which cards go missing: an alibi that never turns up, or a
   room's "not here" card that should be in it.
 - **The killer has to work for a frame.** Destroying two or three cards
   means being alone, in rooms everyone can see, more than once.
 - **The table is the judge.** The record rarely settles everything by
-  itself. The Reconstruction rewards whoever tells the most convincing
-  story, and the killer will try to.
+  itself. The Reconstruction rewards whoever makes the most convincing
+  case, and the killer will try to.
 - **Your notebook is your own.** The board is a sheet you mark yourself.
   The app never says "solved".
 
@@ -137,6 +149,6 @@ alone where or which counts dropped, and that is the innocents' best
 evidence, so people should do better. The target is about 40–50% between
 people. The main dials are in `generate.ts`:
 
-- how often stories share the real room or weapon (`shareChance`);
+- how often a guest's means or opportunity is the real weapon or room (`shareChance`);
 - how much extra evidence is dealt;
-- how many cards break each story.
+- how many cards clear each innocent.

@@ -3,33 +3,34 @@ import type React from "react";
 import type { Answer, PlayerView } from "@party/foulplay";
 import { looks, seatName } from "./text.js";
 
-/** "🗡️ Rope · 📌 Library": a story at a glance. */
-export function StoryChips({ view, story }: { view: PlayerView; story: Answer }) {
+/** "🗡️ Means: rope · 📌 Opportunity: Library": the case against a guest at a glance. */
+export function CaseChips({ view, against, short }: { view: PlayerView; against: Answer; short?: boolean }) {
   const d = view.dossier;
   return (
     <span className="chips">
-      <span className="pill">🗡️ {d.devices[story.device].name}</span>
-      <span className="pill">📌 {d.rooms[story.room].name}</span>
+      <span className="pill">🗡️ {short ? "" : "Means: "}{d.devices[against.device].name}</span>
+      <span className="pill">📌 {short ? "" : "Opportunity: "}{d.rooms[against.room].name}</span>
     </span>
   );
 }
 
-/** The three kinds of card that break a story, for whoever's story it is. */
+/** The kinds of card that clear a guest, for whoever's case it is. */
 function Breakers({ view, story, who }: { view: PlayerView; story: Answer; who: string }) {
   const d = view.dossier;
-  const room = d.rooms[story.room].name;
+  const r = d.rooms[story.room];
+  const room = `${r.preposition} the ${r.name}`;
   const weapon = d.devices[story.device];
+  const kept = d.rooms[weapon.location];
   return (
     <div className="stack breakers" style={{ gap: 4 }}>
       <span className="small">
-        <span className="card-kind clear">🛡️ Alibi</span> for {who}. It could be in any room.
+        <span className="card-kind clear">🛡️ Alibi</span> for {who}: clears you outright. It could be in any room.
       </span>
       <span className="small">
-        <span className="card-kind clear">🚪 Room cleared</span> &ldquo;It didn&apos;t happen in the {room}.&rdquo; Kept in the {room}.
+        <span className="card-kind clear">🚪 Room cleared</span> &ldquo;It didn&apos;t happen {room}&rdquo;: no opportunity. Kept {room}.
       </span>
       <span className="small">
-        <span className="card-kind clear">🔪 Weapon cleared</span> &ldquo;No trace on the {weapon.name.toLowerCase()}.&rdquo; Kept in the{" "}
-        {d.rooms[weapon.location].name}, with the weapon.
+        <span className="card-kind clear">🔪 Weapon cleared</span> &ldquo;No trace on the {weapon.name.toLowerCase()}&rdquo;: no means. Kept {kept.preposition} the {kept.name}, with the weapon.
       </span>
     </div>
   );
@@ -82,7 +83,7 @@ export function Briefing({ view, onDone }: { view: PlayerView; onDone: () => voi
                 : `${seatName(view, g!.killer)} killed Lord Ashcombe, and you're helping them get away with it. It happened`}
               :
             </p>
-            <StoryChips view={view} story={g!.answer} />
+            <CaseChips view={view} against={g!.answer} />
             <p>
               You win if the table names the wrong answer.
               {view.you.role === "killer" && g!.accomplice !== null ? ` Your accomplice is ${seatName(view, g!.accomplice)}.` : ""}
@@ -92,40 +93,42 @@ export function Briefing({ view, onDone }: { view: PlayerView; onDone: () => voi
         ),
     },
     {
-      title: "Everyone has a story",
+      title: "Means, motive and opportunity",
       body: (
         <>
           <p>
-            The house tells a story about every guest: a weapon they could have used, and a room they were in. Only the
-            killer&apos;s is true.
+            Anyone could have done it. Every guest had a <b>motive</b>, the <b>means</b> (a weapon they could have used)
+            and the <b>opportunity</b> (a room they were in where it could have happened). Only the killer actually did.
           </p>
           {!g ? (
             <>
-              <p>The story about you, which is false:</p>
-              <StoryChips view={view} story={view.you.story} />
-              <p className="small">A false story is broken by cards like these, somewhere in the house:</p>
+              <p className="small">The case against you:</p>
+              <span className="small">💰 Motive: {agent.motive}</span>
+              <CaseChips view={view} against={view.you.story} />
+              <p className="small">You know it&apos;s wrong. These cards, somewhere in the house, would show it:</p>
               <Breakers view={view} story={view.you.story} who="you" />
               <p className="small">
-                If a story borrows the real room or weapon, there&apos;s no card to clear it: there are two alibis instead.
-                Other cards fit stories without proving anything, like a <span className="card-kind point">👁️ Sighting</span>{" "}
-                of a guest where their story says they were.
+                If your means or opportunity happens to be the real weapon or room, there&apos;s no card to clear that part,
+                and a second alibi instead. Some cards make a case look stronger without proving anything, like a{" "}
+                <span className="card-kind point">👁️ Sighting</span> of you where you had the opportunity.
               </p>
             </>
           ) : (
             <>
-              <p className="small">Everyone else&apos;s story, which they each know:</p>
+              <p className="small">The case against each of the others, which they each know:</p>
               {view.players.map((p, i) =>
                 i === g.killer ? null : (
                   <div key={p.id} className="small frame-row">
-                    <b>{d.agents[i].name}</b> <StoryChips view={view} story={g.stories[i]} />
+                    <b>{d.agents[i].name}</b> <CaseChips view={view} against={g.stories[i]} short />
                   </div>
                 )
               )}
               <p className="small">
-                Each false story is broken by an <span className="card-kind clear">🛡️ Alibi</span>, a{" "}
-                <span className="card-kind clear">🚪 Room cleared</span> card kept in its room, and a{" "}
-                <span className="card-kind clear">🔪 Weapon cleared</span> card kept with its weapon (or a second alibi
-                where the story borrows the real room or weapon). Destroy them, and the story could stick.
+                Each of them is cleared by an <span className="card-kind clear">🛡️ Alibi</span>, a{" "}
+                <span className="card-kind clear">🚪 Room cleared</span> card kept in their room (no opportunity), and a{" "}
+                <span className="card-kind clear">🔪 Weapon cleared</span> card kept with their weapon (no means), or a
+                second alibi where their case shares the real room or weapon. Destroy those, and the case against them
+                stands.
               </p>
             </>
           )}
