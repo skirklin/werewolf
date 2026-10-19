@@ -32,7 +32,7 @@ export const foulplay: ClientGame<GameConfig, PlayerView, Action> = {
   id: "foulplay",
   name: "Foul Play",
   emoji: "🔍",
-  tagline: "Every guest has a story that fits. One of them is true.",
+  tagline: "Everyone had means, motive and opportunity. Only one of you did it.",
   beta: true,
   Home: FoulPlayHome,
 

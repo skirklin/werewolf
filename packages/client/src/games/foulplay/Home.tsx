@@ -1,3 +1,4 @@
+import type React from "react";
 import type { HomeProps } from "../../shell/game.js";
 import { FoulPlayLocal } from "./LocalApp.js";
 
@@ -15,7 +16,7 @@ export function FoulPlayHome({ sub, navigate, onBack }: HomeProps) {
         <h1>
           Foul Play <span className="beta-pill">BETA</span>
         </h1>
-        <p className="muted">Lord Ashcombe is dead, and the house tells a story about every one of you. Only one is true.</p>
+        <p className="muted">Lord Ashcombe is dead. Every one of you had means, motive and opportunity. Only one of you did it.</p>
       </div>
       <div className="spacer" />
       <div className="stack">
@@ -49,51 +50,84 @@ function Rules({ onBack }: { onBack: () => void }) {
       <div className="stack">
         <h2>How to play</h2>
         <p>
-          Lord Ashcombe has been found dead at the foot of the stairs in the Hall, moved there from wherever he was really
-          killed. Every player is one of the guests, and one of you did it. The evidence is still lying around the house,
-          and the house tells a story about every one of you: a weapon you could have used and a room you were in. Only
-          the killer&apos;s story is true.
+          Lord Ashcombe has been murdered at his own party. Every player is one of the guests, and one of you did it. The
+          evidence is still lying around the house, face down, room by room.
         </p>
-        <h3>Your role and your story</h3>
+
+        <h3>1. Means, motive and opportunity</h3>
         <p className="muted">
-          One player is the <b>killer</b>, who knows everything, including where every card is. At five or more there may
-          be an <b>accomplice</b>, who knows what the killer knows except where the cards are. Everyone else is{" "}
-          <b>innocent</b>. You all start in the Hall with one memory, and you each know your own story and where you went
-          this evening. Somewhere in the house are the cards that break an innocent&apos;s story: an alibi, or proof that
-          their weapon or room wasn&apos;t the one.
+          Anyone could have done it. Every guest has a <b>motive</b>, the <b>means</b> (a weapon they could have used) and
+          the <b>opportunity</b> (a room they were in where it could have happened). You&apos;re told the case against you
+          at the start. Only the killer actually did it, and wins by getting the table to convict someone else.
         </p>
-        <h3>A turn</h3>
+
+        <h3>2. The cards</h3>
+        <p className="muted">Every card is true. Each one says what kind it is:</p>
+        <div className="stack" style={{ gap: 6 }}>
+          <KindRow kind="clear" icon="🛡️" label="Alibi">A witness swears a guest was elsewhere. Clears that guest outright.</KindRow>
+          <KindRow kind="clear" icon="🚪" label="Room cleared">
+            The murder didn&apos;t happen in this room, so nobody had the opportunity there. Kept in that room.
+          </KindRow>
+          <KindRow kind="clear" icon="🔪" label="Weapon cleared">
+            This weapon wasn&apos;t used, so it&apos;s nobody&apos;s means. Kept where the weapon is kept.
+          </KindRow>
+          <KindRow kind="point" icon="👁️" label="Sighting">
+            A guest was seen in a room. It makes the case against them look stronger, but proves nothing.
+          </KindRow>
+          <KindRow kind="plain" icon="📋" label="Staff record · A guest's evening · From the body · Memory">
+            Who went where, and what the body shows. Everyone starts with one memory.
+          </KindRow>
+        </div>
         <p className="muted">
-          <b>Move</b>: stay, go to a room, or join another guest. Then <b>search</b> the room (take the top card of its
-          evidence) or <b>keep watch</b>. If anyone else is in the room, what you find goes straight on the public
-          record. If you&apos;re alone, it goes into your hand, unseen. Then <b>testify</b> what you hold onto the record,
-          or <b>burn</b> it. Anyone can burn: you might want rid of a card that fits your own story. Everyone sees where
-          everyone is and how many cards are left in each room, but nobody sees a burn.
+          So an innocent guest is cleared by an alibi, a room-cleared card for their opportunity and a weapon-cleared
+          card for their means. Where their means or opportunity is the real weapon or room, there&apos;s no card for
+          that part, and a second alibi instead.
         </p>
-        <h3>The night</h3>
+
+        <h3>3. Your role</h3>
         <p className="muted">
-          The device goes round the table and everyone taps through. The killer may murder one guest who was left alone
-          (once a game; no weapon or presence needed, and the body leaves new evidence), or destroy a card in an empty room.
+          One player is the <b>killer</b>, and knows where every card is. At five or more there may be an{" "}
+          <b>accomplice</b>, who knows the truth but not where the cards are. Everyone else is <b>innocent</b>.
         </p>
-        <h3>The Reconstruction</h3>
+
+        <h3>4. A turn</h3>
         <p className="muted">
-          Once a game, instead of moving, you can call everyone together and name who did it, with what, and where. Everyone
-          alive says yes or no, openly. If most say yes, that&apos;s the verdict: right, and the innocents win; wrong, and
-          the killer does. If not, play goes on. The game never ends just because the evidence adds up: someone has to
-          see it and convince the table. The killer can call one too, to frame someone.
+          <b>Move:</b> stay, go to a room, or join another guest. Everyone sees where everyone is, and how many cards are
+          left in each room. <b>Then search or keep watch:</b> a search takes the top card of the room. If anyone else is
+          there, it goes straight on the public record; if you&apos;re alone, it goes into your hand, unseen.{" "}
+          <b>Then testify or burn</b> what you hold: testifying puts it on the record, burning destroys it, and nobody sees a
+          burn. Anyone may burn.
         </p>
+
+        <h3>5. The night</h3>
+        <p className="muted">
+          The device goes round and everyone taps through. The killer may murder a guest who is alone (once a game; the
+          body leaves new evidence), or destroy the top card in an empty room.
+        </p>
+
+        <h3>6. The verdict</h3>
+        <p className="muted">
+          Once a game, instead of moving, anyone can call the <b>Reconstruction</b>: name who, with what, and where.
+          Everyone alive votes yes or no, openly. If most say yes, that&apos;s the verdict: right, and the innocents win;
+          wrong, and the killer does. If not, play goes on. After six rounds, the table votes at dawn.
+        </p>
+
         <h3>Talk is free</h3>
         <p className="muted">
-          Say anything, any time; nothing you say is checked, and the killer will lie. The record is the only proof. The
-          dead don&apos;t talk.
-        </p>
-        <h3>Winning</h3>
-        <p className="muted">
-          The innocents win if the table accepts the right answer. The killer (with the accomplice) wins if it accepts a
-          wrong one, or if the guilty come to outnumber the innocents. If nobody has convinced the table after six rounds,
-          it votes at dawn: who, then with what, then where.
+          Say anything, any time. Nothing anyone says is checked; only cards are proof. The dead don&apos;t talk.
         </p>
       </div>
+    </div>
+  );
+}
+
+function KindRow({ kind, icon, label, children }: { kind: "clear" | "point" | "plain"; icon: string; label: string; children: React.ReactNode }) {
+  return (
+    <div className={`clue kind-${kind}`}>
+      <span className={`card-kind ${kind}`}>
+        {icon} {label}
+      </span>
+      <span className="small">{children}</span>
     </div>
   );
 }

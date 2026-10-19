@@ -1,7 +1,9 @@
 import { useState } from "react";
-import { answerText, atPlace, clueText, hallOf, placeName, type Action, type Answer, type PlayerView } from "@party/foulplay";
+import { answerText, atPlace, clueText, placeName, type Action, type Answer, type PlayerView } from "@party/foulplay";
 import type { TableProps } from "../../shell/game.js";
 import { Board, CardView, Evidence } from "./Notebook.js";
+import { HouseMap } from "./HouseMap.js";
+import { Briefing, CaseChips } from "./Briefing.js";
 import { Dossier } from "./Dossier.js";
 import { useNotes, type Notes } from "./solver.js";
 import { PART_LABEL, cap, cards, logText, nameOf, optionName, seatName } from "./text.js";
@@ -13,14 +15,28 @@ type Tab = "board" | "evidence" | "case" | "log";
 export function FoulPlayTable({ view, room, isHost, act, playAgain, onExit }: TableProps<PlayerView, Action>) {
   const notes = useNotes(view, room.code);
   const [tab, setTab] = useState<Tab>("board");
+  // Your role, story and evening stay hidden until you ask, so a neighbour can't read them off your screen.
+  const [secrets, setSecrets] = useState(false);
+  const [briefing, setBriefing] = useBriefing(view, room.code);
   const phase = view.phase;
   const moving = phase.kind === "turn" && phase.active === view.you.seat && phase.step === "move";
 
+  if (briefing && phase.kind !== "over")
+    return (
+      <Briefing
+        view={view}
+        onDone={() => {
+          setBriefing(false);
+          setSecrets(true);
+        }}
+      />
+    );
+
   return (
     <div className="stack">
-      <RolePanel view={view} />
+      <YouPanel view={view} open={secrets} setOpen={setSecrets} onBriefing={() => setBriefing(true)} />
       <ActionPanel view={view} notes={notes} act={act} isHost={isHost} playAgain={playAgain} onExit={onExit} />
-      <House view={view} act={moving ? act : null} />
+      <HouseMap view={view} act={moving ? act : null} secrets={secrets} />
       <div className="tabs">
         {(["board", "evidence", "case", "log"] as const).map((t) => (
           <button key={t} className={tab === t ? "on" : ""} onClick={() => setTab(t)}>
@@ -36,142 +52,89 @@ export function FoulPlayTable({ view, room, isHost, act, playAgain, onExit }: Ta
   );
 }
 
-/**
- * The house: every room and the Hall, how much evidence is left in each, and
- * who's there. On your move, tap a room to go there or a guest to join them.
- */
-function House({ view, act }: { view: PlayerView; act: Act | null }) {
-  const d = view.dossier;
-  const me = view.you.seat;
-  const hall = hallOf(d);
-  const active = "active" in view.phase ? view.phase.active : -1;
-  const places = [hall, ...d.rooms.map((r) => r.id)];
-  return (
-    <div className="stack" style={{ gap: 6 }}>
-      <div className="spread">
-        <b>🏚️ The house</b>
-        <span className="muted small">
-          {view.phase.kind === "vote" || view.phase.kind === "over" ? "Dawn" : `Round ${view.round} of ${view.rounds}`}
-        </span>
-      </div>
-      <div className="house">
-        {places.map((place) => {
-          const here = view.players.map((p, i) => ({ p, i })).filter(({ p }) => p.alive && p.place === place);
-          const mine = view.players[me].place === place;
-          return (
-            <div key={place} className={`place ${mine ? "mine" : ""}`}>
-              <button
-                className="place-name"
-                disabled={!act}
-                onClick={() => act?.(mine ? { type: "stay" } : { type: "move", to: place })}
-              >
-                <b>{place === hall ? "Hall" : d.rooms[place].name}</b>
-                <span className="count" title="Evidence left here">🂠 {view.counts[place]}</span>
-              </button>
-              <div className="people">
-                {here.length === 0 && <span className="muted small">empty</span>}
-                {here.map(({ p, i }) => (
-                  <button
-                    key={p.id}
-                    className={`guest ${i === active ? "active" : ""} ${i === me ? "you" : ""}`}
-                    disabled={!act || i === me}
-                    onClick={() => act?.({ type: "join", who: p.id })}
-                  >
-                    {i === active ? "▶ " : ""}
-                    {p.id === view.you.id ? "You" : p.name}
-                  </button>
-                ))}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-      {act && <p className="muted small center" style={{ margin: 0 }}>Tap a room to go there, or a guest to join them.</p>}
-    </div>
-  );
+/** Shown once per player per case, before anything else; reopened from your panel. */
+function useBriefing(view: PlayerView, roomCode: string): [boolean, (v: boolean) => void] {
+  const key = `foulplay.briefed.${roomCode}.${view.you.id}.${view.dossier.agents.map((a) => a.name).join("")}${view.you.story.device}${view.you.story.room}`;
+  const [open, setOpen] = useState(() => {
+    try {
+      return localStorage.getItem(key) === null;
+    } catch {
+      return true;
+    }
+  });
+  const set = (v: boolean) => {
+    setOpen(v);
+    try {
+      if (!v) localStorage.setItem(key, "1");
+    } catch {
+      /* storage blocked: you'll just see the briefing again next time */
+    }
+  };
+  return [open, set];
 }
 
-/** Your role, hidden until you tap, so a neighbour can't read it off your screen. */
-function RolePanel({ view }: { view: PlayerView }) {
-  const [open, setOpen] = useState(false);
+/** Your role card: what's yours alone. Hidden until you tap. */
+function YouPanel({
+  view,
+  open,
+  setOpen,
+  onBriefing,
+}: {
+  view: PlayerView;
+  open: boolean;
+  setOpen: (v: boolean) => void;
+  onBriefing: () => void;
+}) {
   const d = view.dossier;
   const g = view.guilty;
-  const me = d.agents[view.you.seat].name;
+  const me = view.you.seat;
+  const myName = d.agents[me].name;
   if (!open)
     return (
       <button className="ghost full" onClick={() => setOpen(true)}>
-        🔒 You are {me}
-        {view.you.alive ? "" : " (dead)"}. Tap to see your role.
+        🔒 You are {myName}
+        {view.you.alive ? "" : " (dead)"}. Tap to show your role and the case against you.
       </button>
     );
+  const role =
+    view.you.role === "killer" ? "🔪 The killer" : view.you.role === "accomplice" ? "🤝 The accomplice" : "🕊️ Innocent";
   return (
     <div className={`card stack role ${g ? "guilty" : ""}`} style={{ gap: 6 }}>
       <div className="spread">
         <b>
-          {view.you.role === "killer" ? "🔪 You are the killer" : view.you.role === "accomplice" ? "🤝 You are the accomplice" : "🕊️ You are innocent"}
+          {myName} · {role}
         </b>
-        <button className="ghost mini" onClick={() => setOpen(false)}>Hide</button>
+        <span className="btn-row" style={{ gap: 4 }}>
+          <button className="ghost mini" onClick={onBriefing}>📖 Briefing</button>
+          <button className="ghost mini" onClick={() => setOpen(false)}>Hide</button>
+        </span>
       </div>
-      {!g && (
-        <>
-          <span>
-            The story the house tells about you: <b>{answerText(d, view.you.story).replace(/^[^,]+, /, "")}</b>. It
-            isn&apos;t true, but it could look it.
-          </span>
-          <span className="muted small">
-            You didn&apos;t do it. Somewhere there&apos;s an alibi that breaks your story: get it on the record. Burn what
-            fits your story if you like. Then help the table name the real killer, with what and where.
-          </span>
-        </>
-      )}
-      {g && view.you.role === "killer" && (
-        <>
-          <span>It was you, {answerText(d, g.answer).replace(/^[^,]+, /, "")}.</span>
-          <span className="muted small">
-            {g.accomplice !== null ? `Your accomplice is ${seatName(view, g.accomplice)}.` : "You have no accomplice."}{" "}
-            Pin it on someone else: destroy the cards that break their story (search alone and burn them; at night,
-            destroy a card in an empty room, or murder a guest who&apos;s alone), then get the table to agree to it. You
-            win if the wrong answer is accepted.
-          </span>
-        </>
-      )}
-      {g && view.you.role === "accomplice" && (
-        <>
-          <span>
-            {seatName(view, g.killer)} did it, {answerText(d, g.answer).replace(/^[^,]+, /, "")}.
-          </span>
-          <span className="muted small">
-            Help them pin it on someone else: burn what breaks an innocent&apos;s story, and back the wrong answer. You win
-            with them.
-          </span>
-        </>
-      )}
-      <span className="muted small">
-        Your evening: {view.you.evening.map((r) => d.rooms[r].name).join(", ")}.
-      </span>
-      {g && (
-        <div className="stack" style={{ gap: 4 }}>
-          <span className="muted small">The story the house tells about each guest:</span>
-          {g.stories.map((st, i) => (
-            <div key={i} className="small">
-              {i === g.killer ? "🔪 " : "• "}
-              {answerText(d, st)}
-            </div>
-          ))}
+      {!g ? (
+        <div className="frame-row small">
+          The case against you: <CaseChips view={view} against={view.you.story} />
         </div>
-      )}
-      {g?.stacks && (
-        <div className="stack" style={{ gap: 4 }}>
-          <span className="muted small">What&apos;s left in the house (top card first):</span>
-          {g.stacks.map((stack, place) =>
-            stack.length ? (
-              <div key={place} className="small">
-                <b>{cap(placeName(d, place))}:</b> {stack.map((c) => clueText(d, c)).join(" | ")}
-              </div>
-            ) : null
+      ) : (
+        <>
+          <div className="frame-row small">
+            The truth: <CaseChips view={view} against={g.answer} short />
+            {view.you.role === "accomplice" ? ` (by ${d.agents[g.killer].name})` : ""}
+          </div>
+          {view.you.role === "killer" && g.accomplice !== null && (
+            <span className="small">Accomplice: {seatName(view, g.accomplice)}</span>
           )}
-        </div>
+          <div className="stack" style={{ gap: 2 }}>
+            {view.players.map((p, i) =>
+              i === g.killer ? null : (
+                <div key={p.id} className="small frame-row">
+                  {p.alive ? "" : "☠️ "}
+                  Against {d.agents[i].name}: <CaseChips view={view} against={g.stories[i]} short />
+                </div>
+              )
+            )}
+          </div>
+        </>
       )}
+      <span className="muted small">👣 Your evening: {view.you.evening.map((r) => d.rooms[r].name).join(", ")}</span>
     </div>
   );
 }
@@ -219,7 +182,7 @@ function ActionPanel({
   );
 }
 
-/** Your turn: move, then search or keep watch. Testifying and burning are free. Or call the Reconstruction. */
+/** Your turn: move, then search or keep watch, then testify or burn. Or call the Reconstruction. */
 function TurnPanel({ view, notes, act }: { view: PlayerView; notes: Notes; act: Act }) {
   const phase = view.phase as Extract<PlayerView["phase"], { kind: "turn" }>;
   const [calling, setCalling] = useState(false);
@@ -230,36 +193,44 @@ function TurnPanel({ view, notes, act }: { view: PlayerView; notes: Notes; act: 
   const last = view.log.at(-1);
   const justFound =
     last?.t === "search" && last.who === view.you.id && last.found === "private" ? hand.at(-1) : null;
+  const steps = ["move", "act", "wrap"] as const;
 
   return (
     <div className="card stack">
-      <b>
-        Your turn
-        {phase.step === "move" ? ": where to?" : phase.step === "act" ? `: ${atPlace(d, here)}` : ": anything to testify?"}
-      </b>
+      <b>Your turn</b>
+      <div className="steps">
+        {steps.map((st, i) => (
+          <span key={st} className={`step ${phase.step === st ? "on" : steps.indexOf(phase.step) > i ? "done" : ""}`}>
+            {i + 1}. {st === "move" ? "Move" : st === "act" ? "Search or watch" : "Testify or burn"}
+          </span>
+        ))}
+      </div>
       {phase.step === "move" ? (
         <>
-          <p className="muted small" style={{ margin: 0 }}>
-            You&apos;re {atPlace(d, here)}. Go to a room, join a guest, or stay. Then you&apos;ll search or keep watch.
+          <p className="small" style={{ margin: 0 }}>
+            You&apos;re {atPlace(d, here)}. Tap a room on the map to go there or to join someone, or stay put.
           </p>
           <button className="full" onClick={() => act({ type: "stay" })}>Stay {atPlace(d, here)}</button>
           {!view.you.called && !calling && (
             <button className="ghost full" onClick={() => setCalling(true)}>
-              🕯️ Call the Reconstruction (once a game, instead of moving)
+              🕯️ Call the Reconstruction instead (once a game)
             </button>
           )}
           {calling && <Reconstruction view={view} notes={notes} act={act} onCancel={() => setCalling(false)} />}
         </>
       ) : phase.step === "wrap" ? (
-        <button className="primary full lg" onClick={() => act({ type: "end" })}>
-          End my turn
-        </button>
+        <>
+          {hand.length === 0 && <p className="muted small" style={{ margin: 0 }}>Nothing in your hand.</p>}
+          <button className="primary full lg" onClick={() => act({ type: "end" })}>
+            End my turn
+          </button>
+        </>
       ) : (
         <>
-          <p className="muted small" style={{ margin: 0 }}>
+          <p className="small" style={{ margin: 0 }}>
             {company.length
-              ? `${company.map((p) => p.name).join(", ")} ${company.length === 1 ? "is" : "are"} here, so anything you find goes on the record.`
-              : "You're alone: anything you find goes into your hand, unseen. Testify it to prove it."}{" "}
+              ? `${company.map((p) => p.name).join(", ")} ${company.length === 1 ? "is" : "are"} here with you: whatever you find goes straight on the public record.`
+              : "You're alone: whatever you find goes into your hand, unseen. Everyone will see the count here drop."}{" "}
             {cards(view.counts[here])} left here.
           </p>
           <div className="btn-row">
@@ -279,7 +250,7 @@ function TurnPanel({ view, notes, act }: { view: PlayerView; notes: Notes; act: 
       {hand.length > 0 && (
         <div className="stack" style={{ gap: 6 }}>
           <span className="muted small">
-            In your hand. Testifying puts a card on the public record; burning destroys it, unseen. Both are free.
+            In your hand: testify a card to put it on the public record, or burn it (nobody sees). Both are free.
           </span>
           {hand.map((c) => (
             <div key={c.id} className="stack" style={{ gap: 4 }}>
@@ -340,7 +311,9 @@ function NightPanel({ view, act }: { view: PlayerView; act: Act }) {
               <span className="row">
                 <span>{clueText(d, view.guilty!.stacks![place][0])}</span>
               </span>
-              <span className="src">{cap(placeName(d, place))}</span>
+              <span className="src">
+                {cap(placeName(d, place))}
+              </span>
             </button>
           ))}
         </>
@@ -462,7 +435,7 @@ function GameOver({ view, isHost, playAgain, onExit }: { view: PlayerView; isHos
       ) : (
         <span className="muted small">Nothing at all.</span>
       )}
-      <div className="muted small group-label">🕰️ Everyone&apos;s story, and evening</div>
+      <div className="muted small group-label">🕰️ The case against each guest, and their evening</div>
       {d.agents.map((a) => (
         <div key={a.id} className="small">
           <b>{a.name}</b>
