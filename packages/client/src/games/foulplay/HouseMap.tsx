@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { breaks, clueText, hallOf, type Action, type Clue, type PlayerView } from "@party/foulplay";
-import { cap, cards } from "./text.js";
+import { clueText, hallOf, type Action, type PlayerView } from "@party/foulplay";
+import { cap, cardKind, cards } from "./text.js";
 
 type Act = (a: Action) => void;
 
@@ -44,9 +44,6 @@ export function HouseMap({ view, act, secrets }: { view: PlayerView; act: Act | 
   const storyWeaponRoom = d.devices[story.device].location;
   const g = view.guilty;
   const nameOf = (place: number) => (place === hall ? "Hall" : d.rooms[place].name);
-  /** For the killer: how many cards here would break an innocent's story. */
-  const breakersHere = (place: number) =>
-    g?.stacks ? g.stacks[place].filter((c) => storiesBroken(view, c).length > 0).length : 0;
 
   return (
     <div className="stack" style={{ gap: 6 }}>
@@ -65,7 +62,6 @@ export function HouseMap({ view, act, secrets }: { view: PlayerView; act: Act | 
           const isStoryRoom = secrets && place === story.room;
           const isStoryWeapon = secrets && place === storyWeaponRoom;
           const went = secrets && view.you.evening.includes(place);
-          const targets = secrets ? breakersHere(place) : 0;
           return (
             <button
               key={place}
@@ -86,12 +82,11 @@ export function HouseMap({ view, act, secrets }: { view: PlayerView; act: Act | 
                   <span key={x.id} className="kept">{x.name}</span>
                 ))}
               </span>
-              {(isStoryRoom || isStoryWeapon || went || targets > 0) && (
+              {(isStoryRoom || isStoryWeapon || went) && (
                 <span className="room-marks">
                   {isStoryRoom && <span className="mark story">📌 {g ? "the real scene" : "your story's room"}</span>}
                   {isStoryWeapon && <span className="mark story">🗡️ {g ? "the real weapon's home" : "your story's weapon"}</span>}
                   {went && <span className="mark went">👣 you went here</span>}
-                  {targets > 0 && <span className="mark target">🎯 {targets}</span>}
                 </span>
               )}
               <span className="tokens">
@@ -130,15 +125,6 @@ function Pile({ n }: { n: number }) {
   );
 }
 
-/** Whose (living, innocent-looking) stories a card would break, as far as the guilty can see. */
-export function storiesBroken(view: PlayerView, c: Clue): number[] {
-  const g = view.guilty;
-  if (!g) return [];
-  return view.players.flatMap((p, i) =>
-    p.alive && i !== g.killer && i !== g.accomplice && breaks(view.dossier, c, g.stories[i], g.evenings[i]) ? [i] : []
-  );
-}
-
 function RoomDetail({
   view,
   place,
@@ -168,19 +154,9 @@ function RoomDetail({
   };
 
   const ties: string[] = [];
-  if (secrets && place === story.room)
-    ties.push(
-      view.you.role === "innocent"
-        ? `Your story says the murder happened here. The card that says it didn't is kept here, unless it's gone.`
-        : "Your story's room."
-    );
-  if (secrets && kept.some((x) => x.id === story.device))
-    ties.push(
-      view.you.role === "innocent"
-        ? `Your story's weapon, the ${d.devices[story.device].name.toLowerCase()}, is kept here, and so is any card saying it wasn't used.`
-        : "Your story's weapon is kept here."
-    );
-  if (secrets && view.you.evening.includes(place)) ties.push("You went in here this evening, and someone may have seen you.");
+  if (secrets && place === story.room) ties.push(g ? "📌 The real scene." : "📌 Your story's room.");
+  if (secrets && kept.some((x) => x.id === story.device)) ties.push(g ? "🗡️ The real weapon is kept here." : "🗡️ Your story's weapon is kept here.");
+  if (secrets && view.you.evening.includes(place)) ties.push("👣 You went in here this evening.");
 
   return (
     <div className="card tight stack room-detail" style={{ gap: 6 }}>
@@ -204,18 +180,12 @@ function RoomDetail({
         <div className="stack" style={{ gap: 4 }}>
           <span className="muted small">What&apos;s here, top first (only the killer sees this):</span>
           {g.stacks[place].length === 0 && <span className="muted small">Nothing.</span>}
-          {g.stacks[place].map((c, i) => {
-            const broken = storiesBroken(view, c);
-            return (
-              <div key={c.id} className="clue small">
-                {i === 0 ? "▶ " : ""}
-                {clueText(d, c)}
-                {broken.length > 0 && (
-                  <span className="src">🎯 breaks the story of {broken.map((s) => d.agents[s].name).join(", ")}</span>
-                )}
-              </div>
-            );
-          })}
+          {g.stacks[place].map((c, i) => (
+            <div key={c.id} className="small">
+              {i === 0 ? "▶ " : "· "}
+              <b>{cardKind(c).label}:</b> {clueText(d, c)}
+            </div>
+          ))}
         </div>
       )}
       {act && (

@@ -108,3 +108,31 @@ export function cardText(view: PlayerView, c: Clue): string {
   if (view.you.role === "accomplice") return "You know who did it.";
   return "You know: you did it.";
 }
+
+/** What sort of card this is, so its job is plain at a glance. */
+export function cardKind(c: Clue): { icon: string; label: string; tone: "clear" | "point" | "plain" } {
+  switch (c.kind) {
+    case "notAgent":
+      return { icon: "🛡️", label: "Alibi", tone: "clear" };
+    case "notRoom":
+      return { icon: "🚪", label: "Room cleared", tone: "clear" };
+    case "notDevice":
+      return { icon: "🔪", label: "Weapon cleared", tone: "clear" };
+    case "seen":
+      return { icon: "👁️", label: "Sighting", tone: "point" };
+    case "visitors":
+      return { icon: "📋", label: "Staff record", tone: "plain" };
+    case "whereabouts":
+      return { icon: "🕰️", label: "A guest's evening", tone: "plain" };
+    case "visited":
+    case "never":
+      return { icon: "💭", label: "Memory", tone: "plain" };
+    case "moleTrait":
+    case "handoffFeature":
+      return { icon: "⚰️", label: "From the body", tone: "plain" };
+    case "isRoom":
+      return { icon: "🩸", label: "The scene", tone: "point" };
+    case "isDevice":
+      return { icon: "🩸", label: "The weapon", tone: "point" };
+  }
+}

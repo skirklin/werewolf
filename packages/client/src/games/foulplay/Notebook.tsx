@@ -1,6 +1,6 @@
-import { breaks, clueText, type Answer, type Clue, type Dimension, type PlayerView } from "@party/foulplay";
+import { clueText, type Answer, type Clue, type Dimension, type PlayerView } from "@party/foulplay";
 import type { Notes } from "./solver.js";
-import { sourceText } from "./text.js";
+import { cardKind, sourceText } from "./text.js";
 
 /** On your turn, the board is also where you name an accusation for an inquest. */
 export type Picking = { answer: Partial<Answer>; onPick: (dim: Dimension, value: number) => void } | null;
@@ -62,14 +62,6 @@ export function Board({ view, notes, picking }: { view: PlayerView; notes: Notes
   );
 }
 
-/** How a card bears on the story told about you. */
-export function bearing(view: PlayerView, clue: Clue): "clears" | "fits" | null {
-  if (clue.id < 0) return null;
-  if (breaks(view.dossier, clue, view.you.story, view.you.evening)) return "clears";
-  if (clue.kind === "seen" && clue.agent === view.you.seat) return "fits";
-  return null;
-}
-
 /** One card: what it says, where it came from, how you came by it. */
 export function CardView({
   view,
@@ -82,17 +74,19 @@ export function CardView({
   onClick?: () => void;
   selected?: boolean;
 }) {
-  const b = bearing(view, clue);
+  const k = cardKind(clue);
   const body = (
     <>
+      <span className={`card-kind ${k.tone}`}>
+        {k.icon} {k.label}
+      </span>
       <span className="row">
         <span>{clueText(view.dossier, clue)}</span>
-        {b && <span className={`pill ${b === "clears" ? "good" : "bad"}`}>{b === "clears" ? "breaks your story" : "fits your story"}</span>}
       </span>
       <span className="src">{sourceText(view, clue.id)}</span>
     </>
   );
-  const cls = "clue";
+  const cls = `clue kind-${k.tone}`;
   if (onClick)
     return (
       <button className={`${cls} pickable ${selected ? "selected" : ""}`} onClick={onClick}>

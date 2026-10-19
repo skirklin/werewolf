@@ -292,8 +292,6 @@ button.has-beta { position: relative; overflow: hidden; }
 .place .guest { min-height: 0; padding: 3px 8px; font-size: 0.78rem; border-radius: 999px; width: auto; }
 .place .guest.you { border-color: var(--accent-2); color: var(--accent-2); }
 .place .guest.active { font-weight: 700; }
-.pill.good { background: color-mix(in srgb, var(--good) 22%, transparent); color: var(--good); white-space: nowrap; }
-.pill.bad { background: color-mix(in srgb, var(--danger) 22%, transparent); color: var(--danger); white-space: nowrap; }
 .verdict-list { display: flex; flex-wrap: wrap; gap: 6px; }
 
 /* Foul Play: the manor floor plan */
@@ -317,7 +315,6 @@ button.has-beta { position: relative; overflow: hidden; }
 .room-marks { display: flex; flex-wrap: wrap; gap: 3px; }
 .room-marks .mark { font-size: 0.68rem; border-radius: 6px; padding: 1px 4px; background: rgba(255,255,255,0.7); }
 .room-marks .mark.story { background: #ffe08a; }
-.room-marks .mark.target { background: #ffb3b3; font-weight: 700; }
 .tokens { display: flex; flex-wrap: wrap; gap: 3px; margin-top: auto; }
 .token { display: inline-flex; align-items: center; gap: 3px; font-size: 0.72rem; background: #2b2233; color: #f1e6cf; border-radius: 999px; padding: 1px 6px 1px 3px; }
 .token .dot { width: 9px; height: 9px; }
@@ -328,11 +325,18 @@ button.has-beta { position: relative; overflow: hidden; }
 .pile .n { font-size: 0.72rem; margin-left: 3px; font-variant-numeric: tabular-nums; }
 .room-detail .tie { background: color-mix(in srgb, #ffe08a 18%, transparent); border-radius: 8px; padding: 4px 6px; }
 .chips { display: inline-flex; flex-wrap: wrap; gap: 4px; }
-.check.done { color: var(--good); }
 .frame-row { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
-.tip { display: block; background: color-mix(in srgb, var(--accent) 14%, transparent); border-radius: 8px; padding: 6px 8px; }
 .steps { display: flex; gap: 4px; flex-wrap: wrap; }
 .steps .step { font-size: 0.75rem; padding: 2px 8px; border-radius: 999px; background: var(--panel-2); color: var(--muted); }
 .steps .step.on { background: var(--accent); color: #fff; font-weight: 700; }
 .steps .step.done { text-decoration: line-through; }
 @media (max-width: 380px) { .manor .room { min-height: 84px; padding: 4px; } .room-head { font-size: 0.78rem; } }
+.card-kind { display: inline-block; font-size: 0.68rem; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; border-radius: 6px; padding: 1px 6px; background: var(--panel-2); color: var(--muted); }
+.card-kind.clear { background: color-mix(in srgb, var(--good) 22%, transparent); color: var(--good); }
+.card-kind.point { background: color-mix(in srgb, #f2a65a 24%, transparent); color: #f2a65a; }
+.clue.kind-clear { border-left: 3px solid var(--good); }
+.clue.kind-point { border-left: 3px solid #f2a65a; }
+.briefing h2 { font-size: 1.3rem; }
+.briefing p { margin: 0; }
+.turn-steps { margin: 0; padding-left: 1.2em; display: flex; flex-direction: column; gap: 6px; }
+.breakers .card-kind { margin-right: 4px; }
