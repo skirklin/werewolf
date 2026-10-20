@@ -80,3 +80,12 @@ container, which the manifest mounts at `/data` from the PVC. Pull them out
 with `kubectl cp`, or read the aggregates at `/api/stats`. With no
 `WEREWOLF_DATA_DIR` set the records stay in memory and vanish on restart, which
 is what happens in local development.
+
+Live rooms are kept beside them in `$WEREWOLF_DATA_DIR/rooms.json`: the server
+saves them on SIGTERM (and every 30 seconds as a backstop) and loads them on
+start, so a deploy doesn't end games in progress — phones reconnect into the
+same game. That's why the Deployment uses the `Recreate` strategy (the old pod
+must save before the new one loads) and why the container runs `node` directly
+(so it receives the signal). A room whose saved state the new build can't read
+— its game's `stateVersion` changed — is skipped, and those players start a
+new room.

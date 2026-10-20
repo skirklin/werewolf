@@ -16,6 +16,8 @@ export const foulplayModule: GameModule<GameConfig, GameState, PlayerView> = {
   name: "Foul Play",
   minPlayers: MIN_PLAYERS,
   maxPlayers: MAX_PLAYERS,
+  // Bump when the game state changes shape (see GameModule.stateVersion).
+  stateVersion: 1,
 
   parseConfig(raw, players) {
     const c = (raw ?? {}) as Partial<GameConfig>;

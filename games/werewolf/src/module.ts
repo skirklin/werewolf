@@ -19,6 +19,8 @@ export const werewolfModule: GameModule<GameConfig, GameState, PlayerView> & {
   name: "Werewolf",
   minPlayers: 3,
   maxPlayers: 30,
+  // Bump when GameState changes shape (see GameModule.stateVersion).
+  stateVersion: 1,
 
   parseConfig(raw, players) {
     let problems;

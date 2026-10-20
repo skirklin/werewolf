@@ -56,6 +56,13 @@ export interface GameModule<Config = unknown, State = unknown, View = unknown> {
   roster?(state: State, roster: readonly RosterEntry[]): State;
   /** An anonymous record of a finished game, for games that keep stats. */
   record?(state: State): unknown;
+  /**
+   * The shape of this game's state, for rooms saved across a server restart.
+   * A deploy reloads the previous server's rooms only when this matches, so
+   * bump it whenever the state changes in a way older saves can't satisfy
+   * (a new required field, a renamed one). Absent counts as 0.
+   */
+  stateVersion?: number;
 }
 
 /** A module with its types erased, as the platform holds it. */

@@ -44,6 +44,20 @@ function randomCode(): string {
   return s;
 }
 
+/** One room as written to disk, to outlive a server restart. */
+export interface RoomSnapshot {
+  code: string;
+  game: string;
+  /** The game module's stateVersion when this was saved. */
+  stateVersion: number;
+  players: RosterEntry[];
+  state: unknown;
+  lastConfig: unknown;
+  seatIds: string[];
+  tokens: [string, string][];
+  devices: [string, string][];
+}
+
 /**
  * One room: a roster, a host, and at most one game at a time. Everything here
  * is the same for every game; the game itself is the module's business.
@@ -68,6 +82,44 @@ export class Room {
     readonly game: AnyGameModule,
     private readonly onFinish?: GameFinishedHook
   ) {}
+
+  /** Everything needed to bring this room back after a restart. */
+  snapshot(): RoomSnapshot {
+    return {
+      code: this.code,
+      game: this.game.id,
+      stateVersion: this.game.stateVersion ?? 0,
+      players: this.players.map((p) => ({ ...p })),
+      state: this.state,
+      lastConfig: this.lastConfig,
+      seatIds: [...this.seatIds],
+      tokens: [...this.tokens],
+      devices: [...this.devices],
+    };
+  }
+
+  /**
+   * Rebuild a saved room. Nobody is connected yet — everyone reconnects with
+   * the seat their browser saved — so the room starts its empty-room grace
+   * period now. Throws if the save doesn't fit this server's game.
+   */
+  static restore(snap: RoomSnapshot, game: AnyGameModule, onFinish?: GameFinishedHook, now = Date.now()): Room {
+    if ((game.stateVersion ?? 0) !== snap.stateVersion) throw new Error("saved with a different state version");
+    const room = new Room(snap.code, game, onFinish);
+    for (const p of snap.players) room.players.push({ ...p, connected: false });
+    room.state = snap.state;
+    room.lastConfig = snap.lastConfig;
+    room.seatIds = [...snap.seatIds];
+    room.tokens = new Map(snap.tokens);
+    room.devices = new Map(snap.devices);
+    room.emptySince = now;
+    if (room.state !== null) {
+      // Prove the game can still read it before anyone tries to play on it.
+      for (const id of room.seatIds) game.view(room.state, id);
+      if (game.roster) room.state = game.roster(room.state, room.info().players);
+    }
+    return room;
+  }
 
   get empty() {
     return this.clients.size === 0;
@@ -315,6 +367,34 @@ export class RoomManager {
     const room = new Room(code, game, this.onFinish);
     this.rooms.set(code, room);
     return room;
+  }
+
+  /** Every room, ready to write to disk. */
+  snapshot(): RoomSnapshot[] {
+    return [...this.rooms.values()].map((r) => r.snapshot());
+  }
+
+  /**
+   * Bring back rooms saved by the previous server. A room this server can't
+   * run (unknown game, older state shape, a state the game rejects) is
+   * skipped, never fatal: its players just start a new room.
+   */
+  restore(snaps: readonly RoomSnapshot[], now = Date.now()): { restored: number; skipped: number } {
+    let restored = 0;
+    let skipped = 0;
+    for (const snap of snaps) {
+      const game = this.games.get(snap?.game);
+      try {
+        if (!game) throw new Error(`unknown game ${snap?.game}`);
+        if (this.rooms.has(snap.code)) throw new Error("code already in use");
+        this.rooms.set(snap.code, Room.restore(snap, game, this.onFinish, now));
+        restored++;
+      } catch (err) {
+        skipped++;
+        console.warn(`Not restoring room ${snap?.code}:`, (err as Error).message);
+      }
+    }
+    return { restored, skipped };
   }
 
   get(code: string): Room | undefined {

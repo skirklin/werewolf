@@ -474,3 +474,32 @@ describe("foul play in a room", () => {
     expect(finished).toEqual([{ game: "foulplay", record: null, ids: clients.map((c) => c.playerId) }]);
   }, 30_000);
 });
+
+describe("restoring saved rooms", () => {
+  it("brings a room back with its seats, disconnected until they rejoin", () => {
+    const { room, clients } = seatPlayers(2, "counter");
+    room.handle(clients[0].playerId, { type: "startGame", config: { target: 3 } });
+    act(room, clients[0], { type: "add" });
+    const next = new RoomManager([counter]);
+    expect(next.restore([room.snapshot()])).toEqual({ restored: 1, skipped: 0 });
+    const back = next.get(room.code)!;
+    expect(back.players.every((p) => !p.connected)).toBe(true);
+    expect(back.empty).toBe(true);
+    const phone = new FakeClient();
+    expect(back.rejoin(clients[1].playerId, clients[1].token, phone)).toBe(true);
+    expect((phone.view as unknown as { count: number }).count).toBe(1);
+  });
+
+  it("skips rooms it can't run instead of failing to start", () => {
+    const { room } = seatPlayers(2, "counter");
+    const snap = room.snapshot();
+    const next = new RoomManager([{ ...counter, stateVersion: 2 }]);
+    const warn = console.warn;
+    console.warn = () => {};
+    try {
+      expect(next.restore([snap, { ...snap, game: "nope" }, null as never])).toEqual({ restored: 0, skipped: 3 });
+    } finally {
+      console.warn = warn;
+    }
+  });
+});

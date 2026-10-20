@@ -127,13 +127,16 @@ jobs:
         run: |
           set -euo pipefail
           SSH="ssh -i ~/.ssh/id_deploy -o IdentitiesOnly=yes"
-          scp -i ~/.ssh/id_deploy -o IdentitiesOnly=yes deploy/werewolf.yaml "$VPS:/tmp/werewolf.yaml"
-          # Apply first (picks up manifest changes), then pin the image to this
-          # commit so `kubectl rollout` records what shipped and can undo it.
+          # Pin the image to this commit in the manifest itself, so one apply
+          # both picks up manifest changes and ships the build — a single
+          # restart (each one is a brief gap under the Recreate strategy), and
+          # `kubectl rollout` still records exactly what shipped.
+          sed -E "s|^( *)image: .*|\\1image: $IMAGE|" deploy/werewolf.yaml > /tmp/werewolf.yaml
+          grep -qF "image: $IMAGE" /tmp/werewolf.yaml
+          scp -i ~/.ssh/id_deploy -o IdentitiesOnly=yes /tmp/werewolf.yaml "$VPS:/tmp/werewolf.yaml"
           $SSH "$VPS" "
             set -eu
             kubectl apply -f /tmp/werewolf.yaml
-            kubectl set image -n homelab deployment/werewolf werewolf=$IMAGE
             kubectl rollout status -n homelab deployment/werewolf --timeout=180s
           "
 

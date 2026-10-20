@@ -3,6 +3,9 @@ import { WebSocket } from "ws";
 import type { FastifyInstance } from "fastify";
 import type { ClientMessage, RoomInfo, ServerMessage as AnyServerMessage } from "@party/core";
 import type { PlayerView, WerewolfAction } from "@party/werewolf";
+import { mkdtempSync, rmSync, existsSync, readFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { createApp } from "./server.js";
 
 let app: FastifyInstance;
@@ -266,5 +269,55 @@ describe("client version enforcement", () => {
     expect(await current.waitFor("hello")).toEqual({ type: "hello", build: "build-2" });
     current.send({ type: "createRoom", game: "werewolf", name: "Sam" });
     expect((await current.waitFor("joined")).code).toHaveLength(4);
+  });
+});
+
+describe("rooms survive a restart", () => {
+  it("saves live games on shutdown and the next server picks them up", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "werewolf-rooms-"));
+    try {
+      const listen = async (a: FastifyInstance) => {
+        await a.listen({ port: 0, host: "127.0.0.1" });
+        const addr = a.server.address();
+        return `ws://127.0.0.1:${typeof addr === "object" && addr ? addr.port : 0}/ws`;
+      };
+
+      // A game in progress on the first server.
+      const first = await createApp({ serveClient: false, dataDir: dir });
+      const firstUrl = await listen(first);
+      const socks = [new TestSocket(firstUrl), new TestSocket(firstUrl), new TestSocket(firstUrl)];
+      await Promise.all(socks.map((s) => s.ready));
+      socks[0].send({ type: "createRoom", game: "werewolf", name: "Host" });
+      const { code } = await socks[0].waitFor("joined");
+      for (const [i, s] of socks.slice(1).entries()) s.send({ type: "joinRoom", code, name: `G${i}` });
+      await socks[0].awaitRoom((r) => r.players.length === 3);
+      socks[0].send({ type: "startGame", config: CONFIG_1_WOLF });
+      await socks[0].awaitView((v) => v.phase === "roleReveal");
+      socks[0].act({ type: "startNight" });
+      const before = await socks[0].awaitView((v) => v.phase === "night");
+      const creds = await Promise.all(socks.map((s) => s.waitFor("joined")));
+
+      // The deploy: the old server closes (saving), the new one starts (loading).
+      await first.close();
+      expect(existsSync(join(dir, "rooms.json"))).toBe(true);
+      expect(JSON.parse(readFileSync(join(dir, "rooms.json"), "utf8")).rooms).toHaveLength(1);
+      const second = await createApp({ serveClient: false, dataDir: dir });
+      const secondUrl = await listen(second);
+      try {
+        // A phone reconnects with the seat it saved and is right back in the night.
+        const phone = new TestSocket(secondUrl);
+        await phone.ready;
+        phone.send({ type: "rejoin", code, playerId: creds[0].playerId, token: creds[0].token });
+        expect((await phone.waitFor("joined")).code).toBe(code);
+        const after = await phone.awaitView((v) => v.phase === "night");
+        expect(after.round).toBe(before.round);
+        expect(after.you.roleId).toBe(before.you.roleId);
+        phone.close();
+      } finally {
+        await second.close();
+      }
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

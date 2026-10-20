@@ -9,6 +9,7 @@ import { aggregate, parseGameRecord, werewolfModule, type GameRecord } from "@pa
 import { foulplayModule } from "@party/foulplay";
 import { RoomManager, type Client } from "./rooms.js";
 import { GameStore } from "./store.js";
+import { RoomStore } from "./roomstore.js";
 
 /** Every game this server can host. */
 export const GAMES = [werewolfModule, foulplayModule];
@@ -30,12 +31,16 @@ export interface AppOptions {
    * that played them.
    */
   onGameFinished?: (record: GameRecord, playerIds: string[]) => void;
+  /** How often to save live rooms (tests). */
+  roomSaveIntervalMs?: number;
   /** Override the current client build id (tests). Defaults to the dist's version.json. */
   build?: string | null;
 }
 
 /** Biggest game record we'll accept from a client, in bytes. */
 const MAX_RECORD_BYTES = 64 * 1024;
+/** How often live rooms are saved as a backstop (a clean shutdown always saves). */
+const ROOM_SAVE_INTERVAL_MS = 30_000;
 /** Records one address may submit per hour. Generous for a household, useless for a flood. */
 const SUBMIT_LIMIT = 30;
 const SUBMIT_WINDOW_MS = 60 * 60_000;
@@ -55,10 +60,28 @@ export async function createApp(opts: AppOptions = {}): Promise<FastifyInstance>
   const sweep = setInterval(() => manager.sweep(), 60_000);
   sweep.unref();
 
+  // Live rooms outlive a restart when there's somewhere to keep them: load what
+  // the previous server saved, save every so often, and save on the way out.
+  const dataDir = opts.dataDir === undefined ? process.env.WEREWOLF_DATA_DIR : opts.dataDir;
+  const roomStore = dataDir ? new RoomStore(dataDir) : null;
+  let roomSaver: NodeJS.Timeout | null = null;
+  if (roomStore) {
+    const { restored, skipped } = manager.restore(roomStore.load());
+    if (restored || skipped) console.log(`Rooms from the last run: ${restored} restored, ${skipped} skipped.`);
+    roomSaver = setInterval(() => roomStore.save(manager.snapshot()), opts.roomSaveIntervalMs ?? ROOM_SAVE_INTERVAL_MS);
+    roomSaver.unref();
+  }
+
   // trustProxy so `req.ip` is the player's address rather than Caddy's —
   // without it every submission would share a single rate-limit bucket.
   const app = Fastify({ logger: false, bodyLimit: MAX_RECORD_BYTES, trustProxy: true });
   app.addHook("onClose", async () => clearInterval(sweep));
+  // preClose runs before the sockets are torn down, so this is the final word
+  // on every room. Synchronous: no move can slip in between it and the exit.
+  app.addHook("preClose", async () => {
+    if (roomSaver) clearInterval(roomSaver);
+    roomStore?.save(manager.snapshot());
+  });
 
   await app.register(websocket);
 

@@ -22,11 +22,12 @@ metadata:
   namespace: homelab
 spec:
   replicas: 1
+  # Stop, then start: the old pod saves its live rooms to /data as it exits and
+  # the new one loads them, so a deploy doesn't end games in progress. (A
+  # rolling update would start the new pod first, before anything was saved,
+  # and have two pods on the one volume.) Phones reconnect through the gap.
   strategy:
-    type: RollingUpdate
-    rollingUpdate:
-      maxUnavailable: 0
-      maxSurge: 1
+    type: Recreate
   selector:
     matchLabels:
       app: werewolf

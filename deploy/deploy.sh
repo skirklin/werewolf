@@ -39,7 +39,9 @@ docker push "$IMAGE"
 docker push "$REPO:latest"
 
 echo "==> Applying manifest on $VPS"
-scp "$HERE/deploy/werewolf.yaml" "$VPS:/tmp/werewolf.yaml"
-ssh "$VPS" "kubectl apply -f /tmp/werewolf.yaml && kubectl set image -n homelab deployment/werewolf werewolf=$IMAGE && kubectl rollout status -n homelab deployment/werewolf --timeout=180s"
+# Pin this build into the manifest so a single apply ships it (one restart).
+sed -E "s|^( *)image: .*|\\1image: $IMAGE|" "$HERE/deploy/werewolf.yaml" > /tmp/werewolf.yaml
+scp /tmp/werewolf.yaml "$VPS:/tmp/werewolf.yaml"
+ssh "$VPS" "kubectl apply -f /tmp/werewolf.yaml && kubectl rollout status -n homelab deployment/werewolf --timeout=180s"
 
 echo "==> Done. Ensure a Caddy site block + DNS A record exist (see deploy/README.md)."
