@@ -32,7 +32,8 @@ export function recommendedConfig(_playerCount: number): GameConfig {
     },
     revealRoleOnDeath: false,
     nightSummary: "discreet",
-    peacefulFirstNight: false,
+    // Nobody dies before the town has said a word — the friendlier default.
+    peacefulFirstNight: true,
     chat: true,
   };
 }

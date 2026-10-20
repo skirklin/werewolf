@@ -62,6 +62,10 @@ describe("role selection", () => {
     expect(werewolfCountFor(12, 0.26)).toBe(3);
   });
 
+  it("defaults to a peaceful first night", () => {
+    expect(recommendedConfig(7).peacefulFirstNight).toBe(true);
+  });
+
   it("never lets wolves start at or past parity", () => {
     for (let n = 3; n <= 20; n++) {
       const w = werewolfCountFor(n, 0.5); // even an absurd ratio is clamped
