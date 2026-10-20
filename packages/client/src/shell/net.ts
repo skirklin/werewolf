@@ -8,6 +8,22 @@ interface Creds {
 }
 
 const STORE_KEY = "party.creds";
+/** Remembers which build we already reloaded for, so a reload can never loop. */
+const RELOAD_KEY = "party.reloadedFor";
+/** Hidden longer than this and the socket is presumed dead (iOS kills it silently). */
+const STALE_AFTER_HIDDEN_MS = 3000;
+
+/** Load the newest page, at most once per server build. True if reloading. */
+function reloadFor(build: string): boolean {
+  try {
+    if (sessionStorage.getItem(RELOAD_KEY) === build) return false;
+    sessionStorage.setItem(RELOAD_KEY, build);
+  } catch {
+    /* storage off: still worth one reload */
+  }
+  location.reload();
+  return true;
+}
 
 function loadCreds(): Creds | null {
   try {
@@ -51,6 +67,8 @@ export function useRoom(): RoomConnection {
   const queueRef = useRef<ClientMessage[]>([]);
   // Pending intent to run once the socket opens (create/join/rejoin).
   const onOpenRef = useRef<(() => void) | null>(null);
+  // Set once the server has turned this page away as outdated: stop retrying.
+  const outdatedRef = useRef(false);
 
   const flush = () => {
     const sock = sockRef.current;
@@ -71,9 +89,11 @@ export function useRoom(): RoomConnection {
   }, [send]);
 
   const ensureSocket = useCallback(() => {
+    if (outdatedRef.current) return;
     if (sockRef.current && sockRef.current.readyState <= WebSocket.OPEN) return;
     const proto = location.protocol === "https:" ? "wss" : "ws";
-    const sock = new WebSocket(`${proto}://${location.host}/ws`);
+    // The server checks the build and turns away pages from an older deploy.
+    const sock = new WebSocket(`${proto}://${location.host}/ws?build=${encodeURIComponent(__BUILD_ID__)}`);
     sockRef.current = sock;
 
     sock.onopen = () => {
@@ -83,9 +103,11 @@ export function useRoom(): RoomConnection {
       flush();
     };
     sock.onclose = () => {
+      // A socket we already replaced (see resume below) has nothing to say.
+      if (sockRef.current !== sock) return;
       setConnected(false);
       // Auto-reconnect + rejoin if we have credentials and a live game.
-      if (credsRef.current) {
+      if (credsRef.current && !outdatedRef.current) {
         setTimeout(() => {
           onOpenRef.current = rejoin;
           ensureSocket();
@@ -94,7 +116,11 @@ export function useRoom(): RoomConnection {
     };
     sock.onmessage = (ev) => {
       const msg = JSON.parse(ev.data) as ServerMessage;
-      if (msg.type === "joined") {
+      if (msg.type === "outdated") {
+        outdatedRef.current = true;
+        // Saved creds survive the reload, so the new page rejoins the seat.
+        reloadFor(msg.build);
+      } else if (msg.type === "joined") {
         credsRef.current = { code: msg.code, playerId: msg.playerId, token: msg.token };
         localStorage.setItem(STORE_KEY, JSON.stringify(credsRef.current));
         setCode(msg.code);
@@ -106,11 +132,58 @@ export function useRoom(): RoomConnection {
         if (msg.room.phase === "lobby") setView(null);
       } else if (msg.type === "view") {
         setView(msg.view);
+        setError(null); // the game moved on; an old complaint no longer applies
       } else if (msg.type === "error") {
         setError(msg.message);
       }
     };
   }, [rejoin]);
+
+  /**
+   * Coming back to the page. iOS Safari freezes a backgrounded tab and kills its
+   * socket without ever firing `close`, so the page looks connected but is
+   * deaf: every tap goes nowhere. After any real absence, or whenever the
+   * socket is plainly gone, replace it and rejoin the seat.
+   */
+  useEffect(() => {
+    let hiddenAt: number | null = document.hidden ? Date.now() : null;
+    const resume = (force: boolean) => {
+      if (!credsRef.current || outdatedRef.current) return;
+      const sock = sockRef.current;
+      const alive = sock && sock.readyState === WebSocket.OPEN;
+      if (alive && !force) return;
+      if (sock) {
+        sockRef.current = null; // detach first, so its close doesn't schedule a second reconnect
+        try {
+          sock.close();
+        } catch {
+          /* already dead */
+        }
+      }
+      onOpenRef.current = rejoin;
+      ensureSocket();
+    };
+    const onVisibility = () => {
+      if (document.hidden) {
+        hiddenAt = Date.now();
+        return;
+      }
+      const away = hiddenAt === null ? 0 : Date.now() - hiddenAt;
+      hiddenAt = null;
+      resume(away > STALE_AFTER_HIDDEN_MS);
+    };
+    // Restored from the back/forward cache: the old socket is certainly gone.
+    const onPageShow = (e: PageTransitionEvent) => resume(e.persisted);
+    const onOnline = () => resume(true);
+    document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("pageshow", onPageShow);
+    window.addEventListener("online", onOnline);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("pageshow", onPageShow);
+      window.removeEventListener("online", onOnline);
+    };
+  }, [ensureSocket, rejoin]);
 
   // On mount, if we have stored creds, try to rejoin the existing game — unless
   // an invite link points at a different room, which should take precedence.

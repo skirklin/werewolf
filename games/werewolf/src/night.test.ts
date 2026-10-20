@@ -70,6 +70,51 @@ describe("no cross-player information at night", () => {
     expect(JSON.stringify(projectView(s, "p1"))).not.toMatch(/groupChoices/);
   });
 
+  it("every night move, by every role, changes nobody's screen but the mover's", () => {
+    // Everyone with a night power, wolves included, in one game. Online there
+    // is no turn order, so nothing anyone does may show up for anyone else.
+    let s = gameWith([
+      "werewolf", "werewolf", "infector", "witch", "seer", "auraSeer", "doctor",
+      "detective", "troublemaker", "silencer", "drunk", "villager", "villager", "villager",
+      "villager", "villager", "villager",
+    ]);
+    const ids = s.players.map((p) => p.id);
+    const move = (id: string): unknown => {
+      const p = projectView(s, id).nightPrompt!;
+      const [a, b] = p.targetIds;
+      switch (p.kind) {
+        case "witch": return { type: "witchAction", healTargetId: p.witch!.healTargetIds[0], poisonTargetId: a };
+        case "swap": return { type: "swapAction", aId: a, bId: b };
+        case "detect": return { type: "detectAction", aId: a, bId: b };
+        case "raise": return { type: "raiseAction", targetId: null };
+        default: return { type: "nightChoice", targetId: a };
+      }
+    };
+    // After each move, every other player's whole view must be byte-for-byte
+    // what it was: no prompt appears, vanishes or changes because of it.
+    const actors = ids.filter((id) => projectView(s, id).nightPrompt);
+    expect(actors.length).toBeGreaterThan(8);
+    for (const id of actors) {
+      const others = ids.filter((o) => o !== id);
+      const before = others.map((o) => JSON.stringify(projectView(s, o)));
+      s = act(s, id, move(id));
+      if (s.phase !== "night") break;
+      expect(others.map((o) => JSON.stringify(projectView(s, o)))).toEqual(before);
+    }
+  });
+
+  it("every role is offered its move the moment night falls — nobody waits on anyone", () => {
+    const s = gameWith(["werewolf", "witch", "seer", "doctor", "detective", "troublemaker", "villager", "villager"]);
+    for (const step of s.night!.steps)
+      for (const id of step.actorIds) expect(projectView(s, id).nightPrompt?.kind).toBe(step.kind);
+  });
+
+  it("a Witch move with the potions left out means 'do nothing'", () => {
+    let s = gameWith(["werewolf", "witch", "villager", "villager", "villager"], { peacefulFirstNight: true });
+    s = act(s, "p1", { type: "witchAction" });
+    expect(s.phase).toBe("dayDiscussion"); // the only actor on a peaceful first night
+  });
+
   it("nobody's view changes when someone else acts at night", () => {
     let s = gameWith(["werewolf", "witch", "seer", "doctor", "villager", "villager"]);
     const views = () => ["p1", "p2", "p3", "p4"].map((id) => JSON.stringify(projectView(s, id)));

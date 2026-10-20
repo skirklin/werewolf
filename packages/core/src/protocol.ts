@@ -41,6 +41,14 @@ export type ClientMessage =
 
 /** Messages the server sends. `View` is the game's per-seat view. */
 export type ServerMessage<View = unknown> =
+  /**
+   * Sent as each connection opens. `build` identifies the client bundle this
+   * server shipped (null in dev); a page running a different one is stale and
+   * should reload before it sends moves the server no longer understands.
+   */
+  | { type: "hello"; build: string | null }
+  /** This page is an old build; the server won't talk to it. Reload. */
+  | { type: "outdated"; build: string }
   | { type: "joined"; playerId: string; token: string; code: string; game: string }
   | { type: "room"; room: RoomInfo }
   | { type: "view"; view: View }

@@ -1,6 +1,6 @@
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import Fastify, { type FastifyInstance } from "fastify";
 import websocket from "@fastify/websocket";
 import fastifyStatic from "@fastify/static";
@@ -30,6 +30,8 @@ export interface AppOptions {
    * that played them.
    */
   onGameFinished?: (record: GameRecord, playerIds: string[]) => void;
+  /** Override the current client build id (tests). Defaults to the dist's version.json. */
+  build?: string | null;
 }
 
 /** Biggest game record we'll accept from a client, in bytes. */
@@ -59,6 +61,12 @@ export async function createApp(opts: AppOptions = {}): Promise<FastifyInstance>
   app.addHook("onClose", async () => clearInterval(sweep));
 
   await app.register(websocket);
+
+  // Which client build is current (see the client's vite.config.ts). Only a
+  // server that ships the client has one to enforce; the arena and tests,
+  // which bring their own clients, don't.
+  const shouldServe = opts.serveClient ?? existsSync(clientDist);
+  const build = opts.build !== undefined ? opts.build : shouldServe ? readBuildId() : null;
 
   app.get("/api/health", async () => ({ ok: true }));
 
@@ -105,7 +113,7 @@ export async function createApp(opts: AppOptions = {}): Promise<FastifyInstance>
   });
 
   await app.register(async (instance) => {
-    instance.get("/ws", { websocket: true }, (socket) => {
+    instance.get<{ Querystring: { build?: string } }>("/ws", { websocket: true }, (socket, req) => {
       let roomCode: string | null = null;
       let playerId: string | null = null;
 
@@ -115,6 +123,19 @@ export async function createApp(opts: AppOptions = {}): Promise<FastifyInstance>
         },
       };
       const fail = (message: string) => client.send({ type: "error", message });
+
+      // Enforce the current client. A page from an older deploy speaks an older
+      // protocol, and its moves can fail in ways that look like a frozen game,
+      // so it's turned away and told to reload (newer pages do so by themselves;
+      // older ones at least show the message). Every deploy restarts the
+      // server, so every open page reconnects and meets this check.
+      if (build && req.query.build !== build) {
+        client.send({ type: "outdated", build });
+        fail("A new version of the game is out — reload this page to keep playing.");
+        socket.close(4000, "outdated client");
+        return;
+      }
+      client.send({ type: "hello", build });
 
       socket.on("message", (raw: Buffer) => {
         let msg: ClientMessage;
@@ -182,13 +203,32 @@ export async function createApp(opts: AppOptions = {}): Promise<FastifyInstance>
 
   app.addHook("onClose", async () => submits.stop());
 
-  const shouldServe = opts.serveClient ?? existsSync(clientDist);
   if (shouldServe && existsSync(clientDist)) {
-    await app.register(fastifyStatic, { root: clientDist });
+    await app.register(fastifyStatic, {
+      root: clientDist,
+      cacheControl: false, // we set it ourselves, below
+      // The page itself must never be cached, or a phone keeps running an old
+      // build after a deploy. Its hashed assets can be cached forever.
+      setHeaders(res, path) {
+        if (path.endsWith(".html") || path.endsWith("version.json")) res.setHeader("Cache-Control", "no-store");
+        else if (path.includes("/assets/")) res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+        else res.setHeader("Cache-Control", "no-cache");
+      },
+    });
     app.setNotFoundHandler((_req, reply) => reply.sendFile("index.html"));
   }
 
   return app;
+}
+
+/** The build id the shipped client was stamped with, or null (dev, tests). */
+function readBuildId(): string | null {
+  try {
+    const parsed = JSON.parse(readFileSync(join(clientDist, "version.json"), "utf8")) as { build?: unknown };
+    return typeof parsed.build === "string" ? parsed.build : null;
+  } catch {
+    return null;
+  }
 }
 
 function stamp(): string {
