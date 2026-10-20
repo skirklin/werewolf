@@ -38,8 +38,6 @@ afterEach(async () => {
   await rm(dir, { recursive: true, force: true });
 });
 
-/** appendFile is fire-and-forget, so give the write a tick to land. */
-const settle = () => new Promise((r) => setTimeout(r, 20));
 
 describe("game store", () => {
   it("keeps records in memory when there's nowhere to write", async () => {
@@ -52,7 +50,7 @@ describe("game store", () => {
     const first = await GameStore.open(dir);
     first.add(record({ rounds: 7 }));
     first.add(record({ winner: "werewolf" }));
-    await settle();
+    await first.flushed();
 
     const second = await GameStore.open(dir);
     expect(second.all()).toHaveLength(2);
@@ -60,18 +58,26 @@ describe("game store", () => {
     expect(second.all()[1].winner).toBe("werewolf");
   });
 
+  it("keeps records in the order they were added, however fast they arrive", async () => {
+    const first = await GameStore.open(dir);
+    for (let i = 1; i <= 50; i++) first.add(record({ rounds: i }));
+    await first.flushed();
+    const second = await GameStore.open(dir);
+    expect(second.all().map((r) => r.rounds)).toEqual(Array.from({ length: 50 }, (_, i) => i + 1));
+  });
+
   it("starts clean in a directory that doesn't exist yet", async () => {
     const store = await GameStore.open(join(dir, "nested", "deeper"));
     expect(store.all()).toEqual([]);
     store.add(record());
-    await settle();
+    await store.flushed();
     expect((await GameStore.open(join(dir, "nested", "deeper"))).all()).toHaveLength(1);
   });
 
   it("skips torn and junk lines rather than losing the file", async () => {
     const store = await GameStore.open(dir);
     store.add(record({ rounds: 3 }));
-    await settle();
+    await store.flushed();
     const file = join(dir, "games.jsonl");
     const good = await readFile(file, "utf8");
     await writeFile(file, `${good}{"v":1,"trunca\nnot json at all\n${good}`);
@@ -85,7 +91,7 @@ describe("game store", () => {
     const store = await GameStore.open(dir);
     store.add(record());
     store.add(record());
-    await settle();
+    await store.flushed();
     const lines = (await readFile(join(dir, "games.jsonl"), "utf8")).trim().split("\n");
     expect(lines).toHaveLength(2);
     expect(JSON.parse(lines[0]).v).toBe(GAME_RECORD_VERSION);

@@ -18,6 +18,13 @@ const MAX_RECORDS = 20_000;
 export class GameStore {
   private records: GameRecord[] = [];
   private failedWrite = false;
+  /**
+   * The last pending write. Each append waits for the one before it: two
+   * appendFile calls in flight at once run on the thread pool and can land
+   * in either order, which would file two games that ended together out of
+   * sequence.
+   */
+  private writes: Promise<void> = Promise.resolve();
 
   private constructor(private readonly file: string | null) {}
 
@@ -51,7 +58,9 @@ export class GameStore {
     this.records.push(record);
     this.trim();
     if (!this.file) return;
-    appendFile(this.file, JSON.stringify(record) + "\n").catch((err) => {
+    const file = this.file;
+    const line = JSON.stringify(record) + "\n";
+    this.writes = this.writes.then(() => appendFile(file, line)).catch((err) => {
       // Log the first failure only — a full or read-only volume would otherwise
       // print once per finished game forever.
       if (!this.failedWrite) {
@@ -59,6 +68,11 @@ export class GameStore {
         console.error("Could not persist a game record:", err);
       }
     });
+  }
+
+  /** Resolves once every record added so far is on disk. */
+  flushed(): Promise<void> {
+    return this.writes;
   }
 
   /** Every retained record, oldest first. */
