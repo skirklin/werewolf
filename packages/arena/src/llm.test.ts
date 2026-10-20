@@ -169,10 +169,11 @@ describe("what every agent is told about the game", () => {
 });
 
 describe("what a wolf is told at night", () => {
-  const wolfNight = (groupChoices?: Record<string, number>) =>
+  const wolfNight = (packmates: string[]) =>
     ({
       ...view,
       phase: "night",
+      packmates,
       players: [
         { id: "p0", name: "Alex", alive: true, isHost: true, connected: true, roleId: "werewolf" },
         { id: "p1", name: "Bailey", alive: true, isHost: false, connected: true, roleId: null },
@@ -183,32 +184,22 @@ describe("what a wolf is told at night", () => {
         roleId: "werewolf",
         targetIds: ["p1", "p2"],
         canTargetSelf: false,
-        groupChoices,
       },
     }) as unknown as PlayerView;
 
-  it("shows the pack what it has already picked, so the kill can converge", async () => {
+  it("tells a pack wolf that picks are secret and the kill goes by plurality", async () => {
     const asked: string[] = [];
     const s = new LlmStrategy({ client: recordingClient(asked, "1") });
-    await s.night(wolfNight({ p2: 1 }));
-    // The pack kills by plurality and the server has always sent this tally;
-    // without it a two-wolf pack splits its own kill by accident.
-    expect(asked.join("\n")).toContain("Your pack has already picked: Casey");
+    await s.night(wolfNight(["p3"]));
+    expect(asked.join("\n")).toMatch(/pick in secret/i);
     expect(asked.join("\n")).toMatch(/most picks/i);
   });
 
-  it("says when this wolf is choosing first", async () => {
+  it("says nothing about a pack for a lone wolf", async () => {
     const asked: string[] = [];
     const s = new LlmStrategy({ client: recordingClient(asked, "1") });
-    await s.night(wolfNight({}));
-    expect(asked.join("\n")).toContain("You are first to choose");
-  });
-
-  it("says nothing about a pack for a lone night role", async () => {
-    const asked: string[] = [];
-    const s = new LlmStrategy({ client: recordingClient(asked, "1") });
-    await s.night(wolfNight(undefined));
-    expect(asked.join("\n")).not.toMatch(/your pack|first to choose/i);
+    await s.night(wolfNight([]));
+    expect(asked.join("\n")).not.toMatch(/packmates|most picks/i);
   });
 });
 

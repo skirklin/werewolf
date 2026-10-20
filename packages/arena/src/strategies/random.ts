@@ -31,7 +31,9 @@ export class RandomStrategy implements Strategy {
     if (picksNeeded(prompt.kind) === 0 && pool.length && this.rng() < 0.5) {
       picks.push(this.pick(pool));
     }
-    return nightMessage(prompt, picks, this.rng() < 0.5);
+    const heal =
+      prompt.witch?.healAvailable && this.rng() < 0.5 ? this.pick(prompt.witch.healTargetIds) : null;
+    return nightMessage(prompt, picks, heal);
   }
 
   // Takes the view it ignores, so subclasses can override with one.

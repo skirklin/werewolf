@@ -156,11 +156,31 @@ describe("rooms", () => {
     expect(room.rejoin(clients[2].playerId, clients[2].token, clients[2])).toBe(false);
   });
 
-  it("a disconnect in the lobby drops the player and reassigns host", () => {
+  it("a disconnect in the lobby keeps the seat (so they can rejoin) and reassigns host", () => {
     const { room, clients } = seatPlayers(3, "counter");
     room.disconnect(clients[0]);
-    expect(clients[1].room!.players).toHaveLength(2);
-    expect(clients[1].room!.players.some((p) => p.isHost)).toBe(true);
+    const players = clients[1].room!.players;
+    expect(players).toHaveLength(3);
+    expect(players.find((p) => p.id === clients[0].playerId)!.connected).toBe(false);
+    expect(players.find((p) => p.isHost)!.id).toBe(clients[1].playerId);
+    // Their phone wakes back up: same seat, same room.
+    expect(room.rejoin(clients[0].playerId, clients[0].token, clients[0])).toBe(true);
+    expect(clients[0].room!.players.find((p) => p.id === clients[0].playerId)!.connected).toBe(true);
+  });
+
+  it("leaving the lobby on purpose frees the seat for good", () => {
+    const { room, clients } = seatPlayers(3, "counter");
+    room.handle(clients[2].playerId, { type: "leave" });
+    expect(clients[0].room!.players).toHaveLength(2);
+    expect(room.rejoin(clients[2].playerId, clients[2].token, clients[2])).toBe(false);
+  });
+
+  it("drops lobby seats that are still empty when the game starts", () => {
+    const { room, clients } = seatPlayers(3, "counter");
+    room.disconnect(clients[2]);
+    room.handle(clients[0].playerId, { type: "startGame", config: { target: 3 } });
+    expect(clients[0].room!.players.map((p) => p.id)).toEqual([clients[0].playerId, clients[1].playerId]);
+    expect(room.rejoin(clients[2].playerId, clients[2].token, clients[2])).toBe(false);
   });
 
   it("hands off host to a connected player if the host leaves mid-game, and tells the game", () => {
@@ -193,7 +213,7 @@ describe("rooms", () => {
 });
 
 describe("room reclamation", () => {
-  it("sweeps empty lobbies immediately but gives in-game rooms a grace period", () => {
+  it("gives empty rooms — lobby or in-game — a grace period before reclaiming them", () => {
     const lobby = mgr.create("counter");
     const lobbyClient = new FakeClient();
     lobby.addPlayer("Solo", lobbyClient);
@@ -205,11 +225,12 @@ describe("room reclamation", () => {
 
     const now = Date.now();
     mgr.sweep(now, 15 * 60_000);
-    expect(mgr.get(lobby.code)).toBeUndefined(); // empty lobby reclaimed now
+    expect(mgr.get(lobby.code)).toBeDefined(); // a lobby whose host's phone locked survives
     expect(mgr.get(started.code)).toBeDefined(); // in-game room within grace
 
     mgr.sweep(now + 16 * 60_000, 15 * 60_000);
-    expect(mgr.get(started.code)).toBeUndefined(); // reclaimed after grace
+    expect(mgr.get(lobby.code)).toBeUndefined(); // reclaimed after grace
+    expect(mgr.get(started.code)).toBeUndefined();
   });
 });
 

@@ -1,5 +1,105 @@
-import type { ReactNode } from "react";
-import { ROLES, type PlayerView, type PublicPlayer, type LogEntry } from "@party/werewolf";
+import { useEffect, useState, type ReactNode } from "react";
+import { ROLES, type Phase, type PlayerView, type PublicPlayer, type LogEntry, type VoteRecord } from "@party/werewolf";
+
+/** Whether the table should be quiet (night) or talking (day) in a phase. */
+export function timeOfDay(phase: Phase): "day" | "night" | null {
+  if (phase === "roleReveal" || phase === "night") return "night";
+  if (phase === "dayDiscussion" || phase === "dayVote" || phase === "hunterShot") return "day";
+  return null;
+}
+
+/** Re-theme the whole page for the time of day, and put it back on the way out. */
+export function useTimeTheme(phase: Phase | null) {
+  const time = phase ? timeOfDay(phase) : null;
+  useEffect(() => {
+    if (time) document.body.dataset.time = time;
+    else delete document.body.dataset.time;
+    return () => {
+      delete document.body.dataset.time;
+    };
+  }, [time]);
+}
+
+/** A loud reminder of whether the table may talk right now. */
+export function TimeBadge({ phase }: { phase: Phase }) {
+  const time = timeOfDay(phase);
+  if (!time) return null;
+  return time === "night" ? (
+    <div className="time-badge">🌙 Night — no talking, eyes on your own screen</div>
+  ) : (
+    <div className="time-badge">☀️ Day — talk it over</div>
+  );
+}
+
+/**
+ * Every role that could be in this game — no counts, no owners. Tap a role to
+ * read what it does, so players can answer "wait, what does the Witch do?"
+ * themselves (and bluff more convincingly).
+ */
+export function RolesInPlay({ roleIds }: { roleIds: string[] }) {
+  const [open, setOpen] = useState<string | null>(null);
+  if (roleIds.length === 0) return null;
+  const role = open ? ROLES[open] : null;
+  return (
+    <div className="card tight stack">
+      <b>🎴 Roles that could be in this game</b>
+      <div className="roles-list">
+        {roleIds.map((id) => (
+          <button
+            key={id}
+            className="pill"
+            style={{ minHeight: 0, padding: "6px 10px", borderColor: open === id ? "var(--accent-2)" : undefined }}
+            onClick={() => setOpen((cur) => (cur === id ? null : id))}
+          >
+            {ROLES[id]?.emoji} {ROLES[id]?.name ?? id}
+          </button>
+        ))}
+      </div>
+      {role && (
+        <div className="small">
+          <b>{role.name}</b> <span className={`team ${role.team}`}>({role.team})</span>
+          <div className="muted">{role.blurb}</div>
+        </div>
+      )}
+      <div className="muted small">Not every role here was necessarily dealt.</div>
+    </div>
+  );
+}
+
+/** Who voted for whom, day by day (votes are public). Most recent first. */
+export function VoteHistory({ history, players, limit = 1 }: { history: VoteRecord[]; players: PublicPlayer[]; limit?: number }) {
+  if (history.length === 0) return null;
+  const name = (id: string) => players.find((p) => p.id === id)?.name ?? "someone";
+  return (
+    <>
+      {history
+        .slice(-limit)
+        .reverse()
+        .map((rec) => (
+          <div key={rec.round} className="card tight stack">
+            <b>🗳️ Day {rec.round}: how everyone voted</b>
+            <BallotLines votes={rec.votes} name={name} />
+          </div>
+        ))}
+    </>
+  );
+}
+
+/** One line per voter: "Sam → Alex", "Kai abstained". */
+export function BallotLines({ votes, name }: { votes: Record<string, string | null>; name: (id: string) => string }) {
+  const entries = Object.entries(votes);
+  if (entries.length === 0) return <div className="muted small">Nobody voted.</div>;
+  return (
+    <>
+      {entries.map(([voter, target]) => (
+        <div key={voter} className="spread small">
+          <span>{name(voter)}</span>
+          <b>{target === null ? "abstained" : `→ ${name(target)}`}</b>
+        </div>
+      ))}
+    </>
+  );
+}
 
 export function Screen({ children, className = "" }: { children: ReactNode; className?: string }) {
   return <div className={`app ${className}`}>{children}</div>;

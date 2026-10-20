@@ -340,3 +340,60 @@ button.has-beta { position: relative; overflow: hidden; }
 .briefing p { margin: 0; }
 .turn-steps { margin: 0; padding-left: 1.2em; display: flex; flex-direction: column; gap: 6px; }
 .breakers .card-kind { margin-right: 4px; }
+
+/* ---- Day / night themes ----
+ * The whole page changes with the time of day, so a table playing in person
+ * can tell at a glance whether it's time to talk (day) or keep quiet (night).
+ */
+body[data-time="night"] {
+  --bg: #070817;
+  --bg-2: #0f1130;
+  --panel: #151839;
+  --panel-2: #1d2150;
+}
+body[data-time="night"]::before {
+  background:
+    radial-gradient(1px 1px at 12% 18%, #fff8 50%, transparent 51%),
+    radial-gradient(1px 1px at 72% 9%, #fff9 50%, transparent 51%),
+    radial-gradient(1.5px 1.5px at 85% 32%, #fff7 50%, transparent 51%),
+    radial-gradient(1px 1px at 33% 41%, #fff6 50%, transparent 51%),
+    radial-gradient(1.5px 1.5px at 55% 22%, #fff8 50%, transparent 51%),
+    radial-gradient(1px 1px at 8% 66%, #fff5 50%, transparent 51%),
+    radial-gradient(1px 1px at 91% 74%, #fff6 50%, transparent 51%),
+    radial-gradient(120% 80% at 50% -10%, #1a1d48 0%, var(--bg) 60%);
+}
+body[data-time="day"] {
+  --bg: #fdf1d6;
+  --bg-2: #f7e6bf;
+  --panel: #fffaee;
+  --panel-2: #fbe9c4;
+  --line: #e6cc93;
+  --text: #2d2410;
+  --muted: #7b6942;
+  --accent: #e2861b;
+  --accent-2: #f4ae3f;
+  --good: #1f9a6a;
+  --village: #1f9a6a;
+  --danger: #d23a50;
+  --danger-2: #c0283e;
+  --wolf: #c0283e;
+  color-scheme: light;
+}
+body[data-time="day"]::before {
+  background: radial-gradient(120% 80% at 50% -10%, #ffe08a 0%, #ffeec4 35%, var(--bg) 70%);
+}
+body[data-time="day"] button.primary { color: #2a1700; }
+
+.time-badge {
+  align-self: center;
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 6px 14px; border-radius: 999px;
+  font-size: 0.85rem; font-weight: 700;
+  border: 1px solid var(--line); background: var(--panel-2);
+}
+
+/* ---- Roles in this game ---- */
+.roles-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.roles-list details { flex: 1 1 100%; }
+.roles-list summary { cursor: pointer; list-style: none; }
+.roles-list summary::-webkit-details-marker { display: none; }

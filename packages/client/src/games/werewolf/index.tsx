@@ -33,7 +33,7 @@ export const werewolf: ClientGame<GameConfig, PlayerView, WerewolfAction> = {
   configProblems: (config, players) => validateConfig(config, players).map((p) => p.message),
 
   LobbySettings: ({ config, players, onChange }) => (
-    <RoleConfigEditor config={config} playerCount={players} onChange={onChange} />
+    <RoleConfigEditor config={config} playerCount={players} onChange={onChange} online />
   ),
 
   Table: WerewolfTable,

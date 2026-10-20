@@ -27,7 +27,7 @@ export type NightActionKind =
  */
 export type NightSubmission =
   | { t: "target"; target: PlayerId } // kill / protect / inspect / silence
-  | { t: "witch"; save: boolean; poison: PlayerId | null }
+  | { t: "witch"; heal: PlayerId | null; poison: PlayerId | null }
   | { t: "swap"; a: PlayerId; b: PlayerId }
   | { t: "detect"; a: PlayerId; b: PlayerId }
   | { t: "raise"; target: PlayerId | null }; // Medium: a dead player, or skip
@@ -121,6 +121,11 @@ export interface GameConfig {
    * a word. The pack still learns who they are on the role card.
    */
   peacefulFirstNight: boolean;
+  /**
+   * The in-app town square. Off suits a table playing in person, where people
+   * just talk out loud. Absent means on (configs saved before it existed).
+   */
+  chat?: boolean;
 }
 
 /** One night-action slot: a role acting on a given night. */
@@ -156,6 +161,17 @@ export interface DetectionResult {
 
 export interface NightState {
   steps: NightStep[];
+  /**
+   * Actors who have dismissed their private night result (Seer, Detective…).
+   * The night waits for them, so a result never vanishes before it's read.
+   */
+  acked: PlayerId[];
+}
+
+/** How each voter voted in one day's ballot (null = abstained). Public. */
+export interface VoteRecord {
+  round: number;
+  votes: Record<PlayerId, PlayerId | null>;
 }
 
 /** One thing somebody said during a day. Public: the whole town hears it. */
@@ -209,6 +225,8 @@ export interface GameState {
   chat: ChatMessage[];
   /** voterId -> targetId, or null for an explicit skip. */
   votes: Record<PlayerId, PlayerId | null>;
+  /** Every resolved day ballot, oldest first. Votes are open, not secret. */
+  voteHistory: VoteRecord[];
   /** Per-Witch remaining potions (heal/poison), each usable once all game. */
   witchPotions: Record<PlayerId, { heal: boolean; poison: boolean }>;
   /** Hunters who have died and owe a dying shot, resolved front-first. */

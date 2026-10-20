@@ -33,6 +33,7 @@ export function recommendedConfig(_playerCount: number): GameConfig {
     revealRoleOnDeath: false,
     nightSummary: "discreet",
     peacefulFirstNight: false,
+    chat: true,
   };
 }
 
@@ -114,6 +115,36 @@ export function previewComposition(
     villageSpecials: villagerAllowed ? distinct : restSlots,
     villagers: villagerAllowed ? restSlots - distinct : 0,
   };
+}
+
+/**
+ * Every role that COULD be in this game — never counts, never who holds what.
+ * Public: knowing the menu lets the town reason (and lets a wolf pick a
+ * believable cover). In pool mode this is the whole pool, so it can include
+ * roles that weren't dealt; in exact mode it's what was set, plus Villagers
+ * if any seats fill with them.
+ */
+export function possibleRoles(config: GameConfig, playerCount: number): string[] {
+  const sel = config.selection;
+  const ids = new Set<string>();
+  if (sel.mode === "exact") {
+    let total = 0;
+    for (const [roleId, count] of Object.entries(sel.roleCounts)) {
+      if (count > 0) ids.add(roleId);
+      total += Math.max(0, count);
+    }
+    if (total < playerCount) ids.add(VILLAGER_ROLE_ID);
+  } else {
+    ids.add("werewolf");
+    for (const id of sel.pool) ids.add(id);
+    // A pool with no Villager still pads with repeats, never Villagers, unless
+    // it has nothing else to pad with.
+    const restPool = sel.pool.filter((id) => id !== VILLAGER_ROLE_ID && !roleCountsAsWolf(getRole(id)));
+    if (restPool.length === 0) ids.add(VILLAGER_ROLE_ID);
+  }
+  // Wolves first, then village, then solo — the order players read a setup in.
+  const rank = { werewolf: 0, village: 1, solo: 2 } as const;
+  return [...ids].sort((a, b) => rank[getRole(a).team] - rank[getRole(b).team]);
 }
 
 /** Build and shuffle the role deck, then deal it. Fair Fisher-Yates over the RNG. */

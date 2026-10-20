@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { ROLES, MAX_CHAT_TEXT, type PlayerView, type WerewolfAction, type PublicPlayer } from "@party/werewolf";
-import { PlayerChip, LogFeed, roleEmoji } from "./ui.js";
+import { PlayerChip, LogFeed, roleEmoji, InspectHistory, RolesInPlay, VoteHistory, BallotLines } from "./ui.js";
 
 type Send = (msg: WerewolfAction) => void;
 
@@ -9,14 +9,12 @@ export function TargetGrid({
   ids,
   selected,
   onPick,
-  groupChoices,
   multi,
 }: {
   view: PlayerView;
   ids: string[];
   selected: string | null;
   onPick: (id: string) => void;
-  groupChoices?: Record<string, number>;
   /** Ids to mark selected when more than one can be chosen (e.g. the swap). */
   multi?: string[];
 }) {
@@ -25,7 +23,6 @@ export function TargetGrid({
     <div className="targets">
       {ids.map((id) => {
         const p = byId(id);
-        const votes = groupChoices?.[id] ?? 0;
         const isSel = selected === id || (multi?.includes(id) ?? false);
         // Always a neutral avatar — a target picker must never reveal roles.
         return (
@@ -36,7 +33,6 @@ export function TargetGrid({
           >
             <span className="avatar">🙂</span>
             <span>{p.name}</span>
-            {votes > 0 && <span className="pill">🐺 ×{votes}</span>}
           </button>
         );
       })}
@@ -56,7 +52,7 @@ const NIGHT_PROMPT: Record<string, string> = {
 export function NightAction({ view, send }: { view: PlayerView; send: Send }) {
   const prompt = view.nightPrompt!;
   if (prompt.kind === "witch")
-    return <WitchPanel view={view} onSubmit={(save, poison) => send({ type: "witchAction", save, poisonTargetId: poison })} />;
+    return <WitchPanel view={view} onSubmit={(heal, poison) => send({ type: "witchAction", healTargetId: heal, poisonTargetId: poison })} />;
   if (prompt.kind === "swap")
     return <SwapPanel view={view} onSubmit={(aId, bId) => send({ type: "swapAction", aId, bId })} />;
   if (prompt.kind === "detect")
@@ -81,7 +77,6 @@ function TargetNightAction({ view, send }: { view: PlayerView; send: Send }) {
         view={view}
         ids={prompt.targetIds}
         selected={picked}
-        groupChoices={prompt.groupChoices}
         onPick={setPicked}
       />
       <button
@@ -95,48 +90,49 @@ function TargetNightAction({ view, send }: { view: PlayerView; send: Send }) {
   );
 }
 
-/** The Witch's night action: heal the wolves' victim and/or poison someone. */
+/**
+ * The Witch's night action. She chooses blind — she is never told whom the
+ * wolves picked — so the heal is a guess: shield someone, and if the wolves
+ * come for them they live (and only then is the potion spent).
+ */
 export function WitchPanel({
   view,
   onSubmit,
 }: {
   view: PlayerView;
-  onSubmit: (save: boolean, poisonTargetId: string | null) => void;
+  onSubmit: (healTargetId: string | null, poisonTargetId: string | null) => void;
 }) {
   const w = view.nightPrompt!.witch!;
-  const victim = w.victimId ? view.players.find((p) => p.id === w.victimId) : null;
-  const [save, setSave] = useState(false);
+  const [heal, setHeal] = useState<string | null>(null);
   const [poison, setPoison] = useState<string | null>(null);
   return (
     <div className="stack">
       <div className="phase-banner">
         <div className="big">🧪</div>
         <h2>The Witch wakes</h2>
-        <p className="muted">
-          {victim ? <>The wolves are about to strike <b>{victim.name}</b>.</> : "The wolves struck no one tonight."}
-        </p>
+        <p className="muted">You don't know who the wolves are after. Brew wisely.</p>
       </div>
 
-      {w.healAvailable && victim && (
-        <button className={`chip ${save ? "" : ""}`} style={{ borderColor: save ? "var(--good)" : undefined }} onClick={() => setSave((s) => !s)}>
-          <span className="avatar">❤️‍🩹</span>
-          <div className="grow" style={{ textAlign: "left" }}>
-            <div className="name">Healing potion</div>
-            <div className="muted small">{save ? `Saving ${victim.name}` : `Save ${victim.name} (one-time only)`}</div>
+      {w.healAvailable && (
+        <>
+          <div className="muted small">
+            ❤️‍🩹 Healing potion (optional) — shield one player tonight. If the wolves strike them, they live and the potion is spent.
           </div>
-          <span className="pill">{save ? "✓" : "tap"}</span>
-        </button>
+          <TargetGrid view={view} ids={w.healTargetIds} selected={heal} onPick={(id) => setHeal((h) => (h === id ? null : id))} />
+        </>
       )}
 
       {w.poisonAvailable && (
         <>
-          <div className="muted small">Poison potion (one-time, optional)</div>
+          <div className="muted small">☠️ Poison potion (optional, one-time) — they won't wake up.</div>
           <TargetGrid view={view} ids={view.nightPrompt!.targetIds} selected={poison} onPick={(id) => setPoison((p) => (p === id ? null : id))} />
         </>
       )}
 
-      <button className="primary full lg" onClick={() => onSubmit(save, poison)}>
-        {save || poison ? "Use potion(s)" : "Do nothing tonight"}
+      {!w.healAvailable && !w.poisonAvailable && <p className="center muted">Your shelf is bare — both potions are spent.</p>}
+
+      <button className="primary full lg" onClick={() => onSubmit(heal, poison)}>
+        {heal || poison ? "Use potion(s)" : "Do nothing tonight"}
       </button>
     </div>
   );
@@ -253,6 +249,33 @@ export function InspectResultCard({ view }: { view: PlayerView }) {
   );
 }
 
+/**
+ * What you learned tonight, held on screen until you dismiss it. The night
+ * doesn't end until every actor with a result has tapped through, so a vision
+ * can't vanish under the dawn before it's been read.
+ */
+export function NightResult({ view, send }: { view: PlayerView; send: Send }) {
+  const inspect = view.myInspects.find((r) => r.round === view.round);
+  const detect = view.myDetections.find((r) => r.round === view.round);
+  const name = (id: string) => view.players.find((p) => p.id === id)?.name ?? "someone";
+  return (
+    <div className="stack">
+      {inspect && <InspectResultCard view={view} />}
+      {detect && (
+        <div className="rolecard">
+          <div className="emoji">{detect.sameTeam ? "🤝" : "🎭"}</div>
+          <div className="rname">{name(detect.aId)} &amp; {name(detect.bId)}</div>
+          <div className="blurb">{detect.sameTeam ? "are on the same team." : "are on different teams."}</div>
+        </div>
+      )}
+      <p className="muted center small">Commit it to memory — it stays in your notes below, but nobody else can see it.</p>
+      <button className="primary full lg" onClick={() => send({ type: "nightAck" })}>
+        Got it ✓
+      </button>
+    </div>
+  );
+}
+
 /** Day discussion board — public info everyone can see. */
 export function DayBoard({
   view,
@@ -272,8 +295,12 @@ export function DayBoard({
       </div>
       <LogFeed log={view.log} players={view.players} />
       <SilencedNote view={view} />
-      <ChatPanel view={view} send={send} />
+      <InspectHistory view={view} />
+      <DetectionHistory view={view} />
+      <VoteHistory history={view.voteHistory} players={view.players} />
+      {view.config.chat !== false && <ChatPanel view={view} send={send} />}
       <PlayerList players={view.players} youId={view.you.id} />
+      <RolesInPlay roleIds={view.possibleRoles} />
       {isHost && (
         <button className="primary full lg" onClick={() => send({ type: "startVote" })}>
           Call a vote
@@ -339,16 +366,15 @@ export function ChatPanel({ view, send }: { view: PlayerView; send: Send }) {
 }
 
 /**
- * Where the vote stands. The server has always sent this and nothing showed it,
- * so nobody could see a majority forming — and a tie eliminates nobody, which
- * is a wasted day for the town.
+ * Where the vote stands, and who voted for whom — the ballot is open. A tie
+ * eliminates nobody, which is a wasted day for the town.
  */
 function VoteTally({ view }: { view: PlayerView }) {
   const standing = Object.entries(view.voteTally)
     .filter(([, n]) => n > 0)
     .sort((a, b) => b[1] - a[1]);
-  if (standing.length === 0) return null;
-  const most = standing[0][1];
+  if (Object.keys(view.votes).length === 0) return null;
+  const most = standing[0]?.[1] ?? 0;
   const tied = standing.filter(([, n]) => n === most).length > 1;
   return (
     <div className="card tight stack">
@@ -362,6 +388,8 @@ function VoteTally({ view }: { view: PlayerView }) {
           <b className="count">{n}</b>
         </div>
       ))}
+      <div className="divider" />
+      <BallotLines votes={view.votes} name={(id) => view.players.find((p) => p.id === id)?.name ?? "someone"} />
     </div>
   );
 }
@@ -397,7 +425,7 @@ export function VoteAction({ view, send }: { view: PlayerView; send: Send }) {
           </button>
         </>
       )}
-      <ChatPanel view={view} send={send} />
+      {view.config.chat !== false && <ChatPanel view={view} send={send} />}
     </div>
   );
 }

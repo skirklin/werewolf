@@ -102,7 +102,7 @@ export const ROLES: Record<string, RoleDef> = {
     team: "village",
     emoji: "🧪",
     blurb:
-      "Two potions, one game: one revives the wolves' victim, one poisons anyone you fancy. One use each, no refills. Every night you learn who the wolves bit.",
+      "Two potions, one game. Each night, secretly shield someone with your healing draught — if the wolves come for them, they live (and the potion's spent). Or poison anyone you fancy. One use each, no refills, and you never know who the wolves picked.",
     night: { kind: "witch", order: 15 },
   },
   troublemaker: {

@@ -24,8 +24,12 @@ export type GameFinishedHook = (game: AnyGameModule, record: unknown, playerIds:
 // Letters only (no ambiguous I/L/O) so nobody has to hop between the letter and
 // number keyboards on a phone to type a code.
 const CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ";
-/** How long an in-game room may sit empty before it's reclaimed. */
-const EMPTY_ROOM_GRACE_MS = 15 * 60_000;
+/**
+ * How long a room may sit empty before it's reclaimed — lobby or game alike.
+ * Generous on purpose: phones lock, tabs get backgrounded, and everyone at a
+ * table can drop at once. A code should keep working through all of that.
+ */
+const EMPTY_ROOM_GRACE_MS = 2 * 60 * 60_000;
 const MAX_NAME = 20;
 
 function randomCode(): string {
@@ -100,9 +104,10 @@ export class Room {
       if (c !== client) continue;
       this.clients.delete(pid);
       const player = this.players.find((p) => p.id === pid);
+      // Keep their seat, lobby or game: a locked phone or a flaky connection
+      // shouldn't cost anyone their place (or the room its code). A lobby
+      // seat still empty when the game starts is dropped then.
       if (player) player.connected = false;
-      // Drop players who leave the lobby before the game starts.
-      if (this.inLobby) this.remove(pid);
       // Hand off host if the host left and someone is still connected (any phase).
       if (player?.isHost) this.reassignHostFrom(pid);
       if (this.empty) this.emptySince = Date.now();
@@ -119,6 +124,16 @@ export class Room {
     };
 
     switch (msg.type) {
+      case "leave": {
+        const client = this.clients.get(playerId);
+        // Mid-game the seat stays (the game still counts it); it's just empty.
+        if (client) this.disconnect(client);
+        if (this.inLobby) {
+          this.remove(playerId);
+          this.broadcast();
+        }
+        return;
+      }
       case "kick": {
         hostOnly();
         if (!this.inLobby) throw new GameError("Can only kick in the lobby.");
@@ -131,6 +146,9 @@ export class Room {
       case "startGame": {
         hostOnly();
         if (!this.inLobby) throw new GameError("Game already started.");
+        // Anyone whose device is gone when the host deals sits this one out
+        // (they'd only stall the game). They can join the next one.
+        for (const p of [...this.players]) if (!this.clients.has(p.id)) this.remove(p.id);
         const n = this.players.length;
         if (n < this.game.minPlayers)
           throw new GameError(`Need at least ${this.game.minPlayers} players to start.`);
@@ -259,15 +277,14 @@ export class RoomManager {
   }
 
   /**
-   * Reclaim rooms so they don't leak: empty lobbies immediately, and any room
-   * that has sat empty past the grace period (players who all vanished
-   * mid-game get time to reconnect first).
+   * Reclaim rooms so they don't leak: any room — lobby or mid-game — that has
+   * sat with nobody connected past the grace period. Until then, everyone who
+   * held a seat can reconnect and carry on.
    */
   sweep(now: number = Date.now(), graceMs = EMPTY_ROOM_GRACE_MS) {
     for (const [code, room] of this.rooms) {
       if (!room.empty) continue;
-      if (room.inLobby) this.rooms.delete(code);
-      else if (room.emptySince !== null && now - room.emptySince > graceMs) this.rooms.delete(code);
+      if (room.emptySince !== null && now - room.emptySince > graceMs) this.rooms.delete(code);
     }
   }
 }

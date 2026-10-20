@@ -15,7 +15,7 @@ import {
 } from "@party/werewolf";
 import { useLocalGame } from "./local.js";
 import { RoleConfigEditor } from "./config.js";
-import { RoleCard, LogFeed } from "./ui.js";
+import { RoleCard, LogFeed, RolesInPlay, VoteHistory, BallotLines, TimeBadge, useTimeTheme } from "./ui.js";
 import { TargetGrid, WitchPanel, SwapPanel, RaisePanel, SilencedNote, GameOver, PlayerList } from "./phases.js";
 
 export function LocalApp({ onExit }: { onExit: () => void }) {
@@ -120,6 +120,7 @@ function LocalPlay({
   const [openedTurn, setOpenedTurn] = useState<string>("");
   const [nightIntroRound, setNightIntroRound] = useState<number>(-1);
   const [seenRole, setSeenRole] = useState<Set<string>>(new Set());
+  useTimeTheme(state?.phase ?? null);
   if (!state || !view) return null;
 
   // The inspector's own vision, matching exactly what the engine will record.
@@ -157,6 +158,7 @@ function LocalPlay({
   if (state.phase === "night" && nightIntroRound !== state.round) {
     return (
       <Public title={`🌙 Night ${state.round}`} onExit={onExit}>
+        <TimeBadge phase={state.phase} />
         <LogFeed log={publicLog(state)} players={publicPlayers(state)} />
         <p className="muted center">Everyone, close your eyes. Pass the phone around as prompted.</p>
         <button className="primary full lg" onClick={() => setNightIntroRound(state.round)}>
@@ -170,9 +172,12 @@ function LocalPlay({
   if (state.phase === "dayDiscussion") {
     return (
       <Public title={`☀️ Day ${state.round}`} onExit={onExit}>
+        <TimeBadge phase={state.phase} />
         <LogFeed log={publicLog(state)} players={publicPlayers(state)} />
         <SilencedNote view={view} />
+        <VoteHistory history={view.voteHistory} players={publicPlayers(state)} />
         <PlayerList players={publicPlayers(state)} youId="-" />
+        <RolesInPlay roleIds={view.possibleRoles} />
         <p className="muted center small">Talk it out. When you're ready, put it to a vote.</p>
         <button className="primary full lg" onClick={game.callVote}>Call a vote</button>
       </Public>
@@ -191,6 +196,7 @@ function LocalPlay({
     return (
       <div className="app">
         <RoleCard view={view} />
+        <div style={{ marginTop: 12 }}><RolesInPlay roleIds={view.possibleRoles} /></div>
         <div className="spacer" />
         <p className="muted center small">Memorize it! You'll act on it now, then pass the phone along.</p>
         <button className="primary full lg" onClick={() => setSeenRole((s) => new Set(s).add(seatId))}>
@@ -327,7 +333,7 @@ function NightTurn({
       {packmates.length > 0 && (
         <p className="center small">🐺 Your pack: <b>{packmates.map((p) => p.name).join(", ")}</b></p>
       )}
-      <TargetGrid view={view} ids={prompt.targetIds} selected={picked} groupChoices={prompt.groupChoices} onPick={setPicked} />
+      <TargetGrid view={view} ids={prompt.targetIds} selected={picked} onPick={setPicked} />
       <div className="spacer" />
       <button
         className="primary full lg"
@@ -348,6 +354,12 @@ function VoteTurn({ view, onSubmit }: { view: PlayerView; onSubmit: (id: string 
       <TargetGrid view={view} ids={others.map((p) => p.id)} selected={null} onPick={(id) => onSubmit(id)} />
       <div className="spacer" />
       <button className="ghost full" onClick={() => onSubmit(null)}>Abstain</button>
+      {Object.keys(view.votes).length > 0 && (
+        <div className="card tight stack" style={{ marginTop: 12 }}>
+          <b>Votes so far (they're public)</b>
+          <BallotLines votes={view.votes} name={(id) => view.players.find((p) => p.id === id)?.name ?? "someone"} />
+        </div>
+      )}
     </div>
   );
 }
