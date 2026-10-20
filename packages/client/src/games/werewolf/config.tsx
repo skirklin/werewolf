@@ -45,10 +45,13 @@ export function RoleConfigEditor({
   config,
   playerCount,
   onChange,
+  online = false,
 }: {
   config: GameConfig;
   playerCount: number;
   onChange: (c: GameConfig) => void;
+  /** Separate devices — the only mode with an in-app chat to switch off. */
+  online?: boolean;
 }) {
   const sel = config.selection;
   const problems = validateConfig(config, playerCount);
@@ -79,7 +82,7 @@ export function RoleConfigEditor({
         <ExactEditor sel={sel} onChange={setSelection} />
       )}
 
-      <SharedToggles config={config} onChange={onChange} />
+      <SharedToggles config={config} onChange={onChange} online={online} />
 
       <div className="card tight">
         <div className="spread"><b>Tonight's cast ({playerCount} players)</b></div>
@@ -199,9 +202,11 @@ function ExactEditor({
 function SharedToggles({
   config,
   onChange,
+  online,
 }: {
   config: GameConfig;
   onChange: (c: GameConfig) => void;
+  online: boolean;
 }) {
   return (
     <>
@@ -228,6 +233,21 @@ function SharedToggles({
           onChange={(e) => onChange({ ...config, peacefulFirstNight: e.target.checked })}
         />
       </label>
+      {online && (
+      <label className="chip" style={{ cursor: "pointer" }}>
+        <span className="avatar">💬</span>
+        <div className="grow">
+          <div className="name">In-app chat</div>
+          <div className="muted small">Turn off when you're all in the same room and just talking out loud.</div>
+        </div>
+        <input
+          type="checkbox"
+          style={{ width: 24, minHeight: 24 }}
+          checked={config.chat !== false}
+          onChange={(e) => onChange({ ...config, chat: e.target.checked })}
+        />
+      </label>
+      )}
       <label className="chip" style={{ cursor: "pointer" }}>
         <span className="avatar">📢</span>
         <div className="grow">

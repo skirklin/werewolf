@@ -298,16 +298,18 @@ export class LlmStrategy implements Strategy {
       if (!pool.length) return nightMessage(prompt, []);
 
       if (prompt.kind === "witch") {
-        // One cheap yes/no, then let the fallback decide about poison.
-        const victim = prompt.witch?.victimId;
-        const save =
-          !!victim &&
-          !!prompt.witch?.healAvailable &&
+        // She can't see the wolves' pick. One cheap yes/no on whether to brew
+        // tonight, then whom to shield; leave poison alone.
+        const w = prompt.witch;
+        const brew =
+          !!w?.healAvailable &&
+          w.healTargetIds.length > 0 &&
           (await this.yesNo(
             view,
-            `The wolves are about to kill ${nameOf(view, victim)}. Use your one healing potion to save them?`
+            "You don't know whom the wolves will attack tonight. Use your one healing potion to shield a player? It is only spent if the wolves actually attack that player."
           ));
-        return nightMessage(prompt, [], save);
+        const heal = brew ? await this.choose(view, "Whom do you shield with your healing potion tonight?", w!.healTargetIds) : null;
+        return nightMessage(prompt, [], heal);
       }
 
       const picks: PlayerId[] = [];
@@ -465,16 +467,14 @@ function setup(view: PlayerView): string {
   return parts.join(" ");
 }
 
-/** What the rest of the pack has picked tonight, for a wolf deciding its own. */
+/**
+ * How the pack's kill works, for a wolf deciding its own pick. Each wolf picks
+ * in secret — nobody at night sees anyone else's choice — so converging means
+ * picking whom the pack would agree on, not following a tally.
+ */
 function packSoFar(view: PlayerView): string {
-  const choices = view.nightPrompt?.groupChoices;
-  if (!choices) return "";
-  const named = Object.entries(choices)
-    .filter(([, n]) => n > 0)
-    .map(([id, n]) => (n > 1 ? `${nameOf(view, id)} (${n})` : nameOf(view, id)));
-  return named.length
-    ? `Your pack has already picked: ${named.join(", ")}. The pack kills whoever gets the most picks. `
-    : "You are first to choose tonight. ";
+  if (view.nightPrompt?.kind !== "kill" || view.packmates.length === 0) return "";
+  return "Your packmates pick in secret too; the pack kills whoever gets the most picks (ties broken at random), so choose whom the pack would most likely agree on. ";
 }
 
 /**

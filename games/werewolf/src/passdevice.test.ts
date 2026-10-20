@@ -69,6 +69,7 @@ describe("passDeviceTurn", () => {
     const withChoice: GameState = {
       ...s,
       night: {
+        acked: [],
         steps: s.night!.steps.map((st) =>
           st.kind === "kill"
             ? { ...st, subs: { p0: { t: "target", target: "p1" } }, done: true }

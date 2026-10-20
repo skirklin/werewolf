@@ -8,6 +8,7 @@ import type {
   InspectResult,
   DetectionResult,
   ChatMessage,
+  VoteRecord,
 } from "./types.js";
 
 /**
@@ -28,17 +29,17 @@ export function publicLog(state: GameState): LogEntry[] {
   );
 }
 import { getRole } from "./roles.js";
-import { living, eligibleVoters, validNightTargets, validShootTargets, wolfVictim, effectiveRoleId, playerById } from "./engine.js";
-import type { NightActionKind, NightStep } from "./types.js";
-
-/** Tally of pack picks by targetId (for the werewolves' shared view). */
-function stepTargetTally(step: NightStep): Record<PlayerId, number> {
-  const tally: Record<PlayerId, number> = {};
-  for (const sub of Object.values(step.subs)) {
-    if (sub.t === "target") tally[sub.target] = (tally[sub.target] ?? 0) + 1;
-  }
-  return tally;
-}
+import { possibleRoles } from "./setup.js";
+import {
+  living,
+  eligibleVoters,
+  validNightTargets,
+  validShootTargets,
+  effectiveRoleId,
+  playerById,
+  unackedNightResults,
+} from "./engine.js";
+import type { NightActionKind } from "./types.js";
 
 /** A player as visible to someone else — role hidden unless it should be shown. */
 export interface PublicPlayer {
@@ -57,12 +58,13 @@ export interface NightPrompt {
   /** Ids this player may target (for kill/protect/inspect, or the swap pool). */
   targetIds: PlayerId[];
   canTargetSelf: boolean;
-  /** For pack (werewolf) steps: live tally of pack picks by targetId. */
-  groupChoices?: Record<PlayerId, number>;
-  /** For the Witch only: what she may do this night. */
+  /**
+   * For the Witch only: what she may do this night. She is never told whom the
+   * wolves picked — every night actor chooses blind, with no cross-player info.
+   */
   witch?: {
-    /** The wolves' victim this night (null if the wolves haven't chosen yet). */
-    victimId: PlayerId | null;
+    /** Who she may shield with her healing potion (herself included). */
+    healTargetIds: PlayerId[];
     healAvailable: boolean;
     poisonAvailable: boolean;
   };
@@ -85,8 +87,11 @@ export interface PlayerView {
   packmates: PlayerId[];
   /** Your night action, if it's your turn and you haven't acted. */
   nightPrompt: NightPrompt | null;
-  /** Number of night actors across the table still to submit. */
-  nightWaitingOn: number;
+  /**
+   * You acted tonight and got a private result (a vision, a case reading) you
+   * haven't dismissed yet. The night won't end until you do (send nightAck).
+   */
+  nightAwaitingAck: boolean;
   /** If you are a fallen Hunter whose dying shot is pending, who you may hit. */
   shootPrompt: { targetIds: PlayerId[] } | null;
   /** Your seer inspections across all rounds (only yours). */
@@ -101,12 +106,18 @@ export interface PlayerView {
   chat: ChatMessage[];
   /** Live vote tally during the day vote (public). */
   voteTally: Record<PlayerId, number>;
+  /** Who has voted for whom so far today (public — votes are open). */
+  votes: Record<PlayerId, PlayerId | null>;
+  /** Every past day's ballot, voter by voter (public). */
+  voteHistory: VoteRecord[];
   votesRemaining: number;
   log: LogEntry[];
   winner: Team | null;
   /** The player who won a solo victory (e.g. a lynched Tanner), if any. */
   soloWinnerId: PlayerId | null;
   config: GameConfig;
+  /** Every role that could be in this game (no counts, no owners). Public. */
+  possibleRoles: string[];
 }
 
 /**
@@ -177,25 +188,16 @@ export function projectView(state: GameState, viewerId: PlayerId): PlayerView {
           .map((p) => p.id)
       : [];
 
-  // Night prompt + waiting count.
+  // Night prompt. Built ONLY from the viewer's own step and public state: no
+  // other actor's choice, progress or timing ever reaches it, so nobody can
+  // read the wolves' pick (or whether they've picked) off their own screen.
   let nightPrompt: NightPrompt | null = null;
-  let nightWaitingOn = 0;
+  let nightAwaitingAck = false;
   if (state.phase === "night" && state.night) {
-    for (const step of state.night.steps) {
-      for (const actorId of step.actorIds) {
-        if (!(actorId in step.subs)) nightWaitingOn++;
-      }
-    }
-    const killStep = state.night.steps.find((s) => s.kind === "kill");
-    const killReady = !killStep || killStep.done;
+    nightAwaitingAck = unackedNightResults(state).includes(viewerId);
     const myStep = state.night.steps.find((s) => s.actorIds.includes(viewerId));
-    // The Witch must wait for the wolves before her prompt appears.
-    const witchReady = myStep?.kind !== "witch" || killReady;
-    if (myStep && you.alive && !(viewerId in myStep.subs) && witchReady) {
+    if (myStep && you.alive && !(viewerId in myStep.subs)) {
       const ability = getRole(effectiveRoleId(state, viewerId)!).night!;
-      const groupChoices = myStep.group
-        ? stepTargetTally(myStep)
-        : undefined;
       nightPrompt = {
         kind: myStep.kind,
         // myStep.roleId is already the effective (disguised) role, so a Drunk
@@ -208,11 +210,10 @@ export function projectView(state: GameState, viewerId: PlayerId): PlayerView {
               ? state.players.filter((p) => !p.alive).map((p) => p.id) // dead players to raise
               : validNightTargets(state, viewerId).map((p) => p.id),
         canTargetSelf: !!ability.canTargetSelf,
-        groupChoices,
         witch:
           myStep.kind === "witch"
             ? {
-                victimId: wolfVictim(state),
+                healTargetIds: living(state).map((p) => p.id),
                 healAvailable: !!state.witchPotions[viewerId]?.heal,
                 poisonAvailable: !!state.witchPotions[viewerId]?.poison,
               }
@@ -253,7 +254,7 @@ export function projectView(state: GameState, viewerId: PlayerId): PlayerView {
     players,
     packmates,
     nightPrompt,
-    nightWaitingOn,
+    nightAwaitingAck,
     shootPrompt,
     myInspects,
     myDetections,
@@ -263,10 +264,13 @@ export function projectView(state: GameState, viewerId: PlayerId): PlayerView {
     myVote: viewerId in state.votes ? state.votes[viewerId] : undefined,
     chat: state.chat.slice(-CHAT_IN_VIEW),
     voteTally,
+    votes: state.phase === "dayVote" ? { ...state.votes } : {},
+    voteHistory: state.voteHistory,
     votesRemaining,
     log: publicLog(state),
     winner: state.winner,
     soloWinnerId: state.soloWinnerId,
     config: state.config,
+    possibleRoles: possibleRoles(state.config, state.players.length),
   };
 }

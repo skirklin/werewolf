@@ -42,8 +42,8 @@ export function isDrunk(state: GameState, id: PlayerId): boolean {
  * nullified automatically (a Drunk's submissions are stripped in endNight);
  * info kinds are fabricated (see nightChoice / detectAction). A role flagged
  * `drunkMimicable` MUST use a kind in this set (a test enforces it), and its
- * prompt/view must not expose real info — which is why the Witch, whose prompt
- * shows the wolves' actual victim, is intentionally not mimicable.
+ * prompt/view must not expose real info. The Witch's potions are a one-time
+ * resource a fake couldn't track convincingly, so she is not mimicable.
  */
 export const DRUNK_MIMIC_KINDS: NightActionKind[] = [
   "inspect",
@@ -89,6 +89,27 @@ export function allNightStepsDone(state: GameState): boolean {
   return state.night.steps.every((s) => s.done);
 }
 
+/** Night kinds that hand the actor a private result they must read before dawn. */
+export const NIGHT_RESULT_KINDS: NightActionKind[] = ["inspect", "detect"];
+
+/** Actors who acted tonight on a result-bearing step and haven't dismissed it yet. */
+export function unackedNightResults(state: GameState): PlayerId[] {
+  if (!state.night) return [];
+  const acked = state.night.acked;
+  return state.night.steps
+    .filter((s) => NIGHT_RESULT_KINDS.includes(s.kind))
+    .flatMap((s) => Object.keys(s.subs))
+    .filter((id) => !acked.includes(id) && playerById(state, id)?.alive);
+}
+
+/**
+ * Whether the night can close by itself: everyone has acted AND everyone who
+ * learned something has had the chance to read it. (The host can still force it.)
+ */
+export function nightReadyToEnd(state: GameState): boolean {
+  return allNightStepsDone(state) && unackedNightResults(state).length === 0;
+}
+
 /** Valid targets for a given actor's (effective, possibly disguised) night ability. */
 export function validNightTargets(state: GameState, actorId: PlayerId): Player[] {
   const roleId = effectiveRoleId(state, actorId);
@@ -123,10 +144,11 @@ export type Action =
   | { type: "startGame"; config: GameConfig }
   | { type: "startNight" }
   | { type: "nightChoice"; actorId: PlayerId; targetId: PlayerId }
-  | { type: "witchAction"; actorId: PlayerId; save: boolean; poisonTargetId: PlayerId | null }
+  | { type: "witchAction"; actorId: PlayerId; healTargetId: PlayerId | null; poisonTargetId: PlayerId | null }
   | { type: "swapAction"; actorId: PlayerId; aId: PlayerId; bId: PlayerId }
   | { type: "detectAction"; actorId: PlayerId; aId: PlayerId; bId: PlayerId }
   | { type: "raiseAction"; actorId: PlayerId; targetId: PlayerId | null }
+  | { type: "nightAck"; actorId: PlayerId }
   | { type: "endNight" }
   | { type: "startVote" }
   | { type: "castVote"; voterId: PlayerId; targetId: PlayerId | null }
@@ -162,13 +184,15 @@ export function reduce(state: GameState, action: Action): GameState {
     case "nightChoice":
       return nightChoice(state, action.actorId, action.targetId);
     case "witchAction":
-      return witchAction(state, action.actorId, action.save, action.poisonTargetId);
+      return witchAction(state, action.actorId, action.healTargetId, action.poisonTargetId);
     case "swapAction":
       return swapAction(state, action.actorId, action.aId, action.bId);
     case "detectAction":
       return detectAction(state, action.actorId, action.aId, action.bId);
     case "raiseAction":
       return raiseAction(state, action.actorId, action.targetId);
+    case "nightAck":
+      return nightAck(state, action.actorId);
     case "endNight":
       return endNight(state);
     case "startVote":
@@ -194,6 +218,7 @@ export function reduce(state: GameState, action: Action): GameState {
  * can leak a role the speaker didn't choose to give away.
  */
 function say(state: GameState, speakerId: PlayerId, text: string): GameState {
+  assert(state.config.chat !== false, "Chat is off for this game — say it out loud.");
   assert(
     state.phase === "dayDiscussion" || state.phase === "dayVote",
     "The town only talks by day."
@@ -301,7 +326,7 @@ function beginNight(state: GameState): GameState {
     });
   }
   steps.sort((a, b) => a.order - b.order);
-  const night: NightState = { steps };
+  const night: NightState = { steps, acked: [] };
   return {
     ...state,
     phase: "night",
@@ -344,7 +369,7 @@ function nightChoice(state: GameState, actorId: PlayerId, targetId: PlayerId): G
   return {
     ...state,
     inspects,
-    night: { steps: withSub(state.night.steps, step, actorId, { t: "target", target: targetId }) },
+    night: { ...state.night, steps: withSub(state.night.steps, step, actorId, { t: "target", target: targetId }) },
   };
 }
 
@@ -368,10 +393,15 @@ export function wolfVictim(state: GameState): PlayerId | null {
   return pluralityTarget(killStep, makeRng(state.seed + state.round));
 }
 
+/**
+ * The Witch acts blind, like everyone else: she never learns whom the wolves
+ * picked. Her healing potion shields one player of her choosing tonight, and
+ * is only spent if the wolves actually came for that player.
+ */
 function witchAction(
   state: GameState,
   actorId: PlayerId,
-  save: boolean,
+  healTargetId: PlayerId | null,
   poisonTargetId: PlayerId | null
 ): GameState {
   assert(state.phase === "night" && state.night, "Not night.");
@@ -380,12 +410,12 @@ function witchAction(
   const step = state.night.steps.find((s) => s.kind === "witch" && s.actorIds.includes(actorId));
   assert(step, "You have no night action.");
   assert(!step.done, "You have already acted.");
-  // The Witch may only act once the wolves have locked in their victim.
-  const killStep = state.night.steps.find((s) => s.kind === "kill");
-  assert(!killStep || killStep.done, "Wait for the wolves to choose first.");
 
   const potions = state.witchPotions[actorId] ?? { heal: false, poison: false };
-  if (save) assert(potions.heal && wolfVictim(state), "You can't heal right now.");
+  if (healTargetId !== null) {
+    assert(potions.heal, "Your healing potion is already spent.");
+    assert(playerById(state, healTargetId)?.alive, "Can't heal a dead player.");
+  }
   if (poisonTargetId !== null) {
     assert(potions.poison, "Your poison is already spent.");
     assert(poisonTargetId !== actorId, "You can't poison yourself.");
@@ -394,13 +424,22 @@ function witchAction(
   return {
     ...state,
     night: {
+      ...state.night,
       steps: withSub(state.night.steps, step, actorId, {
         t: "witch",
-        save,
+        heal: healTargetId,
         poison: poisonTargetId,
       }),
     },
   };
+}
+
+/** An actor has read their private night result; the night may now move on. */
+function nightAck(state: GameState, actorId: PlayerId): GameState {
+  assert(state.phase === "night" && state.night, "Not night.");
+  if (state.night.acked.includes(actorId)) return state;
+  assert(unackedNightResults(state).includes(actorId), "Nothing to acknowledge.");
+  return { ...state, night: { ...state.night, acked: [...state.night.acked, actorId] } };
 }
 
 function swapAction(state: GameState, actorId: PlayerId, aId: PlayerId, bId: PlayerId): GameState {
@@ -418,6 +457,7 @@ function swapAction(state: GameState, actorId: PlayerId, aId: PlayerId, bId: Pla
   return {
     ...state,
     night: {
+      ...state.night,
       steps: withSub(state.night.steps, step, actorId, { t: "swap", a: aId, b: bId }),
     },
   };
@@ -441,7 +481,7 @@ function detectAction(state: GameState, actorId: PlayerId, aId: PlayerId, bId: P
   return {
     ...state,
     detections: [...state.detections, { round: state.round, detectiveId: actorId, aId, bId, sameTeam }],
-    night: { steps: withSub(state.night.steps, step, actorId, { t: "detect", a: aId, b: bId }) },
+    night: { ...state.night, steps: withSub(state.night.steps, step, actorId, { t: "detect", a: aId, b: bId }) },
   };
 }
 
@@ -459,7 +499,7 @@ function raiseAction(state: GameState, actorId: PlayerId, targetId: PlayerId | n
   }
   return {
     ...state,
-    night: { steps: withSub(state.night.steps, step, actorId, { t: "raise", target: targetId }) },
+    night: { ...state.night, steps: withSub(state.night.steps, step, actorId, { t: "raise", target: targetId }) },
   };
 }
 
@@ -603,7 +643,7 @@ function endNight(state: GameState): GameState {
     for (const [actorId, sub] of Object.entries(step.subs)) {
       if (sub.t !== "witch") continue;
       let cur = witchPotions[actorId] ?? { heal: false, poison: false };
-      if (sub.save && cur.heal && victimId) {
+      if (sub.heal !== null && cur.heal && sub.heal === victimId) {
         protectedIds.add(victimId);
         cur = { ...cur, heal: false };
       }
@@ -813,6 +853,8 @@ export function allVotesIn(state: GameState): boolean {
 
 function resolveVote(state: GameState): GameState {
   assert(state.phase === "dayVote", "Not voting.");
+  // The ballot is open: keep who voted for whom, so the town can see it after.
+  state = { ...state, voteHistory: [...state.voteHistory, { round: state.round, votes: state.votes }] };
   const tally = new Map<PlayerId, number>();
   for (const target of Object.values(state.votes)) {
     if (target === null) continue;
@@ -889,6 +931,7 @@ export function createGame(code: string, seed: number): GameState {
     dealtRoles: [],
     chat: [],
     votes: {},
+    voteHistory: [],
     witchPotions: {},
     pendingShots: [],
     afterReckoning: null,

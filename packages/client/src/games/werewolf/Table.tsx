@@ -1,14 +1,16 @@
 import type { PlayerView, WerewolfAction } from "@party/werewolf";
 import type { TableProps } from "../../shell/game.js";
-import { RoleCard, InspectHistory, LogFeed } from "./ui.js";
-import { NightAction, DayBoard, VoteAction, ShootAction, DetectionHistory, GameOver, PlayerList } from "./phases.js";
+import { RoleCard, InspectHistory, LogFeed, RolesInPlay, TimeBadge, useTimeTheme } from "./ui.js";
+import { NightAction, NightResult, DayBoard, VoteAction, ShootAction, DetectionHistory, GameOver, PlayerList } from "./phases.js";
 
 type Send = (action: WerewolfAction) => void;
 
 /** A Werewolf game in progress, on one player's own device. */
 export function WerewolfTable({ view, act, playAgain, onExit }: TableProps<PlayerView, WerewolfAction>) {
+  useTimeTheme(view.phase);
   return (
     <>
+      <TimeBadge phase={view.phase} />
       {renderPhase(view, act, playAgain, onExit)}
       <HostRecovery view={view} send={act} />
     </>
@@ -23,6 +25,7 @@ function renderPhase(view: PlayerView, send: Send, playAgain: () => void, onExit
       return (
         <div className="stack">
           <RoleCard view={view} />
+          <RolesInPlay roleIds={view.possibleRoles} />
           {view.you.isHost ? (
             <button className="primary full lg" onClick={() => send({ type: "startNight" })}>
               Everyone's ready — begin the night
@@ -36,12 +39,14 @@ function renderPhase(view: PlayerView, send: Send, playAgain: () => void, onExit
     case "night":
       if (dead) return <Spectator view={view} label="🌙 The night creeps by…" />;
       if (view.nightPrompt) return <NightAction view={view} send={send} />;
+      if (view.nightAwaitingAck) return <NightResult view={view} send={send} />;
       return (
         <div className="stack">
           <div className="phase-banner"><div className="big">🌙</div><h2>Night falls</h2></div>
           <InspectHistory view={view} />
           <DetectionHistory view={view} />
           <p className="center muted">Waiting for the night to end…</p>
+          <RolesInPlay roleIds={view.possibleRoles} />
         </div>
       );
 

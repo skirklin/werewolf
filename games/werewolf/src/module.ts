@@ -2,7 +2,7 @@ import { GameError, type GameModule, type RosterEntry } from "@party/core";
 import type { GameConfig, GameState, Player } from "./types.js";
 import type { PlayerView } from "./views.js";
 import type { WerewolfAction } from "./protocol.js";
-import { createGame, reduce, allNightStepsDone, allVotesIn, type Action } from "./engine.js";
+import { createGame, reduce, nightReadyToEnd, allVotesIn, type Action } from "./engine.js";
 import { validateConfig } from "./setup.js";
 import { projectView } from "./views.js";
 import { toGameRecord, type GameRecord } from "./record.js";
@@ -48,7 +48,9 @@ export const werewolfModule: GameModule<GameConfig, GameState, PlayerView> & {
     const action = toEngineAction(seatId, raw as WerewolfAction, isHost);
     let next = reduce(state, action);
     // Auto-resolve phases so play flows without manual prompting.
-    if (next.phase === "night" && next.night && allNightStepsDone(next))
+    // The night waits for every actor to act AND to dismiss any private result,
+    // so a Seer's vision can't be swept away by dawn before it's been read.
+    if (next.phase === "night" && next.night && nightReadyToEnd(next))
       next = reduce(next, { type: "endNight" });
     if (next.phase === "dayVote" && allVotesIn(next)) next = reduce(next, { type: "resolveVote" });
     return next;
@@ -84,13 +86,15 @@ function toEngineAction(actorId: string, msg: WerewolfAction, isHost: boolean): 
     case "nightChoice":
       return { type: "nightChoice", actorId, targetId: msg.targetId };
     case "witchAction":
-      return { type: "witchAction", actorId, save: msg.save, poisonTargetId: msg.poisonTargetId };
+      return { type: "witchAction", actorId, healTargetId: msg.healTargetId, poisonTargetId: msg.poisonTargetId };
     case "swapAction":
       return { type: "swapAction", actorId, aId: msg.aId, bId: msg.bId };
     case "detectAction":
       return { type: "detectAction", actorId, aId: msg.aId, bId: msg.bId };
     case "raiseAction":
       return { type: "raiseAction", actorId, targetId: msg.targetId };
+    case "nightAck":
+      return { type: "nightAck", actorId };
     case "endNight":
       hostOnly();
       return { type: "endNight" };

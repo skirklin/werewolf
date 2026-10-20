@@ -35,6 +35,8 @@ export type ClientMessage =
   | { type: "startGame"; config: unknown }
   /** After a game ends: back to the lobby with the same room and roster. */
   | { type: "playAgain" }
+  /** Leaving on purpose (not just a dropped connection): frees a lobby seat. */
+  | { type: "leave" }
   | { type: "act"; action: unknown };
 
 /** Messages the server sends. `View` is the game's per-seat view. */

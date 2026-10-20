@@ -219,23 +219,29 @@ export class Arena {
   }
 
   /**
-   * Everyone with something to do tonight does it. Roles that wait on others
-   * (the Witch needs the wolves first) surface on a later pass, so this keeps
-   * sweeping until the server moves the phase on.
+   * Everyone with something to do tonight does it, then dismisses any private
+   * result (the night waits for that). Roles that surface late (the Medium
+   * needs a death) appear on a later pass, so this keeps sweeping until the
+   * server moves the phase on.
    */
   private async runNight(clients: ArenaClient[], strategies: Strategy[], host: ArenaClient) {
     for (let sweep = 0; sweep < 30; sweep++) {
       if (host.view?.phase !== "night") return;
+      // A seat that has read its result says so; the night can't end without it.
+      const acking = clients.filter((c) => c.view?.phase === "night" && c.view.nightAwaitingAck);
+      for (const c of acking) c.send({ type: "nightAck" });
+      await Promise.all(acking.map((c) => c.soft((v) => !v.nightAwaitingAck || v.phase !== "night", 2000)));
+      if (host.view?.phase !== "night") return;
       const pending = clients.filter((c) => c.view?.nightPrompt);
       if (!pending.length) {
-        // Nothing to do *yet*: roles that wait on others (the Witch needs the
-        // wolves, the Medium a death) surface a beat later. Wake on whichever
+        // Nothing to do *yet*: roles that surface late (the Medium needs a
+        // death) appear a beat later. Wake on whichever
         // comes first — a prompt appearing or the night ending — rather than
         // waiting out a fixed delay for a condition that may never come true
         // during it. Polling the wrong condition here made a rich role pool
         // seven times slower to simulate than a plain one.
         await Promise.race([
-          ...clients.map((c) => c.soft((v) => !!v.nightPrompt, 250)),
+          ...clients.map((c) => c.soft((v) => !!v.nightPrompt || v.nightAwaitingAck, 250)),
           host.soft((v) => v.phase !== "night", 250),
         ]);
         if (host.view?.phase !== "night") return;

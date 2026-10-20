@@ -150,6 +150,10 @@ export function useRoom(): RoomConnection {
   const leave = useCallback(() => {
     localStorage.removeItem(STORE_KEY);
     credsRef.current = null;
+    // Say so before hanging up, so a lobby seat is freed rather than held
+    // open for a reconnect that will never come.
+    const sock = sockRef.current;
+    if (sock?.readyState === WebSocket.OPEN) sock.send(JSON.stringify({ type: "leave" } satisfies ClientMessage));
     sockRef.current?.close();
     sockRef.current = null;
     setRoom(null);

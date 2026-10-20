@@ -77,9 +77,16 @@ export class HeuristicStrategy implements Strategy {
     const ordered = rank(prompt.targetIds);
     const need = picksNeeded(prompt.kind);
     const picks = ordered.slice(0, Math.max(need, ordered.length && need === 0 ? 1 : 0));
-    // Save the victim if there's one to save; poison nobody (too easy to misfire).
-    const save = prompt.kind === "witch" && !!prompt.witch?.victimId && !!prompt.witch.healAvailable;
-    return nightMessage(prompt, need === 0 && !save ? [] : picks.slice(0, Math.max(need, 1)), save);
+    if (prompt.kind === "witch") {
+      // The Witch can't see the wolves' pick, so shield the town's most
+      // valuable known-good player (or herself); poison nobody (too easy to misfire).
+      const w = prompt.witch;
+      const heal = w?.healAvailable
+        ? w.healTargetIds.find((id) => clear.has(id)) ?? view.you.id
+        : null;
+      return nightMessage(prompt, [], heal);
+    }
+    return nightMessage(prompt, need === 0 ? [] : picks.slice(0, Math.max(need, 1)));
   }
 
   async speak(view: PlayerView): Promise<string | null> {

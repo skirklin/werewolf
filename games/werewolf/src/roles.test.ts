@@ -372,32 +372,47 @@ describe("Village Drunk (mimics any role)", () => {
 // Witch
 // ---------------------------------------------------------------------------
 describe("Witch", () => {
-  it("must wait for the wolves before acting", () => {
+  it("acts blind: her prompt is up before the wolves choose and never names their victim", () => {
     let s = gameWith(["werewolf", "witch", "villager", "villager"]);
     s = reduce(s, { type: "startNight" });
-    expect(() =>
-      reduce(s, { type: "witchAction", actorId: "p1", save: true, poisonTargetId: null })
-    ).toThrow(/wolves/i);
-    // No prompt until the kill is locked in.
-    expect(projectView(s, "p1").nightPrompt).toBeNull();
+    const before = projectView(s, "p1").nightPrompt!;
+    expect(before.kind).toBe("witch");
+    s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p2" });
+    const after = projectView(s, "p1").nightPrompt!;
+    expect(after).toEqual(before); // the wolves' pick changes nothing she can see
+    expect(JSON.stringify(after.witch)).not.toMatch(/victim/);
+    // She may act before the wolves have chosen.
+    let early = gameWith(["werewolf", "witch", "villager", "villager"]);
+    early = reduce(early, { type: "startNight" });
+    early = reduce(early, { type: "witchAction", actorId: "p1", healTargetId: "p2", poisonTargetId: null });
+    expect(early.night!.steps.find((st) => st.kind === "witch")!.done).toBe(true);
   });
 
-  it("heals the wolves' victim, spending the heal potion", () => {
+  it("shields the player she picks if the wolves strike them, spending the heal", () => {
     let s = gameWith(["werewolf", "witch", "villager", "villager"]);
     s = reduce(s, { type: "startNight" });
-    s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p2" }); // wolf targets p2
-    expect(projectView(s, "p1").nightPrompt!.witch!.victimId).toBe("p2"); // Witch sees the victim
-    s = reduce(s, { type: "witchAction", actorId: "p1", save: true, poisonTargetId: null });
+    s = reduce(s, { type: "witchAction", actorId: "p1", healTargetId: "p2", poisonTargetId: null });
+    s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p2" });
     s = reduce(s, { type: "endNight" });
     expect(alive(s, "p2")).toBe(true);
     expect(s.witchPotions["p1"]).toEqual({ heal: false, poison: true });
+  });
+
+  it("a heal on someone the wolves didn't pick saves nobody and keeps the potion", () => {
+    let s = gameWith(["werewolf", "witch", "villager", "villager", "villager"]);
+    s = reduce(s, { type: "startNight" });
+    s = reduce(s, { type: "witchAction", actorId: "p1", healTargetId: "p3", poisonTargetId: null });
+    s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p2" });
+    s = reduce(s, { type: "endNight" });
+    expect(alive(s, "p2")).toBe(false);
+    expect(s.witchPotions["p1"]).toEqual({ heal: true, poison: true });
   });
 
   it("poisons a chosen player, spending the poison potion", () => {
     let s = gameWith(["werewolf", "witch", "villager", "villager", "villager"]);
     s = reduce(s, { type: "startNight" });
     s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p2" });
-    s = reduce(s, { type: "witchAction", actorId: "p1", save: false, poisonTargetId: "p3" });
+    s = reduce(s, { type: "witchAction", actorId: "p1", healTargetId: null, poisonTargetId: "p3" });
     s = reduce(s, { type: "endNight" });
     expect(alive(s, "p2")).toBe(false); // wolf kill
     expect(alive(s, "p3")).toBe(false); // poisoned
@@ -409,26 +424,24 @@ describe("Witch", () => {
     let s = gameWith(["werewolf", "witch", "villager", "villager", "villager", "villager"]);
     s = reduce(s, { type: "startNight" });
     s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p2" });
-    s = reduce(s, { type: "witchAction", actorId: "p1", save: true, poisonTargetId: null });
+    s = reduce(s, { type: "witchAction", actorId: "p1", healTargetId: "p2", poisonTargetId: null });
     s = reduce(s, { type: "endNight" }); // heal spent
     // Day, then a new night.
     s = reduce(s, { type: "startVote" });
     for (const p of living(s)) if (p.id !== "p3") s = reduce(s, { type: "castVote", voterId: p.id, targetId: "p3" });
     s = reduce(s, { type: "resolveVote" });
     expect(s.phase).toBe("night");
-    s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p4" });
     expect(projectView(s, "p1").nightPrompt!.witch!.healAvailable).toBe(false);
     expect(() =>
-      reduce(s, { type: "witchAction", actorId: "p1", save: true, poisonTargetId: null })
+      reduce(s, { type: "witchAction", actorId: "p1", healTargetId: "p4", poisonTargetId: null })
     ).toThrow();
   });
 
   it("cannot poison itself", () => {
     let s = gameWith(["werewolf", "witch", "villager", "villager"]);
     s = reduce(s, { type: "startNight" });
-    s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p2" });
     expect(() =>
-      reduce(s, { type: "witchAction", actorId: "p1", save: false, poisonTargetId: "p1" })
+      reduce(s, { type: "witchAction", actorId: "p1", healTargetId: null, poisonTargetId: "p1" })
     ).toThrow();
   });
 
@@ -436,7 +449,7 @@ describe("Witch", () => {
     let s = gameWith(["werewolf", "witch", "villager", "villager", "villager"]);
     s = reduce(s, { type: "startNight" });
     s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p2" }); // wolves target p2
-    s = reduce(s, { type: "witchAction", actorId: "p1", save: true, poisonTargetId: "p2" }); // heal + poison p2
+    s = reduce(s, { type: "witchAction", actorId: "p1", healTargetId: "p2", poisonTargetId: "p2" }); // heal + poison p2
     s = reduce(s, { type: "endNight" });
     expect(alive(s, "p2")).toBe(false); // poison bypasses the heal
     expect(s.log.some((e) => e.type === "poisoned" && e.playerId === "p2")).toBe(true);
@@ -482,7 +495,7 @@ describe("Troublemaker", () => {
     s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p3" });
     s = reduce(s, { type: "swapAction", actorId: "p1", aId: "p2", bId: "p4" }); // swap witch & villager
     // Witch (p2) must act before night ends; she does nothing this round.
-    s = reduce(s, { type: "witchAction", actorId: "p2", save: false, poisonTargetId: null });
+    s = reduce(s, { type: "witchAction", actorId: "p2", healTargetId: null, poisonTargetId: null });
     s = reduce(s, { type: "endNight" });
     // p4 is now the Witch and holds the potions; p2 no longer does.
     expect(s.players.find((p) => p.id === "p4")!.roleId).toBe("witch");

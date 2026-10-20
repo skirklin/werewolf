@@ -28,7 +28,7 @@ export interface LocalGame {
   view: PlayerView | null;
   start: (names: string[], config: GameConfig) => void;
   submitNight: (targetId: string) => void;
-  submitWitch: (save: boolean, poisonTargetId: string | null) => void;
+  submitWitch: (healTargetId: string | null, poisonTargetId: string | null) => void;
   submitSwap: (aId: string, bId: string) => void;
   submitDetect: (aId: string, bId: string) => void;
   submitRaise: (targetId: string | null) => void;
@@ -95,9 +95,9 @@ export function useLocalGame(): LocalGame {
     setState(advanceNight(acted, turn.seatId));
   };
 
-  const submitWitch = (save: boolean, poisonTargetId: string | null) => {
+  const submitWitch = (healTargetId: string | null, poisonTargetId: string | null) => {
     if (!state || turn.kind !== "night") return;
-    const acted = reduce(state, { type: "witchAction", actorId: turn.seatId, save, poisonTargetId });
+    const acted = reduce(state, { type: "witchAction", actorId: turn.seatId, healTargetId, poisonTargetId });
     setState(advanceNight(acted, turn.seatId));
   };
 
