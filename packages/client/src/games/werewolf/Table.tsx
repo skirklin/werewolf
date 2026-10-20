@@ -1,6 +1,6 @@
 import type { PlayerView, WerewolfAction } from "@party/werewolf";
 import type { TableProps } from "../../shell/game.js";
-import { RoleCard, InspectHistory, LogFeed, RolesInPlay, TimeBadge, useTimeTheme } from "./ui.js";
+import { RoleCard, InspectHistory, RolesInPlay, TimeBadge, TownNews, useTimeTheme } from "./ui.js";
 import { NightAction, NightResult, IdleNight, DayBoard, VoteAction, ShootAction, DetectionHistory, GameOver, PlayerList } from "./phases.js";
 
 type Send = (action: WerewolfAction) => void;
@@ -10,7 +10,7 @@ export function WerewolfTable({ view, act, playAgain, onExit }: TableProps<Playe
   useTimeTheme(view.phase);
   return (
     <>
-      <TimeBadge phase={view.phase} />
+      <TimeBadge phase={view.phase} round={view.round} />
       {renderPhase(view, act, playAgain, onExit)}
       <HostRecovery view={view} send={act} />
     </>
@@ -78,8 +78,8 @@ function renderPhase(view: PlayerView, send: Send, playAgain: () => void, onExit
       if (view.silencedIds.includes(view.you.id))
         return (
           <div className="stack">
-            <div className="phase-banner"><div className="big">🤫</div><h2>You&apos;ve been silenced</h2><p className="muted">No vote for you today — sit tight and look innocent.</p></div>
-            <LogFeed log={view.log} players={view.players} />
+            <div className="card tight small">🤫 You&apos;ve been silenced: no vote for you today. Sit tight and look innocent.</div>
+            <VoteAction view={view} send={send} />
           </div>
         );
       return <VoteAction view={view} send={send} />;
@@ -130,7 +130,7 @@ function Spectator({ view, label }: { view: PlayerView; label: string }) {
   return (
     <div className="stack">
       <div className="phase-banner"><div className="big">💀</div><h2>You're out</h2><p className="muted">{label}</p></div>
-      <LogFeed log={view.log} players={view.players} />
+      <TownNews log={view.log} voteHistory={view.voteHistory} round={view.round} players={view.players} />
       <PlayerList players={view.players} youId={view.you.id} />
     </div>
   );

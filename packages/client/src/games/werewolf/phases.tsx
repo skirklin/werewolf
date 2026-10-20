@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { ROLES, MAX_CHAT_TEXT, type PlayerView, type WerewolfAction, type PublicPlayer } from "@party/werewolf";
-import { PlayerChip, LogFeed, roleEmoji, InspectHistory, RolesInPlay, VoteHistory } from "./ui.js";
+import { PlayerChip, roleEmoji, InspectHistory, RolesInPlay, TownNews } from "./ui.js";
 
 type Send = (msg: WerewolfAction) => void;
 
@@ -33,7 +33,6 @@ export function TargetGrid({
             className={`target ${isSel ? "selected" : ""}`}
             onClick={() => onPick(id)}
           >
-            <span className="avatar">🙂</span>
             <span>{p.name}</span>
           </button>
         );
@@ -309,6 +308,25 @@ export function IdleNight({ view, send }: { view: PlayerView; send: Send }) {
   );
 }
 
+/** One side of the final reveal: everyone's name and the role they ended on. */
+function RevealGroup({ title, players }: { title: string; players: PublicPlayer[] }) {
+  if (players.length === 0) return null;
+  return (
+    <div className="card tight stack" style={{ gap: 8 }}>
+      <b className="small">{title}</b>
+      {players.map((p) => (
+        <div key={p.id} className="spread small">
+          <span>
+            {roleEmoji(p.roleId)} {p.name}
+            {p.alive ? "" : " 💀"}
+          </span>
+          <span className="muted">{p.roleId ? ROLES[p.roleId].name : "?"}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 /** Day discussion board — public info everyone can see. */
 export function DayBoard({
   view,
@@ -321,18 +339,12 @@ export function DayBoard({
 }) {
   return (
     <div className="stack">
-      <div className="phase-banner">
-        <div className="big">☀️</div>
-        <h2>Day {view.round}</h2>
-        <p className="muted">{view.round === 1 ? "The village wakes. Who's acting strange?" : "Another morning. Talk it through, then put someone on trial."}</p>
-      </div>
-      <LogFeed log={view.log} players={view.players} />
+      <TownNews log={view.log} voteHistory={view.voteHistory} round={view.round} players={view.players} />
       <SilencedNote view={view} />
       <InspectHistory view={view} />
       <DetectionHistory view={view} />
-      <VoteHistory history={view.voteHistory} players={view.players} />
       {view.config.chat !== false && <ChatPanel view={view} send={send} />}
-      <PlayerList players={view.players} youId={view.you.id} />
+      <PlayerList players={view.players} youId={view.you.id} showPresence={isHost} />
       <RolesInPlay roleIds={view.possibleRoles} />
       {isHost && (
         <button className="primary full lg" onClick={() => send({ type: "startVote" })}>
@@ -355,6 +367,7 @@ export function DayBoard({
  */
 export function ChatPanel({ view, send }: { view: PlayerView; send: Send }) {
   const [draft, setDraft] = useState("");
+  const silentAndDead = !view.you.alive && view.chat.length === 0;
   const feed = useRef<HTMLDivElement>(null);
   const nameOf = (id: string) => view.players.find((p) => p.id === id)?.name ?? "someone";
 
@@ -369,6 +382,9 @@ export function ChatPanel({ view, send }: { view: PlayerView; send: Send }) {
     send({ type: "say", text });
     setDraft("");
   };
+
+  // The dead can read the talk, but there's no point showing them an empty box.
+  if (silentAndDead) return null;
 
   return (
     <div className="card tight stack">
@@ -403,40 +419,12 @@ export function ChatPanel({ view, send }: { view: PlayerView; send: Send }) {
 }
 
 /**
- * Where the vote stands (who voted for whom is in the voting order below). A
- * tie eliminates nobody, which is a wasted day for the town.
- */
-function VoteTally({ view }: { view: PlayerView }) {
-  const standing = Object.entries(view.voteTally)
-    .filter(([, n]) => n > 0)
-    .sort((a, b) => b[1] - a[1]);
-  if (standing.length === 0) return null;
-  const most = standing[0]?.[1] ?? 0;
-  const tied = standing.filter(([, n]) => n === most).length > 1;
-  return (
-    <div className="card tight stack">
-      <div className="spread">
-        <b>🗳️ Where the vote stands</b>
-        {tied && <span className="pill">tied — nobody goes</span>}
-      </div>
-      {standing.map(([id, n]) => (
-        <div key={id} className="spread small">
-          <span>{view.players.find((p) => p.id === id)?.name ?? "someone"}</span>
-          <b className="count">{n}</b>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-/**
  * Voting, one at a time in the day's order: each vote is public the moment
  * it's cast, so later voters know exactly where the earlier ones landed.
  */
 export function VoteAction({ view, send }: { view: PlayerView; send: Send }) {
   const alive = view.players.filter((p) => p.alive && p.id !== view.you.id);
   const name = (id: string) => view.players.find((p) => p.id === id)?.name ?? "someone";
-  const already = view.myVote !== undefined;
   const myTurn = view.voteTurn === view.you.id;
   return (
     <div className="stack">
@@ -447,7 +435,6 @@ export function VoteAction({ view, send }: { view: PlayerView; send: Send }) {
           {myTurn ? "Your turn — who should the town eliminate?" : view.voteTurn ? <>Waiting on <b>{name(view.voteTurn)}</b> to vote…</> : "Counting the votes…"}
         </p>
       </div>
-      <VoteTally view={view} />
       {myTurn ? (
         <>
           <TargetGrid view={view} ids={alive.map((p) => p.id)} selected={null} onPick={(id) => send({ type: "castVote", targetId: id })} />
@@ -457,27 +444,37 @@ export function VoteAction({ view, send }: { view: PlayerView; send: Send }) {
         </>
       ) : null}
       <VoteOrder view={view} name={name} />
-      {already && !myTurn && (
-        <p className="center muted small">
-          You voted: <b>{view.myVote ? name(view.myVote) : "Abstain"}</b>
-        </p>
-      )}
       {view.config.chat !== false && <ChatPanel view={view} send={send} />}
     </div>
   );
 }
 
-/** The day's voting order, with who's done and who's up. */
+/**
+ * The whole vote in one list: the order, who's up, each vote as it's cast,
+ * and a one-line standing at the top (a tie eliminates nobody — a wasted day).
+ */
 function VoteOrder({ view, name }: { view: PlayerView; name: (id: string) => string }) {
   if (view.voteOrder.length === 0) return null;
+  const standing = Object.entries(view.voteTally)
+    .filter(([, n]) => n > 0)
+    .sort((a, b) => b[1] - a[1]);
+  const most = standing[0]?.[1] ?? 0;
+  const leaders = standing.filter(([, n]) => n === most).map(([id]) => name(id));
   return (
-    <div className="card tight stack">
-      <b>Voting order</b>
+    <div className="card tight stack" style={{ gap: 8 }}>
+      <div className="spread small">
+        <b>Voting order</b>
+        {most > 0 && (
+          <span className="pill">
+            {leaders.length > 1 ? `Tied at ${most}: ${leaders.join(", ")}` : `${leaders[0]} leads with ${most}`}
+          </span>
+        )}
+      </div>
       {view.voteOrder.map((id, i) => {
         const done = id in view.votes;
         const up = id === view.voteTurn;
         return (
-          <div key={id} className="spread small" style={{ opacity: done ? 0.6 : 1 }}>
+          <div key={id} className="spread small" style={{ opacity: done ? 0.7 : 1 }}>
             <span>
               {i + 1}. {name(id)}
               {id === view.you.id ? " (you)" : ""}
@@ -516,11 +513,19 @@ export function SilencedNote({ view }: { view: PlayerView }) {
   return <div className="card tight small">🤫 Lost their voice today (no vote): <b>{names.join(", ")}</b></div>;
 }
 
-export function PlayerList({ players, youId }: { players: PublicPlayer[]; youId: string }) {
+export function PlayerList({
+  players,
+  youId,
+  showPresence = false,
+}: {
+  players: PublicPlayer[];
+  youId: string;
+  showPresence?: boolean;
+}) {
   return (
     <div className="players grid">
       {players.map((p) => (
-        <PlayerChip key={p.id} player={p} you={p.id === youId} />
+        <PlayerChip key={p.id} player={p} you={p.id === youId} showPresence={showPresence} />
       ))}
     </div>
   );
@@ -548,21 +553,17 @@ export function GameOver({
       : view.winner === "village"
         ? { emoji: "🎉", headline: "The Village wins!" }
         : { emoji: "🐺", headline: "The Werewolves win!" };
+  // Roles can move mid-game (swaps, infections); a player's final role decides their side.
+  const won = (p: PublicPlayer) =>
+    view.winner === "solo" ? p.id === view.soloWinnerId : !!p.roleId && ROLES[p.roleId]?.team === view.winner;
   return (
     <div className="stack">
       <div className="phase-banner">
         <div className="big">{emoji}</div>
         <h1>{headline}</h1>
       </div>
-      <div className="card stack">
-        <b>The big reveal 🎭</b>
-        {view.players.map((p) => (
-          <div key={p.id} className="spread">
-            <span>{roleEmoji(p.roleId)} {p.name}</span>
-            <span className="muted">{p.roleId ? ROLES[p.roleId].name : "?"}</span>
-          </div>
-        ))}
-      </div>
+      <RevealGroup title="🏆 Won" players={view.players.filter(won)} />
+      <RevealGroup title="Lost" players={view.players.filter((p) => !won(p))} />
       {onPlayAgain ? (
         <button className="primary full lg" onClick={onPlayAgain}>
           Deal another game

@@ -20,14 +20,52 @@ export function useTimeTheme(phase: Phase | null) {
   }, [time]);
 }
 
-/** A loud reminder of whether the table may talk right now. */
-export function TimeBadge({ phase }: { phase: Phase }) {
+/**
+ * The screen's header line: which night or day it is, and whether the table
+ * may talk. One line instead of a badge plus a separate title.
+ */
+export function TimeBadge({ phase, round }: { phase: Phase; round: number }) {
   const time = timeOfDay(phase);
   if (!time) return null;
-  return time === "night" ? (
-    <div className="time-badge">🌙 Night — no talking, eyes on your own screen</div>
-  ) : (
-    <div className="time-badge">☀️ Day — talk it over</div>
+  if (time === "night")
+    return <div className="time-badge">🌙 {round > 0 ? `Night ${round}` : "Before nightfall"} · no talking</div>;
+  return <div className="time-badge">☀️ Day {round} · talk it over</div>;
+}
+
+/** Log entries that belong to a day's vote (as opposed to a night). */
+const DAY_EVENTS = new Set<LogEntry["type"]>(["lynch", "voteTie", "hunterShot"]);
+
+/**
+ * What the town wakes up to: last night's outcome and yesterday's vote, with
+ * everything older folded away. The full record is a tap away.
+ */
+export function TownNews({
+  log,
+  voteHistory,
+  round,
+  players,
+}: {
+  log: LogEntry[];
+  voteHistory: VoteRecord[];
+  round: number;
+  players: PublicPlayer[];
+}) {
+  const [all, setAll] = useState(false);
+  const recent = (e: LogEntry) =>
+    e.round === round || (e.round === round - 1 && (DAY_EVENTS.has(e.type) || (e.type === "noDeath" && e.cause === "lynch")));
+  const shownLog = all ? log : log.filter(recent);
+  const shownVotes = all ? voteHistory : voteHistory.filter((v) => v.round === round - 1);
+  const hasEarlier = log.some((e) => !recent(e) && describe(e, () => "") !== null) || voteHistory.length > shownVotes.length;
+  return (
+    <div className="stack" style={{ gap: 8 }}>
+      <LogFeed log={shownLog} players={players} limit={all ? 50 : 8} />
+      <VoteHistory history={shownVotes} players={players} limit={shownVotes.length} />
+      {hasEarlier && (
+        <button className="ghost small" style={{ alignSelf: "center" }} onClick={() => setAll((v) => !v)}>
+          {all ? "Show just the latest" : "Show earlier days"}
+        </button>
+      )}
+    </div>
   );
 }
 
@@ -96,7 +134,7 @@ export function VoteHistory({ history, players, limit = 1 }: { history: VoteReco
         .reverse()
         .map((rec) => (
           <div key={rec.round} className="card tight stack">
-            <b>🗳️ Day {rec.round}: how everyone voted</b>
+            <b className="small">🗳️ Day {rec.round} vote</b>
             <BallotLines votes={rec.votes} name={name} />
           </div>
         ))}
@@ -104,16 +142,22 @@ export function VoteHistory({ history, players, limit = 1 }: { history: VoteReco
   );
 }
 
-/** One line per voter: "Sam → Alex", "Kai abstained". */
+/**
+ * A ballot grouped by who got the votes, most first: "Ben · 3 — Cleo, Dev,
+ * Eli". One line per target reads faster than one per voter.
+ */
 export function BallotLines({ votes, name }: { votes: Record<string, string | null>; name: (id: string) => string }) {
   const entries = Object.entries(votes);
   if (entries.length === 0) return <div className="muted small">Nobody voted.</div>;
+  const byTarget = new Map<string | null, string[]>();
+  for (const [voter, target] of entries) byTarget.set(target, [...(byTarget.get(target) ?? []), voter]);
+  const rows = [...byTarget.entries()].sort((a, b) => (a[0] === null ? 1 : b[0] === null ? -1 : b[1].length - a[1].length));
   return (
     <>
-      {entries.map(([voter, target]) => (
-        <div key={voter} className="spread small">
-          <span>{name(voter)}</span>
-          <b>{target === null ? "abstained" : `→ ${name(target)}`}</b>
+      {rows.map(([target, voters]) => (
+        <div key={target ?? "-"} className="ballot-row small">
+          <b>{target === null ? "Abstained" : `${name(target)} · ${voters.length}`}</b>
+          <span className="muted">{voters.map(name).join(", ")}</span>
         </div>
       ))}
     </>
@@ -128,28 +172,37 @@ export function roleEmoji(roleId: string | null): string {
   return roleId ? ROLES[roleId]?.emoji ?? "❔" : "❔";
 }
 
+/**
+ * One player in a list: just the name, a skull if they're dead, and their
+ * role only where it's known. Online status matters to the host (who has the
+ * AFK controls), so only the host sees it.
+ */
 export function PlayerChip({
   player,
   you,
   tag,
+  showPresence = false,
 }: {
   player: PublicPlayer;
   you?: boolean;
   tag?: ReactNode;
+  showPresence?: boolean;
 }) {
-  const role = player.roleId ? ROLES[player.roleId] : null;
+  // Never your own role on a shared board: the person beside you can see your screen.
+  const role = player.roleId && !you ? ROLES[player.roleId] : null;
+  const offline = showPresence && player.alive && !player.connected;
   return (
     <div className={`chip ${player.alive ? "" : "dead"}`}>
-      <span className="avatar">{player.alive ? roleEmoji(player.roleId) : "💀"}</span>
-      <span className="name">
-        {player.name}
-        {you ? " (you)" : ""}
+      {!player.alive && <span className="avatar">💀</span>}
+      {player.alive && role && <span className="avatar">{role.emoji}</span>}
+      <span className="who">
+        <span className="name">
+          {player.name}
+          {you ? " (you)" : ""}
+        </span>
+        {(role || offline) && <span className="muted sub">{[role?.name, offline ? "offline" : ""].filter(Boolean).join(" · ")}</span>}
       </span>
-      {role && <span className="tag">{role.name}</span>}
       {tag}
-      {!role && (
-        <span className={`dot ${player.connected ? "on" : ""}`} title={player.connected ? "connected" : "offline"} />
-      )}
     </div>
   );
 }
@@ -202,12 +255,13 @@ export function InspectHistory({ view }: { view: PlayerView }) {
   );
 }
 
-export function LogFeed({ log, players }: { log: LogEntry[]; players: PublicPlayer[] }) {
+export function LogFeed({ log, players, limit = 8 }: { log: LogEntry[]; players: PublicPlayer[]; limit?: number }) {
   const name = (id: string) => players.find((p) => p.id === id)?.name ?? "someone";
   const lines = log
     .map((e) => describe(e, name))
     .filter((x): x is string => x !== null)
-    .slice(-8);
+    .slice(-limit);
+  if (lines.length === 0) return null;
   return (
     <div className="log">
       {lines.map((l, i) => (
