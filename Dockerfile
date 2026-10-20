@@ -26,4 +26,6 @@ ENV HOST=0.0.0.0
 ENV PORT=3000
 EXPOSE 3000
 
-CMD ["npm", "start"]
+# Run Node directly (not via npm/tsx wrappers) so it's PID 1 and receives
+# the SIGTERM a deploy sends: that's when it saves live rooms to /data.
+CMD ["node", "--import", "tsx", "packages/server/src/index.ts"]
