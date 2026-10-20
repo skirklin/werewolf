@@ -38,7 +38,7 @@ export const ROLES: Record<string, RoleDef> = {
     team: "werewolf",
     emoji: "🧛",
     blurb:
-      "A wolf with a nasty bite. Once per game, skip the hunt and infect a neighbor instead — they wake up furry and secretly join the pack.",
+      "A wolf with a nasty bite. Once per game, infect a neighbor — at dawn they wake up furry and secretly join the pack (a vision that same night still shows their old self).",
     night: { kind: "convert", order: 12, canTargetSelf: false },
   },
   seer: {
@@ -111,7 +111,7 @@ export const ROLES: Record<string, RoleDef> = {
     team: "village",
     emoji: "🎭",
     blurb:
-      "A quiet agent of chaos. Each night, secretly swap two players' roles — they wake up as someone new and never know.",
+      "A quiet agent of chaos. Each night, secretly swap two players' roles. The swap lands at dawn: they wake up as someone new and never know (anything they did tonight, they did as their old role).",
     drunkMimicable: true,
     night: { kind: "swap", order: 40 },
   },

@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { castVotes, voteAll } from "./testutil.js";
 import type { GameState, Player, GameConfig } from "./types.js";
 import { reduce, createGame, checkWinner, living, allVotesIn, validNightTargets, fabricatedReveal, fabricatedInspect, fabricatedSameTeam, DRUNK_MIMIC_KINDS } from "./engine.js";
 import { getRole } from "./roles.js";
@@ -64,7 +65,7 @@ describe("Hunter", () => {
     s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p2" });
     s = reduce(s, { type: "endNight" });
     s = reduce(s, { type: "startVote" });
-    for (const p of living(s)) if (p.id !== "p1") s = reduce(s, { type: "castVote", voterId: p.id, targetId: "p1" }); // lynch hunter
+    s = castVotes(s, Object.fromEntries(living(s).filter((p) => p.id !== "p1").map((p) => [p.id, "p1"]))); // lynch hunter
     s = reduce(s, { type: "resolveVote" });
     expect(s.phase).toBe("hunterShot");
     s = reduce(s, { type: "shoot", hunterId: "p1", targetId: "p3" });
@@ -101,7 +102,7 @@ describe("Hunter", () => {
     s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p2" });
     s = reduce(s, { type: "endNight" });
     s = reduce(s, { type: "startVote" });
-    for (const p of living(s)) if (p.id !== "p1") s = reduce(s, { type: "castVote", voterId: p.id, targetId: "p1" }); // lynch hunter
+    s = castVotes(s, Object.fromEntries(living(s).filter((p) => p.id !== "p1").map((p) => [p.id, "p1"]))); // lynch hunter
     s = reduce(s, { type: "resolveVote" });
     s = reduce(s, { type: "shoot", hunterId: "p1", targetId: "p0" }); // shoot the wolf
     expect(s.phase).toBe("gameOver");
@@ -142,7 +143,7 @@ describe("Tanner", () => {
     s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p2" });
     s = reduce(s, { type: "endNight" });
     s = reduce(s, { type: "startVote" });
-    for (const p of living(s)) if (p.id !== "p1") s = reduce(s, { type: "castVote", voterId: p.id, targetId: "p1" });
+    s = castVotes(s, Object.fromEntries(living(s).filter((p) => p.id !== "p1").map((p) => [p.id, "p1"])));
     s = reduce(s, { type: "resolveVote" });
     expect(s.phase).toBe("gameOver");
     expect(s.winner).toBe("solo");
@@ -155,8 +156,8 @@ describe("Tanner", () => {
     s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p2" });
     s = reduce(s, { type: "endNight" });
     s = reduce(s, { type: "startVote" });
-    for (const p of living(s)) if (p.id !== "p1") s = reduce(s, { type: "castVote", voterId: p.id, targetId: "p1" });
-    s = reduce(s, { type: "castVote", voterId: "p1", targetId: "p3" });
+    // Everyone else votes out the Tanner (p1), who votes for p3.
+    s = castVotes(s, { ...Object.fromEntries(living(s).filter((p) => p.id !== "p1").map((p) => [p.id, "p1"])), p1: "p3" });
     s = reduce(s, { type: "resolveVote" });
     const v = projectView(s, "p3");
     expect(v.winner).toBe("solo");
@@ -234,7 +235,7 @@ describe("Village Drunk (mimics any role)", () => {
     s = reduce(s, { type: "nightChoice", actorId: "p1", targetId: "p3" }); // drunk "protects" p3
     s = reduce(s, { type: "endNight" });
     s = reduce(s, { type: "startVote" });
-    for (const p of living(s)) s = reduce(s, { type: "castVote", voterId: p.id, targetId: null });
+    s = voteAll(s, () => null);
     s = reduce(s, { type: "resolveVote" });
     expect(s.round).toBe(2);
     // A real doctor couldn't repeat, so neither can the drunk — otherwise the
@@ -275,7 +276,7 @@ describe("Village Drunk (mimics any role)", () => {
     s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p2" }); // p2 dies
     s = reduce(s, { type: "endNight" });
     s = reduce(s, { type: "startVote" });
-    for (const p of living(s)) s = reduce(s, { type: "castVote", voterId: p.id, targetId: null });
+    s = voteAll(s, () => null);
     s = reduce(s, { type: "resolveVote" }); // night 2
     s = reduce(s, { type: "raiseAction", actorId: "p1", targetId: "p2" }); // drunk "raises" p2
     s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p3" });
@@ -328,7 +329,7 @@ describe("Village Drunk (mimics any role)", () => {
     expect(s.drunkDisguise["p2"]).toBeUndefined();
     // Next night the ex-Drunk wakes as a real wolf (kill step + sees the pack).
     s = reduce(s, { type: "startVote" });
-    for (const p of living(s)) s = reduce(s, { type: "castVote", voterId: p.id, targetId: null });
+    s = voteAll(s, () => null);
     s = reduce(s, { type: "resolveVote" });
     const v = projectView(s, "p2");
     expect(v.nightPrompt!.kind).toBe("kill");
@@ -428,7 +429,7 @@ describe("Witch", () => {
     s = reduce(s, { type: "endNight" }); // heal spent
     // Day, then a new night.
     s = reduce(s, { type: "startVote" });
-    for (const p of living(s)) if (p.id !== "p3") s = reduce(s, { type: "castVote", voterId: p.id, targetId: "p3" });
+    s = castVotes(s, Object.fromEntries(living(s).filter((p) => p.id !== "p3").map((p) => [p.id, "p3"])));
     s = reduce(s, { type: "resolveVote" });
     expect(s.phase).toBe("night");
     expect(projectView(s, "p1").nightPrompt!.witch!.healAvailable).toBe(false);
@@ -520,9 +521,7 @@ describe("Silencer", () => {
     s = reduce(s, { type: "startVote" });
     expect(() => reduce(s, { type: "castVote", voterId: "p3", targetId: "p1" })).toThrow(/silenced/i);
     // The remaining eligible voters (p0, p1, p4) can still resolve the day.
-    s = reduce(s, { type: "castVote", voterId: "p0", targetId: "p4" });
-    s = reduce(s, { type: "castVote", voterId: "p1", targetId: "p4" });
-    s = reduce(s, { type: "castVote", voterId: "p4", targetId: "p1" });
+    s = castVotes(s, { "p0": "p4", "p1": "p4", "p4": "p1" });
     expect(allVotesIn(s)).toBe(true); // p3 not required
     s = reduce(s, { type: "resolveVote" });
     expect(alive(s, "p4")).toBe(false); // lynched 2-1
@@ -553,7 +552,7 @@ describe("Silencer", () => {
     s = reduce(s, { type: "nightChoice", actorId: "p1", targetId: "p3" });
     s = reduce(s, { type: "endNight" });
     s = reduce(s, { type: "startVote" });
-    for (const p of living(s)) if (!s.silenced.includes(p.id) && p.id !== "p3") s = reduce(s, { type: "castVote", voterId: p.id, targetId: null });
+    s = voteAll(s, () => null);
     s = reduce(s, { type: "resolveVote" }); // -> next night
     expect(s.phase).toBe("night");
     expect(s.silenced).toEqual([]); // cleared for the new night
@@ -607,7 +606,7 @@ describe("Medium", () => {
     s = reduce(s, { type: "endNight" });
     // Skip the day.
     s = reduce(s, { type: "startVote" });
-    for (const p of living(s)) s = reduce(s, { type: "castVote", voterId: p.id, targetId: null });
+    s = voteAll(s, () => null);
     s = reduce(s, { type: "resolveVote" }); // -> night 2
     expect(s.phase).toBe("night");
     // Now the Medium can raise the dead p2.
@@ -620,7 +619,7 @@ describe("Medium", () => {
     expect(s.log.some((e) => e.type === "raised" && e.playerId === "p2")).toBe(true);
     // Power spent: no raise step on the next night.
     s = reduce(s, { type: "startVote" });
-    for (const p of living(s)) s = reduce(s, { type: "castVote", voterId: p.id, targetId: null });
+    s = voteAll(s, () => null);
     s = reduce(s, { type: "resolveVote" });
     expect(projectView(s, "p1").nightPrompt?.kind).not.toBe("raise");
   });
@@ -632,7 +631,7 @@ describe("Medium", () => {
     s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p3" }); // p3 dies
     s = reduce(s, { type: "endNight" });
     s = reduce(s, { type: "startVote" });
-    for (const p of living(s)) s = reduce(s, { type: "castVote", voterId: p.id, targetId: null });
+    s = voteAll(s, () => null);
     s = reduce(s, { type: "resolveVote" }); // -> night 2
     // Medium raises p3, Troublemaker swaps the Medium (p1) with villager p5.
     s = reduce(s, { type: "raiseAction", actorId: "p1", targetId: "p3" });
@@ -645,7 +644,7 @@ describe("Medium", () => {
     expect(s.mediumUsed["p1"]).toBeUndefined();
     // The new Medium (p5) gets no raise step — the power is truly gone.
     s = reduce(s, { type: "startVote" });
-    for (const p of living(s)) s = reduce(s, { type: "castVote", voterId: p.id, targetId: null });
+    s = voteAll(s, () => null);
     s = reduce(s, { type: "resolveVote" });
     expect(projectView(s, "p5").nightPrompt?.kind).not.toBe("raise");
   });
@@ -656,7 +655,7 @@ describe("Medium", () => {
     s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p2" });
     s = reduce(s, { type: "endNight" });
     s = reduce(s, { type: "startVote" });
-    for (const p of living(s)) s = reduce(s, { type: "castVote", voterId: p.id, targetId: null });
+    s = voteAll(s, () => null);
     s = reduce(s, { type: "resolveVote" }); // night 2
     expect(() => reduce(s, { type: "raiseAction", actorId: "p1", targetId: "p3" })).toThrow(); // p3 alive
     s = reduce(s, { type: "raiseAction", actorId: "p1", targetId: null }); // hold
@@ -739,7 +738,7 @@ describe("Infector", () => {
     expect(s.convertUsed["p1"]).toBe(true);
     // Power spent — no convert prompt next night.
     s = reduce(s, { type: "startVote" });
-    for (const p of living(s)) s = reduce(s, { type: "castVote", voterId: p.id, targetId: null });
+    s = voteAll(s, () => null);
     s = reduce(s, { type: "resolveVote" });
     expect(projectView(s, "p1").nightPrompt).toBeNull();
   });

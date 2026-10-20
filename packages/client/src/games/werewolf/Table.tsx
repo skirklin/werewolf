@@ -1,7 +1,7 @@
 import type { PlayerView, WerewolfAction } from "@party/werewolf";
 import type { TableProps } from "../../shell/game.js";
 import { RoleCard, InspectHistory, LogFeed, RolesInPlay, TimeBadge, useTimeTheme } from "./ui.js";
-import { NightAction, NightResult, DayBoard, VoteAction, ShootAction, DetectionHistory, GameOver, PlayerList } from "./phases.js";
+import { NightAction, NightResult, IdleNight, DayBoard, VoteAction, ShootAction, DetectionHistory, GameOver, PlayerList } from "./phases.js";
 
 type Send = (action: WerewolfAction) => void;
 
@@ -40,6 +40,7 @@ function renderPhase(view: PlayerView, send: Send, playAgain: () => void, onExit
       if (dead) return <Spectator view={view} label="🌙 The night creeps by…" />;
       if (view.nightPrompt) return <NightAction view={view} send={send} />;
       if (view.nightAwaitingAck) return <NightResult view={view} send={send} />;
+      if (view.idlePrompt) return <IdleNight view={view} send={send} />;
       return (
         <div className="stack">
           <div className="phase-banner"><div className="big">🌙</div><h2>Night falls</h2></div>
@@ -95,11 +96,12 @@ function renderPhase(view: PlayerView, send: Send, playAgain: () => void, onExit
  */
 function HostRecovery({ view, send }: { view: PlayerView; send: Send }) {
   if (!view.you.isHost) return null;
+  const turnName = view.players.find((p) => p.id === view.voteTurn)?.name;
   const action =
     view.phase === "night"
       ? { label: "Nudge the night along (someone's AFK)", msg: { type: "endNight" } as WerewolfAction }
-      : view.phase === "dayVote"
-        ? { label: "Force the vote (someone's AFK)", msg: { type: "resolveVote" } as WerewolfAction }
+      : view.phase === "dayVote" && turnName
+        ? { label: `Skip ${turnName}'s vote (they're AFK)`, msg: { type: "skipVoter" } as WerewolfAction }
         : view.phase === "hunterShot"
           ? { label: "Skip the shot (Hunter's AFK)", msg: { type: "skipShot" } as WerewolfAction }
           : null;

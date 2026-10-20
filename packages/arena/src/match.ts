@@ -189,14 +189,18 @@ export class Arena {
         }
 
         case "dayVote": {
-          for (const client of clients) {
-            const me = await current(client);
-            if (!me) continue;
-            const seat = clients.indexOf(client);
-            if (me.myVote !== undefined || me.silencedIds.includes(me.you.id)) continue;
-            const target = await strategies[seat].vote(me);
-            client.send({ type: "castVote", targetId: target });
-            await client.soft((v) => v.myVote !== undefined || v.phase !== "dayVote", 2000);
+          // One at a time, in the day's order: each voter sees every vote before theirs.
+          for (let turn = host.view?.voteTurn; host.view?.phase === "dayVote" && turn; turn = host.view?.voteTurn) {
+            const client = clients.find((c) => c.view?.you.id === turn);
+            const me = client && (await current(client));
+            if (!client || !me) {
+              host.send({ type: "skipVoter" }); // nobody to ask; don't stall the day
+            } else {
+              const seat = clients.indexOf(client);
+              await client.soft((v) => v.voteTurn === turn, 2000);
+              client.send({ type: "castVote", targetId: await strategies[seat].vote(client.view!) });
+            }
+            await host.soft((v) => v.voteTurn !== turn || v.phase !== "dayVote", 2000);
           }
           await host.waitFor((v) => v.phase !== "dayVote", "the vote to resolve");
           break;
@@ -231,6 +235,11 @@ export class Arena {
       const acking = clients.filter((c) => c.view?.phase === "night" && c.view.nightAwaitingAck);
       for (const c of acking) c.send({ type: "nightAck" });
       await Promise.all(acking.map((c) => c.soft((v) => !v.nightAwaitingAck || v.phase !== "night", 2000)));
+      if (host.view?.phase !== "night") return;
+      // Seats with no power tonight tap their decoy (the night waits for them too).
+      const idle = clients.filter((c) => c.view?.phase === "night" && c.view.idlePrompt);
+      for (const c of idle) c.send({ type: "nightIdle", targetId: c.view!.idlePrompt!.targetIds[0] });
+      await Promise.all(idle.map((c) => c.soft((v) => !v.idlePrompt || v.phase !== "night", 2000)));
       if (host.view?.phase !== "night") return;
       const pending = clients.filter((c) => c.view?.nightPrompt);
       if (!pending.length) {

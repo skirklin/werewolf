@@ -166,6 +166,12 @@ export interface NightState {
    * The night waits for them, so a result never vanishes before it's read.
    */
   acked: PlayerId[];
+  /**
+   * Living players with no power tonight who have tapped through their decoy
+   * prompt. Everyone gets something to tap at night, and the night waits for
+   * all of it, so a phone being busy never marks its owner as a power role.
+   */
+  idleDone: PlayerId[];
 }
 
 /** How each voter voted in one day's ballot (null = abstained). Public. */
@@ -225,6 +231,11 @@ export interface GameState {
   chat: ChatMessage[];
   /** voterId -> targetId, or null for an explicit skip. */
   votes: Record<PlayerId, PlayerId | null>;
+  /**
+   * Today's voting order: everyone eligible, one at a time, starting from a
+   * seat that moves round the table each day. Later voters see earlier votes.
+   */
+  voteOrder: PlayerId[];
   /** Every resolved day ballot, oldest first. Votes are open, not secret. */
   voteHistory: VoteRecord[];
   /** Per-Witch remaining potions (heal/poison), each usable once all game. */

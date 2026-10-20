@@ -14,9 +14,12 @@ export type WerewolfAction =
   | { type: "detectAction"; aId: PlayerId; bId: PlayerId }
   | { type: "raiseAction"; targetId: PlayerId | null }
   | { type: "nightAck" }
+  /** A player with no power tonight taps through their decoy prompt. */
+  | { type: "nightIdle"; targetId: PlayerId }
   | { type: "endNight" }
   | { type: "startVote" }
   | { type: "castVote"; targetId: PlayerId | null }
+  | { type: "skipVoter" }
   | { type: "resolveVote" }
   | { type: "shoot"; targetId: PlayerId }
   | { type: "skipShot" }

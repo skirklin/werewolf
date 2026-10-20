@@ -491,7 +491,6 @@ function voteQuestion(view: PlayerView): string {
   return [
     standing ? `Votes so far — ${standing}.` : "Nobody has voted yet.",
     view.votesRemaining > 0 ? `${view.votesRemaining} still to vote.` : "",
-    view.myVote !== undefined ? "You have already voted; this replaces it." : "",
     "Who do you vote to eliminate?",
   ]
     .filter(Boolean)
