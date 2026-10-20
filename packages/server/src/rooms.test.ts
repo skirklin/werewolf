@@ -168,20 +168,39 @@ describe("rooms", () => {
     expect(clients[0].room!.players.find((p) => p.id === clients[0].playerId)!.connected).toBe(true);
   });
 
-  it("mid-game, joining with your old name takes back your empty seat", () => {
-    const { room, clients } = seatPlayers(3, "counter");
-    room.handle(clients[0].playerId, { type: "startGame", config: { target: 3 } });
-    const name = clients[1].room!.players.find((p) => p.id === clients[1].playerId)!.name;
-    // Still connected: nobody can take the seat out from under them.
-    expect(() => room.addPlayer(name, new FakeClient())).toThrow(/already connected/);
-    room.disconnect(clients[1]);
-    const phone = new FakeClient();
-    const { playerId, token } = room.addPlayer(` ${name.toUpperCase()} `, phone);
-    expect(playerId).toBe(clients[1].playerId);
-    expect(phone.room!.players.find((p) => p.id === playerId)!.connected).toBe(true);
-    expect(room.rejoin(playerId, clients[1].token, new FakeClient())).toBe(false); // old token retired
-    expect(room.rejoin(playerId, token, phone)).toBe(true);
-    expect(() => room.addPlayer("Stranger", new FakeClient())).toThrow(/exact name/);
+  it("mid-game, joining from the same device takes back that device's seat", () => {
+    const room = mgr.create("counter");
+    const phones = ["device-aaaaaaaaaaaaaaaa", "device-bbbbbbbbbbbbbbbb"];
+    const first = phones.map((d, i) => {
+      const c = new FakeClient();
+      return { c, ...room.addPlayer(`P${i}`, c, d) };
+    });
+    room.handle(first[0].playerId, { type: "startGame", config: { target: 3 } });
+
+    // Someone tapped Leave (saved seat gone), then joins again from that phone.
+    room.disconnect(first[1].c);
+    const again = new FakeClient();
+    const back = room.addPlayer("whatever name", again, phones[1]);
+    expect(back.playerId).toBe(first[1].playerId);
+    expect(again.room!.players.find((p) => p.id === back.playerId)!.connected).toBe(true);
+    expect(room.rejoin(back.playerId, first[1].token, new FakeClient())).toBe(false); // old token retired
+
+    // A name is not a key: someone else using that name gets nothing.
+    expect(() => room.addPlayer("P1", new FakeClient(), "device-cccccccccccccccc")).toThrow(/already started/);
+    expect(() => room.addPlayer("P1", new FakeClient())).toThrow(/already started/);
+    // And no device id is ever shown to the table.
+    expect(JSON.stringify(again.messages)).not.toContain("device-");
+  });
+
+  it("the same device joining a lobby twice keeps one seat", () => {
+    const room = mgr.create("counter");
+    const a = room.addPlayer("Sam", new FakeClient(), "device-aaaaaaaaaaaaaaaa");
+    const b = room.addPlayer("Sam", new FakeClient(), "device-aaaaaaaaaaaaaaaa");
+    expect(b.playerId).toBe(a.playerId);
+    expect(room.players).toHaveLength(1);
+    // Two different people called Sam get told apart.
+    room.addPlayer("Sam", new FakeClient(), "device-bbbbbbbbbbbbbbbb");
+    expect(room.players.map((p) => p.name)).toEqual(["Sam", "Sam 2"]);
   });
 
   it("leaving the lobby on purpose frees the seat for good", () => {

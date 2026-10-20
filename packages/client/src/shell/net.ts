@@ -34,6 +34,26 @@ function loadCreds(): Creds | null {
   }
 }
 
+const DEVICE_KEY = "party.deviceId";
+
+/**
+ * This browser's own random id, made once and kept (it outlives Leave). The
+ * server uses it to hand a seat back to the device that held it — never a
+ * name, which anyone could type.
+ */
+function deviceId(): string | undefined {
+  try {
+    let id = localStorage.getItem(DEVICE_KEY);
+    if (!id) {
+      id = crypto.randomUUID?.() ?? Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, "0")).join("");
+      localStorage.setItem(DEVICE_KEY, id);
+    }
+    return id;
+  } catch {
+    return undefined; // storage blocked: this device just can't reclaim a seat
+  }
+}
+
 /** True when this browser was in a room and should try to rejoin it. */
 export function hasSavedRoom(): boolean {
   return loadCreds() !== null;
@@ -202,7 +222,7 @@ export function useRoom(): RoomConnection {
 
   const create = useCallback(
     (game: string, name: string) => {
-      onOpenRef.current = () => send({ type: "createRoom", game, name });
+      onOpenRef.current = () => send({ type: "createRoom", game, name, deviceId: deviceId() });
       ensureSocket();
       flush();
     },
@@ -211,7 +231,7 @@ export function useRoom(): RoomConnection {
 
   const join = useCallback(
     (roomCode: string, name: string) => {
-      onOpenRef.current = () => send({ type: "joinRoom", code: normalizeRoomCode(roomCode), name });
+      onOpenRef.current = () => send({ type: "joinRoom", code: normalizeRoomCode(roomCode), name, deviceId: deviceId() });
       ensureSocket();
       flush();
     },
