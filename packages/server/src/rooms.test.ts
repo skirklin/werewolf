@@ -333,6 +333,14 @@ describe("rematch", () => {
   });
 });
 
+/** Everyone with no power tonight taps their decoy (the night waits for them). */
+function idleAll(room: Room, clients: FakeClient[]) {
+  for (const c of clients) {
+    const prompt = c.view?.phase === "night" ? c.view.idlePrompt : null;
+    if (prompt) ww(room, c, { type: "nightIdle", targetId: prompt.targetIds[0] });
+  }
+}
+
 describe("werewolf in a room", () => {
   it("a villager never receives another player's role", () => {
     const { room, clients } = seatPlayers(4);
@@ -379,6 +387,7 @@ describe("werewolf in a room", () => {
     const wolf = clients.find((c) => c.view!.you.roleId === "werewolf")!;
     const victimId = wolf.view!.nightPrompt!.targetIds[0];
     ww(room, wolf, { type: "nightChoice", targetId: victimId });
+    idleAll(room, clients);
 
     expect(host.view!.phase).toBe("dayDiscussion");
     expect(byId(victimId).view!.you.alive).toBe(false);
@@ -386,8 +395,11 @@ describe("werewolf in a room", () => {
     ww(room, host, { type: "startVote" });
     const living = clients.filter((c) => c.view!.you.alive);
     const decoy = living.find((c) => c.playerId !== wolf.playerId)!;
-    for (const c of living)
+    // One at a time, in the order the day calls them.
+    for (let turn = host.view!.voteTurn; turn; turn = host.view!.phase === "dayVote" ? host.view!.voteTurn : null) {
+      const c = living.find((x) => x.playerId === turn)!;
       ww(room, c, { type: "castVote", targetId: c.playerId === wolf.playerId ? decoy.playerId : wolf.playerId });
+    }
 
     expect(host.view!.phase).toBe("gameOver");
     expect(host.view!.winner).toBe("village");
@@ -411,6 +423,7 @@ describe("werewolf in a room", () => {
     const victimId = wolf.view!.nightPrompt!.targetIds[0];
     ww(room, doctor, { type: "nightChoice", targetId: victimId });
     ww(room, wolf, { type: "nightChoice", targetId: victimId });
+    idleAll(room, clients);
     expect(clients[0].view!.phase).toBe("dayDiscussion");
     expect(clients.find((c) => c.playerId === victimId)!.view!.you.alive).toBe(true);
   });
@@ -422,6 +435,7 @@ describe("werewolf in a room", () => {
     const wolf = clients.find((c) => c.view!.you.roleId === "werewolf")!;
     const hunter = clients.find((c) => c.view!.you.roleId === "hunter")!;
     ww(room, wolf, { type: "nightChoice", targetId: hunter.playerId });
+    idleAll(room, clients);
     expect(clients[0].view!.phase).toBe("hunterShot");
     const victim = hunter.view!.shootPrompt!.targetIds.find((id) => id !== wolf.playerId)!;
     ww(room, hunter, { type: "shoot", targetId: victim });

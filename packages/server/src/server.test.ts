@@ -214,6 +214,12 @@ describe("websocket transport", () => {
     const wolfView = await wolf.awaitView((v) => v.phase === "night" && !!v.nightPrompt);
     const victimId = wolfView.nightPrompt!.targetIds[0];
     wolf.act({ type: "nightChoice", targetId: victimId });
+    // Everyone else has no power tonight: each taps their decoy prompt.
+    for (const s of socks) {
+      if (s === wolf) continue;
+      const idle = await s.awaitView((v) => v.phase === "night" && !!v.idlePrompt);
+      s.act({ type: "nightIdle", targetId: idle.idlePrompt!.targetIds[0] });
+    }
     await host.awaitView((v) => v.phase === "dayDiscussion");
 
     // The dead villager's own socket should now see itself as dead.
@@ -222,12 +228,13 @@ describe("websocket transport", () => {
 
     // Day vote: everyone votes out the wolf; the wolf (can't self-vote) votes a decoy.
     host.act({ type: "startVote" });
-    await host.awaitView((v) => v.phase === "dayVote");
+    const voting = await host.awaitView((v) => v.phase === "dayVote");
     const decoy = socks.find((s) => s.playerId !== wolf.playerId && s.playerId !== victimId)!;
-    for (const s of socks) {
-      if (s.playerId === victimId) continue; // dead players can't vote
-      const target = s.playerId === wolf.playerId ? decoy.playerId : wolf.playerId;
-      s.act({ type: "castVote", targetId: target });
+    // One at a time, in the day's order, each waiting for their turn.
+    for (const id of voting.voteOrder) {
+      const s = socks.find((x) => x.playerId === id)!;
+      await s.awaitView((v) => v.voteTurn === id);
+      s.act({ type: "castVote", targetId: id === wolf.playerId ? decoy.playerId : wolf.playerId });
     }
 
     const over = await host.awaitView((v) => v.phase === "gameOver");

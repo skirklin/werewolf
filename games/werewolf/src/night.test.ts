@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { GameState, Player, GameConfig } from "./types.js";
-import { createGame, reduce } from "./engine.js";
+import { createGame, reduce, nightIdlers } from "./engine.js";
 import { projectView } from "./views.js";
 import { possibleRoles } from "./setup.js";
 import { werewolfModule } from "./module.js";
@@ -27,11 +27,29 @@ function gameWith(roles: string[], over: Partial<GameConfig> = {}): GameState {
 const act = (s: GameState, seat: string, action: unknown) =>
   werewolfModule.act(s, seat, action, { isHost: seat === "p0" });
 
+/** Everyone with no power tonight taps through their decoy prompt. */
+function idleRest(s: GameState): GameState {
+  for (const p of nightIdlers(s)) {
+    if (s.phase !== "night" || s.night!.idleDone.includes(p.id)) continue;
+    const pick = projectView(s, p.id).idlePrompt!.targetIds[0];
+    s = act(s, p.id, { type: "nightIdle", targetId: pick });
+  }
+  return s;
+}
+
+/** Cast this ballot the way the table does: one at a time, in voting order. */
+function voteInOrder(s: GameState, ballot: Record<string, string | null>): GameState {
+  for (const id of s.voteOrder)
+    if (s.phase === "dayVote" && !(id in s.votes)) s = act(s, id, { type: "castVote", targetId: ballot[id] ?? null });
+  return s;
+}
+
 describe("the night waits for results to be read", () => {
   it("doesn't dawn until the Seer dismisses her vision", () => {
     let s = gameWith(["werewolf", "seer", "villager", "villager", "villager"]);
     s = act(s, "p1", { type: "nightChoice", targetId: "p0" });
     s = act(s, "p0", { type: "nightChoice", targetId: "p2" });
+    s = idleRest(s);
     expect(s.phase).toBe("night"); // everyone acted, but the vision is unread
     const seer = projectView(s, "p1");
     expect(seer.nightAwaitingAck).toBe(true);
@@ -47,6 +65,7 @@ describe("the night waits for results to be read", () => {
     expect(() => act(s, "p2", { type: "nightAck" })).toThrow();
     s = act(s, "p1", { type: "detectAction", aId: "p0", bId: "p2" });
     s = act(s, "p0", { type: "nightChoice", targetId: "p3" });
+    s = idleRest(s);
     expect(s.phase).toBe("night");
     s = act(s, "p1", { type: "nightAck" });
     expect(s.phase).toBe("dayDiscussion");
@@ -111,8 +130,10 @@ describe("no cross-player information at night", () => {
 
   it("a Witch move with the potions left out means 'do nothing'", () => {
     let s = gameWith(["werewolf", "witch", "villager", "villager", "villager"], { peacefulFirstNight: true });
+    s = idleRest(s); // the wolf sits out a peaceful first night, so it gets a decoy too
+    expect(s.phase).toBe("night");
     s = act(s, "p1", { type: "witchAction" });
-    expect(s.phase).toBe("dayDiscussion"); // the only actor on a peaceful first night
+    expect(s.phase).toBe("dayDiscussion");
   });
 
   it("nobody's view changes when someone else acts at night", () => {
@@ -128,15 +149,15 @@ describe("open votes", () => {
   it("shows who voted for whom, live and after the vote", () => {
     let s = gameWith(["werewolf", "villager", "villager", "villager", "villager"]);
     s = act(s, "p0", { type: "nightChoice", targetId: "p1" });
+    s = idleRest(s);
     s = act(s, "p0", { type: "startVote" });
-    s = act(s, "p2", { type: "castVote", targetId: "p0" });
-    expect(projectView(s, "p3").votes).toEqual({ p2: "p0" });
-    s = act(s, "p3", { type: "castVote", targetId: "p0" });
-    s = act(s, "p4", { type: "castVote", targetId: null });
+    expect(s.voteOrder).toEqual(["p0", "p2", "p3", "p4"]); // day 1 starts at seat 0
     s = act(s, "p0", { type: "castVote", targetId: "p2" });
+    expect(projectView(s, "p3").votes).toEqual({ p0: "p2" });
+    s = voteInOrder(s, { p2: "p0", p3: "p0", p4: null });
     expect(s.phase).toBe("gameOver");
     expect(projectView(s, "p3").voteHistory).toEqual([
-      { round: 1, votes: { p2: "p0", p3: "p0", p4: null, p0: "p2" } },
+      { round: 1, votes: { p0: "p2", p2: "p0", p3: "p0", p4: null } },
     ]);
   });
 });
@@ -151,6 +172,7 @@ describe("chat switch", () => {
   it("allows it by default (older configs have no switch)", () => {
     let s = gameWith(["werewolf", "villager", "villager", "villager"]);
     s = act(s, "p0", { type: "nightChoice", targetId: "p1" });
+    s = idleRest(s);
     s = act(s, "p2", { type: "say", text: "hi" });
     expect(s.chat).toHaveLength(1);
   });
@@ -175,3 +197,67 @@ describe("possible roles", () => {
     expect(projectView(s, "p2").possibleRoles).toEqual(["werewolf", "seer", "villager"]);
   });
 });
+
+describe("everyone taps something at night", () => {
+  it("players with no power get a decoy prompt, and the night waits for them", () => {
+    let s = gameWith(["werewolf", "seer", "villager", "villager"]);
+    const v = projectView(s, "p2");
+    expect(v.nightPrompt).toBeNull();
+    expect(v.idlePrompt!.targetIds).toEqual(["p0", "p1", "p3"]);
+    expect(projectView(s, "p0").idlePrompt).toBeNull(); // real powers get real prompts
+    s = act(s, "p0", { type: "nightChoice", targetId: "p2" });
+    s = act(s, "p1", { type: "nightChoice", targetId: "p3" });
+    s = act(s, "p1", { type: "nightAck" });
+    s = act(s, "p2", { type: "nightIdle", targetId: "p0" });
+    expect(s.phase).toBe("night"); // p3 hasn't tapped yet
+    expect(projectView(s, "p2").idlePrompt).toBeNull();
+    s = act(s, "p3", { type: "nightIdle", targetId: "p0" });
+    expect(s.phase).toBe("dayDiscussion");
+  });
+
+  it("a decoy pick changes nothing and nobody else can see it", () => {
+    let s = gameWith(["werewolf", "villager", "villager", "villager"]);
+    const others = ["p0", "p2", "p3"].map((id) => JSON.stringify(projectView(s, id)));
+    s = act(s, "p1", { type: "nightIdle", targetId: "p0" });
+    expect(["p0", "p2", "p3"].map((id) => JSON.stringify(projectView(s, id)))).toEqual(others);
+    expect(() => act(s, "p0", { type: "nightIdle", targetId: "p1" })).toThrow(/real choice/);
+  });
+});
+
+describe("sequential votes", () => {
+  const toDay = (s: GameState) => {
+    s = act(s, "p0", { type: "nightChoice", targetId: s.players.at(-1)!.id });
+    return act(idleRest(s), "p0", { type: "startVote" });
+  };
+
+  it("votes go one at a time, in order, and out-of-turn votes are refused", () => {
+    let s = toDay(gameWith(["werewolf", "villager", "villager", "villager", "villager", "villager"]));
+    expect(projectView(s, "p3").voteTurn).toBe("p0");
+    expect(() => act(s, "p3", { type: "castVote", targetId: "p0" })).toThrow(/turn/);
+    s = act(s, "p0", { type: "castVote", targetId: "p3" });
+    expect(projectView(s, "p4").voteTurn).toBe("p1");
+    expect(() => act(s, "p0", { type: "castVote", targetId: "p4" })).toThrow(/already voted/);
+  });
+
+  it("the first voter moves one seat round the table each day", () => {
+    const s = gameWith(["werewolf", "villager", "villager", "villager", "villager", "villager"]);
+    expect(voteOrderOn({ ...s, round: 1 })[0]).toBe("p0");
+    expect(voteOrderOn({ ...s, round: 2 })[0]).toBe("p1");
+    expect(voteOrderOn({ ...s, round: 7 })[0]).toBe("p0");
+    // Dead and silenced players are left out, without breaking the rotation.
+    const fewer = { ...s, round: 2, silenced: ["p1"], players: s.players.map((p) => (p.id === "p2" ? { ...p, alive: false } : p)) };
+    expect(voteOrderOn(fewer)).toEqual(["p3", "p4", "p5", "p0"]);
+  });
+
+  it("the host can skip a voter who has wandered off (counts as an abstain)", () => {
+    let s = toDay(gameWith(["werewolf", "villager", "villager", "villager", "villager", "villager"]));
+    expect(() => act(s, "p1", { type: "skipVoter" })).toThrow(/host/i);
+    s = act(s, "p0", { type: "skipVoter" });
+    expect(s.votes).toEqual({ p0: null });
+    expect(projectView(s, "p2").voteTurn).toBe("p1");
+  });
+});
+
+function voteOrderOn(s: GameState): string[] {
+  return reduce({ ...s, phase: "dayDiscussion" }, { type: "startVote" }).voteOrder;
+}

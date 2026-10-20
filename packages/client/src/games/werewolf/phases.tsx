@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { ROLES, MAX_CHAT_TEXT, type PlayerView, type WerewolfAction, type PublicPlayer } from "@party/werewolf";
-import { PlayerChip, LogFeed, roleEmoji, InspectHistory, RolesInPlay, VoteHistory, BallotLines } from "./ui.js";
+import { PlayerChip, LogFeed, roleEmoji, InspectHistory, RolesInPlay, VoteHistory } from "./ui.js";
 
 type Send = (msg: WerewolfAction) => void;
 
@@ -276,6 +276,28 @@ export function NightResult({ view, send }: { view: PlayerView; send: Send }) {
   );
 }
 
+/**
+ * The night screen for a player with no power tonight. Everyone at the table
+ * is tapping at night, so a busy phone gives nobody away; this pick goes
+ * nowhere, and the night waits for it like any other.
+ */
+export function IdleNight({ view, send }: { view: PlayerView; send: Send }) {
+  const [picked, setPicked] = useState<string | null>(null);
+  return (
+    <div className="stack">
+      <div className="phase-banner">
+        <div className="big">🌙</div>
+        <h2>The village sleeps</h2>
+        <p className="muted">Who do you suspect most? Only you see this, and it changes nothing — it just keeps every phone at the table equally busy.</p>
+      </div>
+      <TargetGrid view={view} ids={view.idlePrompt!.targetIds} selected={picked} onPick={setPicked} />
+      <button className="primary full lg" disabled={!picked} onClick={() => picked && send({ type: "nightIdle", targetId: picked })}>
+        Confirm
+      </button>
+    </div>
+  );
+}
+
 /** Day discussion board — public info everyone can see. */
 export function DayBoard({
   view,
@@ -366,14 +388,14 @@ export function ChatPanel({ view, send }: { view: PlayerView; send: Send }) {
 }
 
 /**
- * Where the vote stands, and who voted for whom — the ballot is open. A tie
- * eliminates nobody, which is a wasted day for the town.
+ * Where the vote stands (who voted for whom is in the voting order below). A
+ * tie eliminates nobody, which is a wasted day for the town.
  */
 function VoteTally({ view }: { view: PlayerView }) {
   const standing = Object.entries(view.voteTally)
     .filter(([, n]) => n > 0)
     .sort((a, b) => b[1] - a[1]);
-  if (Object.keys(view.votes).length === 0) return null;
+  if (standing.length === 0) return null;
   const most = standing[0]?.[1] ?? 0;
   const tied = standing.filter(([, n]) => n === most).length > 1;
   return (
@@ -388,44 +410,67 @@ function VoteTally({ view }: { view: PlayerView }) {
           <b className="count">{n}</b>
         </div>
       ))}
-      <div className="divider" />
-      <BallotLines votes={view.votes} name={(id) => view.players.find((p) => p.id === id)?.name ?? "someone"} />
     </div>
   );
 }
 
-/** Voting UI for a living player. */
+/**
+ * Voting, one at a time in the day's order: each vote is public the moment
+ * it's cast, so later voters know exactly where the earlier ones landed.
+ */
 export function VoteAction({ view, send }: { view: PlayerView; send: Send }) {
   const alive = view.players.filter((p) => p.alive && p.id !== view.you.id);
+  const name = (id: string) => view.players.find((p) => p.id === id)?.name ?? "someone";
   const already = view.myVote !== undefined;
+  const myTurn = view.voteTurn === view.you.id;
   return (
     <div className="stack">
       <div className="phase-banner">
         <div className="big">🗳️</div>
         <h2>Vote</h2>
-        <p className="muted">{already ? "Vote locked in." : "Who should the town eliminate?"}</p>
+        <p className="muted">
+          {myTurn ? "Your turn — who should the town eliminate?" : view.voteTurn ? <>Waiting on <b>{name(view.voteTurn)}</b> to vote…</> : "Counting the votes…"}
+        </p>
       </div>
       <VoteTally view={view} />
-      {already ? (
-        <div className="card center">
-          You voted:{" "}
-          <b>{view.myVote === null ? "Abstain" : view.players.find((p) => p.id === view.myVote)?.name}</b>
-          <p className="muted small">Waiting for {view.votesRemaining} more…</p>
-        </div>
-      ) : (
+      {myTurn ? (
         <>
-          <TargetGrid
-            view={view}
-            ids={alive.map((p) => p.id)}
-            selected={null}
-            onPick={(id) => send({ type: "castVote", targetId: id })}
-          />
+          <TargetGrid view={view} ids={alive.map((p) => p.id)} selected={null} onPick={(id) => send({ type: "castVote", targetId: id })} />
           <button className="ghost full" onClick={() => send({ type: "castVote", targetId: null })}>
             Abstain
           </button>
         </>
+      ) : null}
+      <VoteOrder view={view} name={name} />
+      {already && !myTurn && (
+        <p className="center muted small">
+          You voted: <b>{view.myVote ? name(view.myVote) : "Abstain"}</b>
+        </p>
       )}
       {view.config.chat !== false && <ChatPanel view={view} send={send} />}
+    </div>
+  );
+}
+
+/** The day's voting order, with who's done and who's up. */
+function VoteOrder({ view, name }: { view: PlayerView; name: (id: string) => string }) {
+  if (view.voteOrder.length === 0) return null;
+  return (
+    <div className="card tight stack">
+      <b>Voting order</b>
+      {view.voteOrder.map((id, i) => {
+        const done = id in view.votes;
+        const up = id === view.voteTurn;
+        return (
+          <div key={id} className="spread small" style={{ opacity: done ? 0.6 : 1 }}>
+            <span>
+              {i + 1}. {name(id)}
+              {id === view.you.id ? " (you)" : ""}
+            </span>
+            <b>{up ? "voting now…" : done ? (view.votes[id] === null ? "abstained" : `→ ${name(view.votes[id]!)}`) : ""}</b>
+          </div>
+        );
+      })}
     </div>
   );
 }

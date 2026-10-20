@@ -20,7 +20,7 @@ export const werewolfModule: GameModule<GameConfig, GameState, PlayerView> & {
   minPlayers: 3,
   maxPlayers: 30,
   // Bump when GameState changes shape (see GameModule.stateVersion).
-  stateVersion: 1,
+  stateVersion: 2, // 2: decoy night prompts (night.idleDone) + sequential votes (voteOrder)
 
   parseConfig(raw, players) {
     let problems;
@@ -98,6 +98,8 @@ function toEngineAction(actorId: string, msg: WerewolfAction, isHost: boolean): 
       return { type: "raiseAction", actorId, targetId: msg.targetId ?? null };
     case "nightAck":
       return { type: "nightAck", actorId };
+    case "nightIdle":
+      return { type: "nightIdle", actorId, targetId: msg.targetId };
     case "endNight":
       hostOnly();
       return { type: "endNight" };
@@ -105,7 +107,10 @@ function toEngineAction(actorId: string, msg: WerewolfAction, isHost: boolean): 
       hostOnly();
       return { type: "startVote" };
     case "castVote":
-      return { type: "castVote", voterId: actorId, targetId: msg.targetId };
+      return { type: "castVote", voterId: actorId, targetId: msg.targetId ?? null };
+    case "skipVoter":
+      hostOnly(); // recovery when the voter whose turn it is has gone quiet
+      return { type: "skipVoter" };
     case "resolveVote":
       hostOnly();
       return { type: "resolveVote" };

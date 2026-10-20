@@ -102,12 +102,24 @@ export function unackedNightResults(state: GameState): PlayerId[] {
     .filter((id) => !acked.includes(id) && playerById(state, id)?.alive);
 }
 
+/** Living players with no night step tonight (they get a decoy prompt). */
+export function nightIdlers(state: GameState): Player[] {
+  const steps = state.night?.steps ?? [];
+  return living(state).filter((p) => !steps.some((s) => s.actorIds.includes(p.id)));
+}
+
 /**
- * Whether the night can close by itself: everyone has acted AND everyone who
- * learned something has had the chance to read it. (The host can still force it.)
+ * Whether the night can close by itself: everyone has acted (powers and
+ * decoys alike) AND everyone who learned something has had the chance to
+ * read it. (The host can still force it.)
  */
 export function nightReadyToEnd(state: GameState): boolean {
-  return allNightStepsDone(state) && unackedNightResults(state).length === 0;
+  const idleDone = state.night?.idleDone ?? [];
+  return (
+    allNightStepsDone(state) &&
+    unackedNightResults(state).length === 0 &&
+    nightIdlers(state).every((p) => idleDone.includes(p.id))
+  );
 }
 
 /** Valid targets for a given actor's (effective, possibly disguised) night ability. */
@@ -149,9 +161,11 @@ export type Action =
   | { type: "detectAction"; actorId: PlayerId; aId: PlayerId; bId: PlayerId }
   | { type: "raiseAction"; actorId: PlayerId; targetId: PlayerId | null }
   | { type: "nightAck"; actorId: PlayerId }
+  | { type: "nightIdle"; actorId: PlayerId; targetId: PlayerId }
   | { type: "endNight" }
   | { type: "startVote" }
   | { type: "castVote"; voterId: PlayerId; targetId: PlayerId | null }
+  | { type: "skipVoter" }
   | { type: "resolveVote" }
   | { type: "shoot"; hunterId: PlayerId; targetId: PlayerId }
   | { type: "skipShot" }
@@ -193,12 +207,16 @@ export function reduce(state: GameState, action: Action): GameState {
       return raiseAction(state, action.actorId, action.targetId);
     case "nightAck":
       return nightAck(state, action.actorId);
+    case "nightIdle":
+      return nightIdle(state, action.actorId, action.targetId);
     case "endNight":
       return endNight(state);
     case "startVote":
       return startVote(state);
     case "castVote":
       return castVote(state, action.voterId, action.targetId);
+    case "skipVoter":
+      return skipVoter(state);
     case "resolveVote":
       return resolveVote(state);
     case "shoot":
@@ -326,7 +344,7 @@ function beginNight(state: GameState): GameState {
     });
   }
   steps.sort((a, b) => a.order - b.order);
-  const night: NightState = { steps, acked: [] };
+  const night: NightState = { steps, acked: [], idleDone: [] };
   return {
     ...state,
     phase: "night",
@@ -432,6 +450,19 @@ function witchAction(
       }),
     },
   };
+}
+
+/**
+ * A player with no power tonight taps through their decoy prompt. The pick is
+ * deliberately thrown away: the prompt exists only so every phone at the
+ * table is busy at night, not to record anything.
+ */
+function nightIdle(state: GameState, actorId: PlayerId, targetId: PlayerId): GameState {
+  assert(state.phase === "night" && state.night, "Not night.");
+  assert(nightIdlers(state).some((p) => p.id === actorId), "You have a real choice to make tonight.");
+  assert(targetId !== actorId && playerById(state, targetId)?.alive, "Pick another living player.");
+  if (state.night.idleDone.includes(actorId)) return state;
+  return { ...state, night: { ...state.night, idleDone: [...state.night.idleDone, actorId] } };
 }
 
 /** An actor has read their private night result; the night may now move on. */
@@ -823,22 +854,58 @@ function skipShot(state: GameState): GameState {
   return enterReckoning({ ...state, pendingShots }, state.afterReckoning ?? "day");
 }
 
-function startVote(state: GameState): GameState {
-  assert(state.phase === "dayDiscussion", "Not in day discussion.");
-  return { ...state, phase: "dayVote", votes: {} };
+/**
+ * The order the town votes in today: every eligible voter in seat order,
+ * starting from a seat that moves one place round the table each day — going
+ * last (seeing every other vote) shouldn't always fall to the same people.
+ */
+export function voteOrderFor(state: GameState): PlayerId[] {
+  const n = state.players.length;
+  if (n === 0) return [];
+  const start = (((state.round - 1) % n) + n) % n;
+  const seats = [...state.players.slice(start), ...state.players.slice(0, start)];
+  const eligible = new Set(eligibleVoters(state).map((p) => p.id));
+  return seats.filter((p) => eligible.has(p.id)).map((p) => p.id);
 }
 
+/** Whose turn it is to vote, or null once everyone has. */
+export function currentVoter(state: GameState): PlayerId | null {
+  if (state.phase !== "dayVote") return null;
+  return state.voteOrder.find((id) => !(id in state.votes)) ?? null;
+}
+
+function startVote(state: GameState): GameState {
+  assert(state.phase === "dayDiscussion", "Not in day discussion.");
+  return { ...state, phase: "dayVote", votes: {}, voteOrder: voteOrderFor(state) };
+}
+
+/**
+ * Votes are cast one at a time, in order, and each is public the moment it's
+ * cast: later voters vote knowing the earlier ones, as at a real table. Your
+ * vote is final.
+ */
 function castVote(state: GameState, voterId: PlayerId, targetId: PlayerId | null): GameState {
   assert(state.phase === "dayVote", "Not voting.");
   const voter = playerById(state, voterId);
   assert(voter?.alive, "Dead players can't vote.");
   assert(!state.silenced.includes(voterId), "You've been silenced — no vote today.");
+  assert(!(voterId in state.votes), "You've already voted.");
+  const turn = currentVoter(state);
+  assert(turn === voterId, `It's ${playerById(state, turn ?? "")?.name ?? "someone else"}'s turn to vote.`);
   if (targetId !== null) {
     assert(targetId !== voterId, "You can't vote for yourself.");
     const target = playerById(state, targetId);
     assert(target?.alive, "Can't vote for a dead player.");
   }
   return { ...state, votes: { ...state.votes, [voterId]: targetId } };
+}
+
+/** Host recovery: the voter whose turn it is has wandered off — record an abstain. */
+function skipVoter(state: GameState): GameState {
+  assert(state.phase === "dayVote", "Not voting.");
+  const turn = currentVoter(state);
+  assert(turn, "Everyone has voted.");
+  return { ...state, votes: { ...state.votes, [turn]: null } };
 }
 
 /** Living players who are allowed to vote (silenced players sit the day out). */
@@ -931,6 +998,7 @@ export function createGame(code: string, seed: number): GameState {
     dealtRoles: [],
     chat: [],
     votes: {},
+    voteOrder: [],
     voteHistory: [],
     witchPotions: {},
     pendingShots: [],

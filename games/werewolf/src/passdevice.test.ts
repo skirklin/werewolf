@@ -70,6 +70,7 @@ describe("passDeviceTurn", () => {
       ...s,
       night: {
         acked: [],
+        idleDone: [],
         steps: s.night!.steps.map((st) =>
           st.kind === "kill"
             ? { ...st, subs: { p0: { t: "target", target: "p1" } }, done: true }

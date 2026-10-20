@@ -62,6 +62,10 @@ export function RolesInPlay({ roleIds }: { roleIds: string[] }) {
         </div>
       )}
       <div className="muted small">Not every role here was necessarily dealt.</div>
+      <div className="muted small">
+        🌙 Everyone acts at the same time at night. What happens (swaps, infections, deaths) lands at dawn, so a
+        vision shows the table as it stood at nightfall.
+      </div>
     </div>
   );
 }

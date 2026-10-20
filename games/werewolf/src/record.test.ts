@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { castVotes } from "./testutil.js";
 import type { GameConfig, GameState, Player } from "./types.js";
 import { createGame, reduce } from "./engine.js";
 import { GAME_RECORD_VERSION, parseGameRecord, toGameRecord, type GameRecord } from "./record.js";
@@ -36,9 +37,7 @@ function villageWin(): GameState {
   s = reduce(s, { type: "nightChoice", actorId: "uuid-secret-0", targetId: "uuid-secret-1" });
   s = reduce(s, { type: "endNight" });
   s = reduce(s, { type: "startVote" });
-  s = reduce(s, { type: "castVote", voterId: "uuid-secret-0", targetId: "uuid-secret-2" });
-  s = reduce(s, { type: "castVote", voterId: "uuid-secret-2", targetId: "uuid-secret-0" });
-  s = reduce(s, { type: "castVote", voterId: "uuid-secret-3", targetId: "uuid-secret-0" });
+  s = castVotes(s, { "uuid-secret-0": "uuid-secret-2", "uuid-secret-2": "uuid-secret-0", "uuid-secret-3": "uuid-secret-0" });
   return reduce(s, { type: "resolveVote" });
 }
 
@@ -87,9 +86,7 @@ describe("game records", () => {
     s = reduce(s, { type: "nightChoice", actorId: "uuid-secret-0", targetId: "uuid-secret-2" });
     s = reduce(s, { type: "endNight" });
     s = reduce(s, { type: "startVote" });
-    s = reduce(s, { type: "castVote", voterId: "uuid-secret-0", targetId: "uuid-secret-1" });
-    s = reduce(s, { type: "castVote", voterId: "uuid-secret-1", targetId: "uuid-secret-0" });
-    s = reduce(s, { type: "castVote", voterId: "uuid-secret-3", targetId: "uuid-secret-1" });
+    s = castVotes(s, { "uuid-secret-0": "uuid-secret-1", "uuid-secret-1": "uuid-secret-0", "uuid-secret-3": "uuid-secret-1" });
     s = reduce(s, { type: "resolveVote" });
     const rec = toGameRecord(s, "local")!;
     expect(rec.winner).toBe("solo");

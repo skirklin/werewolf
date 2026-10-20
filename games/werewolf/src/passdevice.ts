@@ -1,4 +1,5 @@
 import type { GameState } from "./types.js";
+import { currentVoter } from "./engine.js";
 
 /**
  * Pass-the-device seat sequencing (pure). Every living player is prompted each
@@ -53,10 +54,9 @@ export function passDeviceTurn(
   }
 
   if (state.phase === "dayVote") {
-    const next = state.players.find(
-      (p) => p.alive && !state.silenced.includes(p.id) && !(p.id in state.votes)
-    );
-    return next ? { kind: "vote", seatId: next.id } : { kind: "public" };
+    // One at a time, in the day's voting order.
+    const next = currentVoter(state);
+    return next ? { kind: "vote", seatId: next } : { kind: "public" };
   }
 
   return { kind: "public" };

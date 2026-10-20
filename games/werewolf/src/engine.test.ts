@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { castVotes, voteAll } from "./testutil.js";
 import type { GameState, Player, GameConfig } from "./types.js";
 import {
   reduce,
@@ -42,7 +43,7 @@ function gameWith(roles: string[], config?: Partial<GameConfig>): GameState {
 /** Abstain the whole table so the day ends without a lynch. */
 function skipDay(s: GameState): GameState {
   let next = reduce(s, { type: "startVote" });
-  for (const p of living(next)) next = reduce(next, { type: "castVote", voterId: p.id, targetId: null });
+  next = voteAll(next, () => null);
   return reduce(next, { type: "resolveVote" });
 }
 
@@ -212,9 +213,7 @@ describe("day vote", () => {
     expect(s.phase).toBe("dayDiscussion");
     s = reduce(s, { type: "startVote" });
     // p2, p3 vote out the wolf p0; p0 votes p2
-    s = reduce(s, { type: "castVote", voterId: "p0", targetId: "p2" });
-    s = reduce(s, { type: "castVote", voterId: "p2", targetId: "p0" });
-    s = reduce(s, { type: "castVote", voterId: "p3", targetId: "p0" });
+    s = castVotes(s, { "p0": "p2", "p2": "p0", "p3": "p0" });
     expect(allVotesIn(s)).toBe(true);
     s = reduce(s, { type: "resolveVote" });
     expect(s.phase).toBe("gameOver");
@@ -227,9 +226,7 @@ describe("day vote", () => {
     s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p1" });
     s = reduce(s, { type: "endNight" });
     s = reduce(s, { type: "startVote" });
-    s = reduce(s, { type: "castVote", voterId: "p0", targetId: "p2" });
-    s = reduce(s, { type: "castVote", voterId: "p2", targetId: "p0" });
-    s = reduce(s, { type: "castVote", voterId: "p3", targetId: null }); // skip -> 1v1 tie
+    s = castVotes(s, { "p0": "p2", "p2": "p0", "p3": null });  // skip -> 1v1 tie
     s = reduce(s, { type: "resolveVote" });
     expect(s.log.some((e) => e.type === "voteTie")).toBe(true);
     expect(living(s)).toHaveLength(3);
@@ -370,7 +367,7 @@ describe("multi-round games", () => {
     expect(s.phase).toBe("dayDiscussion");
     // Town abstains (no lynch).
     s = reduce(s, { type: "startVote" });
-    for (const p of living(s)) s = reduce(s, { type: "castVote", voterId: p.id, targetId: null });
+    s = voteAll(s, () => null);
     s = reduce(s, { type: "resolveVote" });
     expect(s.phase).toBe("night"); // continues
     // Second kill reaches parity -> wolves win.
@@ -555,9 +552,7 @@ describe("rematch", () => {
     s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p1" });
     s = reduce(s, { type: "endNight" });
     s = reduce(s, { type: "startVote" });
-    s = reduce(s, { type: "castVote", voterId: "p0", targetId: "p2" });
-    s = reduce(s, { type: "castVote", voterId: "p2", targetId: "p0" });
-    s = reduce(s, { type: "castVote", voterId: "p3", targetId: "p0" });
+    s = castVotes(s, { "p0": "p2", "p2": "p0", "p3": "p0" });
     s = reduce(s, { type: "resolveVote" });
     expect(s.phase).toBe("gameOver");
     return s;

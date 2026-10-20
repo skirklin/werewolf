@@ -38,6 +38,8 @@ import {
   effectiveRoleId,
   playerById,
   unackedNightResults,
+  nightIdlers,
+  currentVoter,
 } from "./engine.js";
 import type { NightActionKind } from "./types.js";
 
@@ -92,6 +94,12 @@ export interface PlayerView {
    * haven't dismissed yet. The night won't end until you do (send nightAck).
    */
   nightAwaitingAck: boolean;
+  /**
+   * For a living player with no power tonight: a decoy prompt that looks and
+   * feels like a real one, so a busy phone gives nobody away. Picking does
+   * nothing (send nightIdle); the night waits for it all the same.
+   */
+  idlePrompt: { targetIds: PlayerId[] } | null;
   /** If you are a fallen Hunter whose dying shot is pending, who you may hit. */
   shootPrompt: { targetIds: PlayerId[] } | null;
   /** Your seer inspections across all rounds (only yours). */
@@ -106,6 +114,10 @@ export interface PlayerView {
   chat: ChatMessage[];
   /** Live vote tally during the day vote (public). */
   voteTally: Record<PlayerId, number>;
+  /** Today's voting order (public). Votes are cast one at a time, in this order. */
+  voteOrder: PlayerId[];
+  /** Whose turn it is to vote, or null (public). */
+  voteTurn: PlayerId | null;
   /** Who has voted for whom so far today (public — votes are open). */
   votes: Record<PlayerId, PlayerId | null>;
   /** Every past day's ballot, voter by voter (public). */
@@ -193,8 +205,11 @@ export function projectView(state: GameState, viewerId: PlayerId): PlayerView {
   // read the wolves' pick (or whether they've picked) off their own screen.
   let nightPrompt: NightPrompt | null = null;
   let nightAwaitingAck = false;
+  let idlePrompt: PlayerView["idlePrompt"] = null;
   if (state.phase === "night" && state.night) {
     nightAwaitingAck = unackedNightResults(state).includes(viewerId);
+    if (nightIdlers(state).some((p) => p.id === viewerId) && !state.night.idleDone.includes(viewerId))
+      idlePrompt = { targetIds: living(state).filter((p) => p.id !== viewerId).map((p) => p.id) };
     const myStep = state.night.steps.find((s) => s.actorIds.includes(viewerId));
     if (myStep && you.alive && !(viewerId in myStep.subs)) {
       const ability = getRole(effectiveRoleId(state, viewerId)!).night!;
@@ -255,6 +270,7 @@ export function projectView(state: GameState, viewerId: PlayerId): PlayerView {
     packmates,
     nightPrompt,
     nightAwaitingAck,
+    idlePrompt,
     shootPrompt,
     myInspects,
     myDetections,
@@ -264,6 +280,8 @@ export function projectView(state: GameState, viewerId: PlayerId): PlayerView {
     myVote: viewerId in state.votes ? state.votes[viewerId] : undefined,
     chat: state.chat.slice(-CHAT_IN_VIEW),
     voteTally,
+    voteOrder: state.phase === "dayVote" ? state.voteOrder : [],
+    voteTurn: currentVoter(state),
     votes: state.phase === "dayVote" ? { ...state.votes } : {},
     voteHistory: state.voteHistory,
     votesRemaining,
