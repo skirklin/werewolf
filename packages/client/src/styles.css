@@ -446,3 +446,26 @@ body[data-time="day"] button.primary { color: #2a1700; }
 .roles-summary { width: 100%; text-align: left; min-height: 0; font-weight: 400; }
 .role-pill { border: 1px solid var(--line); min-height: 0; padding: 6px 10px; }
 .role-pill.on { border-color: var(--accent-2); }
+
+.ballot-row { display: flex; flex-direction: column; gap: 2px; }
+
+/* ---- House rules: one line each, details behind an ⓘ ---- */
+.rules { display: flex; flex-direction: column; padding: 4px 14px; }
+.rule + .rule { border-top: 1px solid var(--line); }
+.rule-row { display: flex; align-items: center; gap: 10px; min-height: 48px; cursor: pointer; }
+.rule-row input[type="checkbox"] { width: 22px; height: 22px; min-height: 0; flex: none; accent-color: var(--accent); }
+.rule-help { padding: 0 0 12px 30px; line-height: 1.45; }
+button.info { min-height: 32px; padding: 0 8px; color: var(--muted); border: none; }
+
+/* Name-only target buttons: lighter, so a big table fits on one screen. */
+.target { padding: 12px 8px; min-height: 52px; justify-content: center; font-weight: 600; }
+
+/* The header line now carries the day/night name, so give it a little weight. */
+.time-badge { font-size: 0.95rem; padding: 7px 16px; }
+
+/* A player chip: name, and an optional second line (revealed role, offline). */
+.chip .who { display: flex; flex-direction: column; min-width: 0; }
+.chip .who .sub { font-size: 0.75rem; line-height: 1.2; }
+.chip.dead .who .sub { text-decoration: none; }
+.chip:not(:has(.avatar)) { padding-left: 14px; }
+.host-tools button { white-space: nowrap; flex: none; }

@@ -78,21 +78,20 @@ export function RoleConfigEditor({
 
   return (
     <div className="stack loose">
-      <div className="section-title">Roles</div>
-      <div className="btn-row" style={{ marginTop: -12 }}>
-        <button className={sel.mode === "pool" ? "primary" : ""} onClick={() => switchMode("pool")}>
-          🎲 Role pool
-        </button>
-        <button className={sel.mode === "exact" ? "primary" : ""} onClick={() => switchMode("exact")}>
-          🔢 Exact counts
-        </button>
+      <div className="stack" style={{ gap: 8 }}>
+        <div className="spread">
+          <div className="section-title">Roles</div>
+          {/* Exact counts are for the few who want them; the pool suits nearly every table. */}
+          <button className="ghost small" onClick={() => switchMode(sel.mode === "pool" ? "exact" : "pool")}>
+            {sel.mode === "pool" ? "Advanced: exact counts" : "Back to a role pool"}
+          </button>
+        </div>
+        {sel.mode === "pool" ? (
+          <PoolEditor sel={sel} onChange={setSelection} />
+        ) : (
+          <ExactEditor sel={sel} onChange={setSelection} />
+        )}
       </div>
-
-      {sel.mode === "pool" ? (
-        <PoolEditor sel={sel} onChange={setSelection} />
-      ) : (
-        <ExactEditor sel={sel} onChange={setSelection} />
-      )}
 
       <div className="stack" style={{ gap: 8 }}>
         <div className="section-title">House rules</div>
@@ -226,6 +225,45 @@ function ExactEditor({
   );
 }
 
+/** One house rule: a single line, with its explanation behind an ⓘ. */
+function Rule({
+  icon,
+  label,
+  help,
+  checked,
+  onChange,
+}: {
+  icon: string;
+  label: string;
+  help: string;
+  checked: boolean;
+  onChange: (on: boolean) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="rule">
+      <label className="rule-row">
+        <span aria-hidden>{icon}</span>
+        <span className="grow">{label}</span>
+        <button
+          type="button"
+          className="ghost info"
+          aria-label={`About ${label}`}
+          aria-expanded={open}
+          onClick={(e) => {
+            e.preventDefault();
+            setOpen((v) => !v);
+          }}
+        >
+          ⓘ
+        </button>
+        <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} />
+      </label>
+      {open && <div className="muted small rule-help">{help}</div>}
+    </div>
+  );
+}
+
 function SharedToggles({
   config,
   onChange,
@@ -236,62 +274,37 @@ function SharedToggles({
   online: boolean;
 }) {
   return (
-    <>
-      <label className="chip" style={{ cursor: "pointer" }}>
-        <span className="avatar">💀</span>
-        <div className="grow"><div className="name">Reveal roles on death</div><div className="muted small">Off = keep everyone guessing (spookier)</div></div>
-        <input
-          type="checkbox"
-          style={{ width: 24, minHeight: 24 }}
-          checked={config.revealRoleOnDeath}
-          onChange={(e) => onChange({ ...config, revealRoleOnDeath: e.target.checked })}
-        />
-      </label>
-      <label className="chip" style={{ cursor: "pointer" }}>
-        <span className="avatar">🕊️</span>
-        <div className="grow">
-          <div className="name">Peaceful first night</div>
-          <div className="muted small">The wolves skip night one, so nobody's out before the town has spoken.</div>
-        </div>
-        <input
-          type="checkbox"
-          style={{ width: 24, minHeight: 24 }}
-          checked={config.peacefulFirstNight}
-          onChange={(e) => onChange({ ...config, peacefulFirstNight: e.target.checked })}
-        />
-      </label>
+    <div className="card tight rules">
+      <Rule
+        icon="🕊️"
+        label="Peaceful first night"
+        help="The wolves skip night one, so nobody's out before the town has spoken."
+        checked={config.peacefulFirstNight}
+        onChange={(on) => onChange({ ...config, peacefulFirstNight: on })}
+      />
+      <Rule
+        icon="💀"
+        label="Reveal roles on death"
+        help="Off keeps everyone guessing (spookier)."
+        checked={config.revealRoleOnDeath}
+        onChange={(on) => onChange({ ...config, revealRoleOnDeath: on })}
+      />
+      <Rule
+        icon="📢"
+        label="Announce saves"
+        help={'Tilts the game toward the villagers: a protected kill is announced, instead of a vague "quiet night".'}
+        checked={config.nightSummary === "detailed"}
+        onChange={(on) => onChange({ ...config, nightSummary: on ? "detailed" : "discreet" })}
+      />
       {online && (
-      <label className="chip" style={{ cursor: "pointer" }}>
-        <span className="avatar">💬</span>
-        <div className="grow">
-          <div className="name">In-app chat</div>
-          <div className="muted small">Turn off when you're all in the same room and just talking out loud.</div>
-        </div>
-        <input
-          type="checkbox"
-          style={{ width: 24, minHeight: 24 }}
+        <Rule
+          icon="💬"
+          label="In-app chat"
+          help="Turn it off when you're all in the same room and talking out loud."
           checked={config.chat !== false}
-          onChange={(e) => onChange({ ...config, chat: e.target.checked })}
+          onChange={(on) => onChange({ ...config, chat: on })}
         />
-      </label>
       )}
-      <label className="chip" style={{ cursor: "pointer" }}>
-        <span className="avatar">📢</span>
-        <div className="grow">
-          <div className="name">Reveal more information</div>
-          <div className="muted small">
-            Tilts the game toward the villagers — announces saves and protected kills instead of a vague "quiet night".
-          </div>
-        </div>
-        <input
-          type="checkbox"
-          style={{ width: 24, minHeight: 24 }}
-          checked={config.nightSummary === "detailed"}
-          onChange={(e) =>
-            onChange({ ...config, nightSummary: e.target.checked ? "detailed" : "discreet" })
-          }
-        />
-      </label>
-    </>
+    </div>
   );
 }

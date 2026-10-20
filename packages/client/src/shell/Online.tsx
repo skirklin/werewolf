@@ -35,7 +35,8 @@ export function Online({ game, onExit }: { game?: ClientGame; onExit: (gameId?: 
   const Table = playing.Table;
   return (
     <div className="app">
-      <TopBar code={code} error={error} onExit={exit} />
+      {/* No room code mid-game: nobody needs it, and seats come back by device. */}
+      <TopBar error={error} onExit={exit} />
       <Table
         view={view}
         room={room}
@@ -195,7 +196,7 @@ function Lobby({
         <div className="players">
           {room.players.map((p) => (
             <div key={p.id} className="chip">
-              <span className="avatar">{p.isHost ? "👑" : "🙂"}</span>
+              {p.isHost && <span className="avatar" title="Host">👑</span>}
               <span className="name">{p.name}{p.id === net.playerId ? " (you)" : ""}</span>
               <span className={`dot ${p.connected ? "on" : ""}`} style={{ marginLeft: "auto" }} />
               {isHost && p.id !== net.playerId && (

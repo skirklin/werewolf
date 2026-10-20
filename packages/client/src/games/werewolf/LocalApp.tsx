@@ -15,7 +15,7 @@ import {
 } from "@party/werewolf";
 import { useLocalGame } from "./local.js";
 import { RoleConfigEditor } from "./config.js";
-import { RoleCard, LogFeed, RolesInPlay, VoteHistory, BallotLines, TimeBadge, useTimeTheme } from "./ui.js";
+import { RoleCard, LogFeed, RolesInPlay, TownNews, BallotLines, useTimeTheme } from "./ui.js";
 import { TargetGrid, WitchPanel, SwapPanel, RaisePanel, SilencedNote, GameOver, PlayerList } from "./phases.js";
 
 export function LocalApp({ onExit }: { onExit: () => void }) {
@@ -157,9 +157,8 @@ function LocalPlay({
   // Public: night intro — a beat to recap the day and tell everyone eyes closed.
   if (state.phase === "night" && nightIntroRound !== state.round) {
     return (
-      <Public title={`🌙 Night ${state.round}`} onExit={onExit}>
-        <TimeBadge phase={state.phase} />
-        <LogFeed log={publicLog(state)} players={publicPlayers(state)} />
+      <Public title={`🌙 Night ${state.round} · no talking`} onExit={onExit}>
+        <LogFeed log={publicLog(state).filter((e) => e.round >= state.round - 1)} players={publicPlayers(state)} />
         <p className="muted center">Everyone, close your eyes. Pass the phone around as prompted.</p>
         <button className="primary full lg" onClick={() => setNightIntroRound(state.round)}>
           Begin the night
@@ -171,11 +170,9 @@ function LocalPlay({
   // Public: day board.
   if (state.phase === "dayDiscussion") {
     return (
-      <Public title={`☀️ Day ${state.round}`} onExit={onExit}>
-        <TimeBadge phase={state.phase} />
-        <LogFeed log={publicLog(state)} players={publicPlayers(state)} />
+      <Public title={`☀️ Day ${state.round} · talk it over`} onExit={onExit}>
+        <TownNews log={publicLog(state)} voteHistory={view.voteHistory} round={state.round} players={publicPlayers(state)} />
         <SilencedNote view={view} />
-        <VoteHistory history={view.voteHistory} players={publicPlayers(state)} />
         <PlayerList players={publicPlayers(state)} youId="-" />
         <RolesInPlay roleIds={view.possibleRoles} />
         <p className="muted center small">Talk it out. When you're ready, put it to a vote.</p>
