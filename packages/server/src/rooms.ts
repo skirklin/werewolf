@@ -32,6 +32,11 @@ const CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ";
 const EMPTY_ROOM_GRACE_MS = 2 * 60 * 60_000;
 const MAX_NAME = 20;
 
+/** A browser's self-made id: accepted only if it looks like one (a UUID-ish token). */
+function validDeviceId(raw: unknown): string | null {
+  return typeof raw === "string" && /^[A-Za-z0-9-]{16,64}$/.test(raw) ? raw : null;
+}
+
 function randomCode(): string {
   let s = "";
   for (let i = 0; i < ROOM_CODE_LENGTH; i++)
@@ -53,6 +58,8 @@ export class Room {
   private seatIds: string[] = [];
   private clients = new Map<string, Client>();
   private tokens = new Map<string, string>();
+  /** playerId -> the joining browser's own id (see addPlayer). Never sent out. */
+  private devices = new Map<string, string>();
   /** When the room last became empty (for sweeping), or null while occupied. */
   emptySince: number | null = null;
 
@@ -70,23 +77,31 @@ export class Room {
     return this.state === null;
   }
 
-  addPlayer(name: string, client: Client): { playerId: string; token: string } {
-    if (!this.inLobby) return this.reclaimSeat(name, client);
-    const clean = String(name ?? "").trim().slice(0, MAX_NAME) || "Player";
-    // A dropped player coming back under the same name gets their seat back.
-    const ghost = this.players.find((p) => p.name.toLowerCase() === clean.toLowerCase() && !this.clients.has(p.id));
-    if (ghost) return this.claim(ghost, client);
+  /**
+   * Seat a player. `deviceId` is a random id each browser makes once and keeps
+   * (never shown to anyone): joining from a device that already holds a seat
+   * here — lobby or mid-game — hands that seat back rather than adding a new
+   * one. That's how a phone that lost its saved seat (someone tapped Leave, a
+   * stale socket, a reload) gets back in. Names are only for display.
+   */
+  addPlayer(name: string, client: Client, deviceId?: unknown): { playerId: string; token: string } {
+    const device = validDeviceId(deviceId);
+    const mine = device ? this.players.find((p) => this.devices.get(p.id) === device) : undefined;
+    if (mine) return this.claim(mine, client);
+    if (!this.inLobby)
+      throw new GameError("This game has already started. Rejoin from the phone you joined on, or wait for the next game.");
     if (this.players.length >= this.game.maxPlayers) throw new GameError("This room is full.");
     const playerId = randomUUID();
     const token = randomUUID();
     this.players.push({
       id: playerId,
-      // Names are how a lost device finds its seat again, so keep them unique.
-      name: this.uniqueName(clean),
+      // Two Sams would make every vote and night prompt ambiguous.
+      name: this.uniqueName(String(name ?? "").trim().slice(0, MAX_NAME) || "Player"),
       isHost: this.players.length === 0,
       connected: true,
     });
     this.tokens.set(playerId, token);
+    if (device) this.devices.set(playerId, device);
     this.clients.set(playerId, client);
     this.emptySince = null;
     this.broadcast();
@@ -94,21 +109,9 @@ export class Room {
   }
 
   /**
-   * Mid-game, "joining" with the name you played under takes your seat back.
-   * The fallback for a device that lost its saved seat (cleared storage, a
-   * different browser, someone tapped Leave): only a seat with nobody
-   * connected to it can be claimed, so a player at the table can't be bumped.
+   * Hand a seat to a (re)connecting device, retiring its old token. If the
+   * seat still has a socket, that one is stale — the same device is back.
    */
-  private reclaimSeat(name: string, client: Client): { playerId: string; token: string } {
-    const wanted = String(name ?? "").trim().slice(0, MAX_NAME).toLowerCase();
-    const seat = this.players.find((p) => p.name.toLowerCase() === wanted && this.seatIds.includes(p.id));
-    if (!seat)
-      throw new GameError("This game has already started. To get back into your seat, join with the exact name you played under.");
-    if (this.clients.has(seat.id)) throw new GameError(`${seat.name} is already connected to this game.`);
-    return this.claim(seat, client);
-  }
-
-  /** Hand an empty seat to a new device, retiring the old device's token. */
   private claim(seat: RosterEntry, client: Client): { playerId: string; token: string } {
     const token = randomUUID();
     this.tokens.set(seat.id, token);
@@ -258,6 +261,7 @@ export class Room {
     if (i < 0) return;
     const [gone] = this.players.splice(i, 1);
     this.tokens.delete(playerId);
+    this.devices.delete(playerId);
     if (gone.isHost) this.reassignHostFrom(playerId);
   }
 

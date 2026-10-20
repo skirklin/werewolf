@@ -28,8 +28,12 @@ export interface RoomInfo {
 
 /** Messages a device sends. */
 export type ClientMessage =
-  | { type: "createRoom"; game: string; name: string }
-  | { type: "joinRoom"; code: string; name: string }
+  /**
+   * `deviceId` is a random id the browser makes once and keeps. Joining a room
+   * from a device that already has a seat there gives that seat back.
+   */
+  | { type: "createRoom"; game: string; name: string; deviceId?: string }
+  | { type: "joinRoom"; code: string; name: string; deviceId?: string }
   | { type: "rejoin"; code: string; playerId: string; token: string }
   | { type: "kick"; playerId: string }
   | { type: "startGame"; config: unknown }
