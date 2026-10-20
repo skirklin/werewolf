@@ -224,7 +224,8 @@ export function TopBar({ code, error, onExit }: { code?: string; error?: string 
         <button className="ghost small" onClick={onExit}>← Leave</button>
         {code && <span className="pill">Room {code}</span>}
       </div>
-      {error && <div className="err">⚠️ {error}</div>}
+      {/* Pinned to the screen: a refusal shown at the top of a long page went unseen. */}
+      {error && <div className="err toast" role="alert">⚠️ {error}</div>}
     </div>
   );
 }

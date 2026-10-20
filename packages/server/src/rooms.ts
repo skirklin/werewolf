@@ -71,13 +71,18 @@ export class Room {
   }
 
   addPlayer(name: string, client: Client): { playerId: string; token: string } {
-    if (!this.inLobby) throw new GameError("Game already in progress.");
+    if (!this.inLobby) return this.reclaimSeat(name, client);
+    const clean = String(name ?? "").trim().slice(0, MAX_NAME) || "Player";
+    // A dropped player coming back under the same name gets their seat back.
+    const ghost = this.players.find((p) => p.name.toLowerCase() === clean.toLowerCase() && !this.clients.has(p.id));
+    if (ghost) return this.claim(ghost, client);
     if (this.players.length >= this.game.maxPlayers) throw new GameError("This room is full.");
     const playerId = randomUUID();
     const token = randomUUID();
     this.players.push({
       id: playerId,
-      name: String(name ?? "").trim().slice(0, MAX_NAME) || "Player",
+      // Names are how a lost device finds its seat again, so keep them unique.
+      name: this.uniqueName(clean),
       isHost: this.players.length === 0,
       connected: true,
     });
@@ -86,6 +91,42 @@ export class Room {
     this.emptySince = null;
     this.broadcast();
     return { playerId, token };
+  }
+
+  /**
+   * Mid-game, "joining" with the name you played under takes your seat back.
+   * The fallback for a device that lost its saved seat (cleared storage, a
+   * different browser, someone tapped Leave): only a seat with nobody
+   * connected to it can be claimed, so a player at the table can't be bumped.
+   */
+  private reclaimSeat(name: string, client: Client): { playerId: string; token: string } {
+    const wanted = String(name ?? "").trim().slice(0, MAX_NAME).toLowerCase();
+    const seat = this.players.find((p) => p.name.toLowerCase() === wanted && this.seatIds.includes(p.id));
+    if (!seat)
+      throw new GameError("This game has already started. To get back into your seat, join with the exact name you played under.");
+    if (this.clients.has(seat.id)) throw new GameError(`${seat.name} is already connected to this game.`);
+    return this.claim(seat, client);
+  }
+
+  /** Hand an empty seat to a new device, retiring the old device's token. */
+  private claim(seat: RosterEntry, client: Client): { playerId: string; token: string } {
+    const token = randomUUID();
+    this.tokens.set(seat.id, token);
+    seat.connected = true;
+    this.clients.set(seat.id, client);
+    this.emptySince = null;
+    this.rosterChanged();
+    return { playerId: seat.id, token };
+  }
+
+  /** "Sam", or "Sam 2" if there's already a Sam. */
+  private uniqueName(name: string): string {
+    const taken = new Set(this.players.map((p) => p.name.toLowerCase()));
+    if (!taken.has(name.toLowerCase())) return name;
+    for (let n = 2; ; n++) {
+      const candidate = `${name.slice(0, MAX_NAME - String(n).length - 1)} ${n}`;
+      if (!taken.has(candidate.toLowerCase())) return candidate;
+    }
   }
 
   rejoin(playerId: string, token: string, client: Client): boolean {

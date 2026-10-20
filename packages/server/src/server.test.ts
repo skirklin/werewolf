@@ -235,3 +235,36 @@ describe("websocket transport", () => {
     for (const s of socks) s.close();
   });
 });
+
+describe("client version enforcement", () => {
+  let strict: FastifyInstance;
+  let strictUrl: string;
+
+  beforeAll(async () => {
+    strict = await createApp({ serveClient: false, dataDir: null, build: "build-2" });
+    await strict.listen({ port: 0, host: "127.0.0.1" });
+    const addr = strict.server.address();
+    strictUrl = `ws://127.0.0.1:${typeof addr === "object" && addr ? addr.port : 0}/ws`;
+  });
+
+  afterAll(async () => {
+    await strict.close();
+  });
+
+  it("turns away a page from an older deploy (or one that names no build) and says why", async () => {
+    for (const target of [`${strictUrl}?build=build-1`, strictUrl]) {
+      const old = new TestSocket(target);
+      await old.ready;
+      expect(await old.waitFor("outdated")).toEqual({ type: "outdated", build: "build-2" });
+      expect((await old.waitFor("error")).message).toMatch(/reload/i);
+    }
+  });
+
+  it("lets the current page in", async () => {
+    const current = new TestSocket(`${strictUrl}?build=build-2`);
+    await current.ready;
+    expect(await current.waitFor("hello")).toEqual({ type: "hello", build: "build-2" });
+    current.send({ type: "createRoom", game: "werewolf", name: "Sam" });
+    expect((await current.waitFor("joined")).code).toHaveLength(4);
+  });
+});

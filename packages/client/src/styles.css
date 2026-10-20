@@ -397,3 +397,11 @@ body[data-time="day"] button.primary { color: #2a1700; }
 .roles-list details { flex: 1 1 100%; }
 .roles-list summary { cursor: pointer; list-style: none; }
 .roles-list summary::-webkit-details-marker { display: none; }
+
+/* An error the player must see, wherever they've scrolled to (below the top bar, so Leave stays reachable). */
+.err.toast {
+  position: fixed; left: 50%; top: calc(max(16px, env(safe-area-inset-top)) + 60px); transform: translateX(-50%);
+  z-index: 60; width: min(528px, calc(100% - 32px));
+  padding: 12px 14px; border-radius: 12px;
+  background: var(--panel); border: 1px solid var(--danger); box-shadow: 0 6px 24px #0006;
+}

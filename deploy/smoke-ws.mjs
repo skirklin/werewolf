@@ -3,7 +3,12 @@
 //   node deploy/smoke-ws.mjs wss://werewolf.example.com/ws
 import { WebSocket } from "ws";
 
-const url = process.argv[2] ?? "wss://werewolf.example.com/ws";
+const base = process.argv[2] ?? "wss://werewolf.example.com/ws";
+// The server only talks to the current client build, so present the one it's
+// serving (version.json sits beside the page).
+const site = base.replace(/^ws/, "http").replace(/\/ws$/, "");
+const build = await fetch(`${site}/version.json`).then((r) => r.json()).then((v) => v.build).catch(() => null);
+const url = build ? `${base}?build=${encodeURIComponent(build)}` : base;
 const ws = new WebSocket(url);
 const timer = setTimeout(() => {
   console.error("TIMEOUT — no expected messages");

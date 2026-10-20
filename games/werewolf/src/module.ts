@@ -86,13 +86,14 @@ function toEngineAction(actorId: string, msg: WerewolfAction, isHost: boolean): 
     case "nightChoice":
       return { type: "nightChoice", actorId, targetId: msg.targetId };
     case "witchAction":
-      return { type: "witchAction", actorId, healTargetId: msg.healTargetId, poisonTargetId: msg.poisonTargetId };
+      // Missing means "no": a client that leaves a potion out isn't asking for it.
+      return { type: "witchAction", actorId, healTargetId: msg.healTargetId ?? null, poisonTargetId: msg.poisonTargetId ?? null };
     case "swapAction":
       return { type: "swapAction", actorId, aId: msg.aId, bId: msg.bId };
     case "detectAction":
       return { type: "detectAction", actorId, aId: msg.aId, bId: msg.bId };
     case "raiseAction":
-      return { type: "raiseAction", actorId, targetId: msg.targetId };
+      return { type: "raiseAction", actorId, targetId: msg.targetId ?? null };
     case "nightAck":
       return { type: "nightAck", actorId };
     case "endNight":

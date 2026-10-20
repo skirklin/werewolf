@@ -168,6 +168,22 @@ describe("rooms", () => {
     expect(clients[0].room!.players.find((p) => p.id === clients[0].playerId)!.connected).toBe(true);
   });
 
+  it("mid-game, joining with your old name takes back your empty seat", () => {
+    const { room, clients } = seatPlayers(3, "counter");
+    room.handle(clients[0].playerId, { type: "startGame", config: { target: 3 } });
+    const name = clients[1].room!.players.find((p) => p.id === clients[1].playerId)!.name;
+    // Still connected: nobody can take the seat out from under them.
+    expect(() => room.addPlayer(name, new FakeClient())).toThrow(/already connected/);
+    room.disconnect(clients[1]);
+    const phone = new FakeClient();
+    const { playerId, token } = room.addPlayer(` ${name.toUpperCase()} `, phone);
+    expect(playerId).toBe(clients[1].playerId);
+    expect(phone.room!.players.find((p) => p.id === playerId)!.connected).toBe(true);
+    expect(room.rejoin(playerId, clients[1].token, new FakeClient())).toBe(false); // old token retired
+    expect(room.rejoin(playerId, token, phone)).toBe(true);
+    expect(() => room.addPlayer("Stranger", new FakeClient())).toThrow(/exact name/);
+  });
+
   it("leaving the lobby on purpose frees the seat for good", () => {
     const { room, clients } = seatPlayers(3, "counter");
     room.handle(clients[2].playerId, { type: "leave" });
