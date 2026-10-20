@@ -59,6 +59,13 @@ function Landing({ game, net, onExit }: { game?: ClientGame; net: RoomConnection
     <div className="app">
       <TopBar onExit={onExit} error={net.error} />
       <div className="spacer" />
+      <div className="phase-banner">
+        <div className="big">{game?.emoji ?? "🎲"}</div>
+        <h2>{game ? `Play ${game.name} together` : "Join a game"}</h2>
+        <p className="muted">
+          {game ? "Start a room and share the code, or join a friend's." : "Enter the code your host is showing."}
+        </p>
+      </div>
       <div className="card stack">
         <label className="field">
           <span className="muted small">Your name</span>
@@ -103,9 +110,11 @@ function Landing({ game, net, onExit }: { game?: ClientGame; net: RoomConnection
 function RoomInvite({ code, gameName }: { code: string; gameName: string }) {
   const url = `${location.origin}/?room=${code}`;
   const [qr, setQr] = useState<string | null>(null);
+  const [showQr, setShowQr] = useState(false);
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
+    if (!showQr) return;
     let alive = true;
     QRCode.toDataURL(url, { margin: 1, width: 320, color: { dark: "#0f1020", light: "#ffffff" } })
       .then((d) => alive && setQr(d))
@@ -113,7 +122,7 @@ function RoomInvite({ code, gameName }: { code: string; gameName: string }) {
     return () => {
       alive = false;
     };
-  }, [url]);
+  }, [url, showQr]);
 
   const canShare = "share" in navigator;
   const share = async () => {
@@ -136,21 +145,21 @@ function RoomInvite({ code, gameName }: { code: string; gameName: string }) {
   };
 
   return (
-    <div className="card stack center">
-      <div className="muted small">Others join by scanning, or with the code</div>
-      <div className="big" style={{ letterSpacing: 8 }}>{code}</div>
-      {qr && (
-        <img
-          src={qr}
-          alt={`QR code to join room ${code}`}
-          width={200}
-          height={200}
-          style={{ borderRadius: 12, alignSelf: "center" }}
-        />
+    <div className="card stack center" style={{ alignItems: "center" }}>
+      <div className="muted small">Room code</div>
+      <div className="room-code">{code}</div>
+      {/* The QR only when someone needs to scan it; otherwise it just takes up the lobby. */}
+      {showQr && qr && (
+        <img src={qr} alt={`QR code to join room ${code}`} width={200} height={200} style={{ borderRadius: 12 }} />
       )}
-      <button className="primary full lg" onClick={share}>
-        {copied ? "Copied! ✓" : canShare ? "📲 Share the invite" : "🔗 Copy the invite"}
-      </button>
+      <div className="btn-row" style={{ width: "100%" }}>
+        <button className="small" onClick={share}>
+          {copied ? "Copied ✓" : canShare ? "Share invite" : "Copy link"}
+        </button>
+        <button className="small" aria-expanded={showQr} onClick={() => setShowQr((v) => !v)}>
+          {showQr ? "Hide QR code" : "Show QR code"}
+        </button>
+      </div>
     </div>
   );
 }
@@ -180,10 +189,9 @@ function Lobby({
       <TopBar code={room.code} error={net.error} onExit={onExit} />
       <RoomInvite code={room.code} gameName={game.name} />
 
-      <div className="stack">
-        <div className="spread">
-          <b>{players} in the room</b>
-        </div>
+      <div className="stack loose">
+        <div className="stack" style={{ gap: 8 }}>
+        <div className="section-title">Players · {players}</div>
         <div className="players">
           {room.players.map((p) => (
             <div key={p.id} className="chip">
@@ -191,10 +199,11 @@ function Lobby({
               <span className="name">{p.name}{p.id === net.playerId ? " (you)" : ""}</span>
               <span className={`dot ${p.connected ? "on" : ""}`} style={{ marginLeft: "auto" }} />
               {isHost && p.id !== net.playerId && (
-                <button className="ghost small" onClick={() => net.send({ type: "kick", playerId: p.id })}>✕</button>
+                <button className="ghost small" aria-label={`Remove ${p.name}`} onClick={() => net.send({ type: "kick", playerId: p.id })}>✕</button>
               )}
             </div>
           ))}
+        </div>
         </div>
 
         {isHost ? (
@@ -210,7 +219,9 @@ function Lobby({
             </button>
           </>
         ) : (
-          <p className="center muted">Waiting for the host to start…</p>
+          <p className="center muted">
+            {room.players.find((p) => p.isHost)?.name ?? "The host"} is setting up the game. Hang tight.
+          </p>
         )}
       </div>
     </div>

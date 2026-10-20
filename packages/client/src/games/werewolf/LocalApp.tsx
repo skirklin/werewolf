@@ -83,7 +83,7 @@ function Setup({
               onChange={(e) => setName(i, e.target.value)}
             />
             {names.length > 3 && (
-              <button className="ghost" onClick={() => setNames((ns) => ns.filter((_, j) => j !== i))}>✕</button>
+              <button className="ghost small" aria-label="Remove player" onClick={() => setNames((ns) => ns.filter((_, j) => j !== i))}>✕</button>
             )}
           </div>
         ))}
@@ -196,7 +196,7 @@ function LocalPlay({
     return (
       <div className="app">
         <RoleCard view={view} />
-        <div style={{ marginTop: 12 }}><RolesInPlay roleIds={view.possibleRoles} /></div>
+        <div style={{ marginTop: 12 }}><RolesInPlay roleIds={view.possibleRoles} open /></div>
         <div className="spacer" />
         <p className="muted center small">Memorize it! You'll act on it now, then pass the phone along.</p>
         <button className="primary full lg" onClick={() => setSeenRole((s) => new Set(s).add(seatId))}>

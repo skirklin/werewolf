@@ -32,39 +32,54 @@ export function TimeBadge({ phase }: { phase: Phase }) {
 }
 
 /**
- * Every role that could be in this game — no counts, no owners. Tap a role to
- * read what it does, so players can answer "wait, what does the Witch do?"
- * themselves (and bluff more convincingly).
+ * Every role that could be in this game — no counts, no owners. Collapsed to
+ * one line of emoji unless opened (or `open` from the start), so it's always
+ * to hand without crowding the screen. Tap a role to read what it does, so
+ * players can answer "wait, what does the Witch do?" themselves.
  */
-export function RolesInPlay({ roleIds }: { roleIds: string[] }) {
-  const [open, setOpen] = useState<string | null>(null);
+export function RolesInPlay({ roleIds, open = false }: { roleIds: string[]; open?: boolean }) {
+  const [expanded, setExpanded] = useState(open);
+  const [shown, setShown] = useState<string | null>(null);
   if (roleIds.length === 0) return null;
-  const role = open ? ROLES[open] : null;
+  const role = shown ? ROLES[shown] : null;
+  if (!expanded)
+    return (
+      <button className="card tight spread roles-summary" onClick={() => setExpanded(true)}>
+        <span className="small"><b>Roles in play</b></span>
+        <span aria-hidden>{roleIds.map((id) => ROLES[id]?.emoji).join(" ")}</span>
+        <span className="muted small">Show</span>
+      </button>
+    );
   return (
     <div className="card tight stack">
-      <b>🎴 Roles that could be in this game</b>
+      <div className="spread">
+        <b className="small">Roles that could be in this game</b>
+        {!open && (
+          <button className="ghost small" onClick={() => setExpanded(false)}>
+            Hide
+          </button>
+        )}
+      </div>
       <div className="roles-list">
         {roleIds.map((id) => (
           <button
             key={id}
-            className="pill"
-            style={{ minHeight: 0, padding: "6px 10px", borderColor: open === id ? "var(--accent-2)" : undefined }}
-            onClick={() => setOpen((cur) => (cur === id ? null : id))}
+            className={`pill role-pill ${shown === id ? "on" : ""}`}
+            onClick={() => setShown((cur) => (cur === id ? null : id))}
           >
             {ROLES[id]?.emoji} {ROLES[id]?.name ?? id}
           </button>
         ))}
       </div>
       {role && (
-        <div className="small">
-          <b>{role.name}</b> <span className={`team ${role.team}`}>({role.team})</span>
-          <div className="muted">{role.blurb}</div>
+        <div className="role-detail">
+          <b>{role.name}</b> · <span className={`team ${role.team}`}>{role.team}</span>
+          <div>{role.blurb}</div>
         </div>
       )}
-      <div className="muted small">Not every role here was necessarily dealt.</div>
       <div className="muted small">
-        🌙 Everyone acts at the same time at night. What happens (swaps, infections, deaths) lands at dawn, so a
-        vision shows the table as it stood at nightfall.
+        Not every role listed was necessarily dealt. Everyone acts at once at night, and what happens lands at dawn,
+        so a vision shows the table as it stood at nightfall.
       </div>
     </div>
   );
