@@ -19,34 +19,41 @@ export function WerewolfTable({ view, act, playAgain, onExit }: TableProps<Playe
 
 function renderPhase(view: PlayerView, send: Send, playAgain: () => void, onExit: () => void) {
   const dead = !view.you.alive;
+  const host = view.players.find((p) => p.isHost)?.name ?? "The host";
 
   switch (view.phase) {
     case "roleReveal":
       return (
         <div className="stack">
           <RoleCard view={view} />
-          <RolesInPlay roleIds={view.possibleRoles} />
+          <RolesInPlay roleIds={view.possibleRoles} open />
           {view.you.isHost ? (
-            <button className="primary full lg" onClick={() => send({ type: "startNight" })}>
-              Everyone's ready — begin the night
-            </button>
+            <>
+              <p className="center muted small">Start once everyone has seen their card.</p>
+              <button className="primary full lg" onClick={() => send({ type: "startNight" })}>
+                Start the night
+              </button>
+            </>
           ) : (
-            <p className="center muted">Memorize your role. Waiting for the host…</p>
+            <p className="center muted">Keep a straight face. {host} starts the night once everyone has seen their card.</p>
           )}
         </div>
       );
 
     case "night":
-      if (dead) return <Spectator view={view} label="🌙 The night creeps by…" />;
+      if (dead) return <Spectator view={view} label="The night goes on without you. No hints, no faces." />;
       if (view.nightPrompt) return <NightAction view={view} send={send} />;
       if (view.nightAwaitingAck) return <NightResult view={view} send={send} />;
       if (view.idlePrompt) return <IdleNight view={view} send={send} />;
       return (
         <div className="stack">
-          <div className="phase-banner"><div className="big">🌙</div><h2>Night falls</h2></div>
+          <div className="phase-banner">
+            <div className="big">🌙</div>
+            <h2>You're done for tonight</h2>
+            <p className="muted">Keep your eyes on your own screen. Dawn comes when everyone has finished.</p>
+          </div>
           <InspectHistory view={view} />
           <DetectionHistory view={view} />
-          <p className="center muted">Waiting for the night to end…</p>
           <RolesInPlay roleIds={view.possibleRoles} />
         </div>
       );
@@ -55,8 +62,11 @@ function renderPhase(view: PlayerView, send: Send, playAgain: () => void, onExit
       if (view.shootPrompt) return <ShootAction view={view} send={send} />;
       return (
         <div className="stack">
-          <div className="phase-banner"><div className="big">🏹</div><h2>A shot rings out</h2></div>
-          <p className="center muted">A fallen Hunter is taking someone down with them…</p>
+          <div className="phase-banner">
+            <div className="big">🏹</div>
+            <h2>A shot rings out</h2>
+            <p className="muted">A fallen Hunter is choosing who to take down with them.</p>
+          </div>
         </div>
       );
 
@@ -99,16 +109,17 @@ function HostRecovery({ view, send }: { view: PlayerView; send: Send }) {
   const turnName = view.players.find((p) => p.id === view.voteTurn)?.name;
   const action =
     view.phase === "night"
-      ? { label: "Nudge the night along (someone's AFK)", msg: { type: "endNight" } as WerewolfAction }
+      ? { label: "End the night now", hint: "if someone has wandered off", msg: { type: "endNight" } as WerewolfAction }
       : view.phase === "dayVote" && turnName
-        ? { label: `Skip ${turnName}'s vote (they're AFK)`, msg: { type: "skipVoter" } as WerewolfAction }
+        ? { label: `Skip ${turnName}'s vote`, hint: "counts as an abstain", msg: { type: "skipVoter" } as WerewolfAction }
         : view.phase === "hunterShot"
-          ? { label: "Skip the shot (Hunter's AFK)", msg: { type: "skipShot" } as WerewolfAction }
+          ? { label: "Skip the Hunter's shot", hint: "if they've left", msg: { type: "skipShot" } as WerewolfAction }
           : null;
   if (!action) return null;
   return (
-    <div style={{ marginTop: 16 }}>
-      <button className="ghost full small" onClick={() => send(action.msg)}>
+    <div className="host-tools">
+      <span className="muted small">Host · {action.hint}</span>
+      <button className="ghost small" onClick={() => send(action.msg)}>
         {action.label}
       </button>
     </div>
@@ -118,7 +129,7 @@ function HostRecovery({ view, send }: { view: PlayerView; send: Send }) {
 function Spectator({ view, label }: { view: PlayerView; label: string }) {
   return (
     <div className="stack">
-      <div className="phase-banner"><div className="big">💀</div><h2>You're out 💀</h2><p className="muted">{label}</p></div>
+      <div className="phase-banner"><div className="big">💀</div><h2>You're out</h2><p className="muted">{label}</p></div>
       <LogFeed log={view.log} players={view.players} />
       <PlayerList players={view.players} youId={view.you.id} />
     </div>

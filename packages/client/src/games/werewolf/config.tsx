@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import {
   assignableSpecialRoles,
   poolEligibleRoles,
@@ -24,16 +24,27 @@ const TEAM_SECTIONS: { team: RoleDef["team"]; label: string }[] = [
 ];
 
 /** Render a set of roles grouped under team headers, in a fixed team order. */
-function TeamGroups({ roles, render }: { roles: RoleDef[]; render: (r: RoleDef) => ReactNode }) {
+function TeamGroups({
+  roles,
+  render,
+  grid = false,
+}: {
+  roles: RoleDef[];
+  render: (r: RoleDef) => ReactNode;
+  /** Lay the group out as a two-column grid of compact toggles. */
+  grid?: boolean;
+}) {
   return (
     <>
       {TEAM_SECTIONS.map(({ team, label }) => {
         const group = roles.filter((r) => r.team === team);
         if (group.length === 0) return null;
         return (
-          <div key={team} className="stack">
-            <div className="muted small" style={{ marginTop: 6, fontWeight: 700, letterSpacing: 0.5 }}>{label}</div>
-            {group.map(render)}
+          <div key={team} className="stack" style={{ gap: 8 }}>
+            <div className="section-title">{label}</div>
+            <div className={grid ? "role-grid" : "stack"} style={grid ? undefined : { gap: 8 }}>
+              {group.map(render)}
+            </div>
           </div>
         );
       })}
@@ -66,8 +77,9 @@ export function RoleConfigEditor({
   };
 
   return (
-    <div className="stack">
-      <div className="btn-row">
+    <div className="stack loose">
+      <div className="section-title">Roles</div>
+      <div className="btn-row" style={{ marginTop: -12 }}>
         <button className={sel.mode === "pool" ? "primary" : ""} onClick={() => switchMode("pool")}>
           🎲 Role pool
         </button>
@@ -82,10 +94,13 @@ export function RoleConfigEditor({
         <ExactEditor sel={sel} onChange={setSelection} />
       )}
 
-      <SharedToggles config={config} onChange={onChange} online={online} />
+      <div className="stack" style={{ gap: 8 }}>
+        <div className="section-title">House rules</div>
+        <SharedToggles config={config} onChange={onChange} online={online} />
+      </div>
 
-      <div className="card tight">
-        <div className="spread"><b>Tonight's cast ({playerCount} players)</b></div>
+      <div className="card tight stack" style={{ gap: 6 }}>
+        <div className="spread"><b>Tonight's cast · {playerCount} players</b></div>
         <div className="spread small"><span>🐺 Werewolves</span><b>{comp.werewolves}</b></div>
         <div className="spread small"><span>✨ Village specials</span><b>{comp.villageSpecials}</b></div>
         <div className="spread small"><span>🧑‍🌾 Villagers</span><b>{comp.villagers}</b></div>
@@ -109,6 +124,9 @@ function PoolEditor({
   sel: Extract<RoleSelection, { mode: "pool" }>;
   onChange: (s: RoleSelection) => void;
 }) {
+  // The last role tapped, so its description shows without crowding the grid.
+  const [shown, setShown] = useState<string | null>(null);
+  const shownRole = poolEligibleRoles().find((r) => r.id === shown);
   const toggle = (roleId: string) =>
     onChange({
       ...sel,
@@ -120,7 +138,7 @@ function PoolEditor({
   return (
     <div className="stack">
       <div>
-        <div className="muted small" style={{ marginBottom: 6 }}>How many wolves? (scales with your group)</div>
+        <div className="muted small" style={{ marginBottom: 8 }}>How many wolves? It scales with the size of your group.</div>
         <div className="btn-row">
           {RATIO_PRESETS.map((p) => (
             <button
@@ -137,28 +155,37 @@ function PoolEditor({
         </div>
       </div>
 
-      <div className="muted small">Roles allowed in the pool (may exceed player count — drawn at random)</div>
+      <div className="muted small">
+        Tap the roles that could be dealt. Each game draws from these at random, so you can pick more than there are
+        players.
+      </div>
       <TeamGroups
+        grid
         roles={poolEligibleRoles()}
         render={(role) => {
           const on = sel.pool.includes(role.id);
           return (
             <button
               key={role.id}
-              className="chip"
-              style={{ borderColor: on ? "var(--accent-2)" : undefined, textAlign: "left" }}
-              onClick={() => toggle(role.id)}
+              className={`role-toggle ${on ? "on" : ""}`}
+              aria-pressed={on}
+              onClick={() => {
+                toggle(role.id);
+                setShown(role.id);
+              }}
             >
               <span className="avatar">{role.emoji}</span>
-              <div className="grow">
-                <div className="name">{role.name}</div>
-                <div className="muted small">{role.blurb}</div>
-              </div>
-              <span className="pill">{on ? "✓ in pool" : "add"}</span>
+              <span className="clamp-1">{role.name}</span>
+              {on && <span className="check">✓</span>}
             </button>
           );
         }}
       />
+      {shownRole && (
+        <div className="role-detail">
+          {shownRole.emoji} <b>{shownRole.name}</b> — {shownRole.blurb}
+        </div>
+      )}
     </div>
   );
 }
@@ -181,9 +208,9 @@ function ExactEditor({
         render={(role) => (
           <div key={role.id} className="chip">
             <span className="avatar">{role.emoji}</span>
-            <div className="grow">
+            <div className="grow" style={{ minWidth: 0 }}>
               <div className="name">{role.name}</div>
-              <div className="muted small">{role.blurb}</div>
+              <div className="muted small clamp-1">{role.blurb}</div>
             </div>
             <div className="btn-row" style={{ width: 128 }}>
               <button onClick={() => setCount(role.id, (sel.roleCounts[role.id] ?? 0) - 1)}>–</button>

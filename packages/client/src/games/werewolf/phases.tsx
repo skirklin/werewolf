@@ -4,6 +4,8 @@ import { PlayerChip, LogFeed, roleEmoji, InspectHistory, RolesInPlay, VoteHistor
 
 type Send = (msg: WerewolfAction) => void;
 
+const nameOf = (view: PlayerView, id: string) => view.players.find((p) => p.id === id)?.name ?? "someone";
+
 export function TargetGrid({
   view,
   ids,
@@ -39,6 +41,15 @@ export function TargetGrid({
     </div>
   );
 }
+
+/** The confirm button names the act and the person, so a mis-tap is obvious. */
+const NIGHT_VERB: Record<string, string> = {
+  kill: "Attack",
+  protect: "Protect",
+  inspect: "Look into",
+  silence: "Silence",
+  convert: "Infect",
+};
 
 const NIGHT_PROMPT: Record<string, string> = {
   kill: "Choose tonight's victim",
@@ -84,7 +95,7 @@ function TargetNightAction({ view, send }: { view: PlayerView; send: Send }) {
         disabled={!picked}
         onClick={() => picked && send({ type: "nightChoice", targetId: picked })}
       >
-        Confirm
+        {picked ? `${NIGHT_VERB[prompt.kind] ?? "Choose"} ${nameOf(view, picked)}` : "Pick someone"}
       </button>
     </div>
   );
@@ -268,7 +279,7 @@ export function NightResult({ view, send }: { view: PlayerView; send: Send }) {
           <div className="blurb">{detect.sameTeam ? "are on the same team." : "are on different teams."}</div>
         </div>
       )}
-      <p className="muted center small">Commit it to memory — it stays in your notes below, but nobody else can see it.</p>
+      <p className="muted center small">Commit it to memory. It stays in your notes, and nobody else can see it.</p>
       <button className="primary full lg" onClick={() => send({ type: "nightAck" })}>
         Got it ✓
       </button>
@@ -288,11 +299,11 @@ export function IdleNight({ view, send }: { view: PlayerView; send: Send }) {
       <div className="phase-banner">
         <div className="big">🌙</div>
         <h2>The village sleeps</h2>
-        <p className="muted">Who do you suspect most? Only you see this, and it changes nothing — it just keeps every phone at the table equally busy.</p>
+        <p className="muted">Who do you suspect most? It's just for you and changes nothing, but every phone stays busy at night.</p>
       </div>
       <TargetGrid view={view} ids={view.idlePrompt!.targetIds} selected={picked} onPick={setPicked} />
       <button className="primary full lg" disabled={!picked} onClick={() => picked && send({ type: "nightIdle", targetId: picked })}>
-        Confirm
+        {picked ? `Suspect ${nameOf(view, picked)}` : "Pick someone"}
       </button>
     </div>
   );
@@ -313,7 +324,7 @@ export function DayBoard({
       <div className="phase-banner">
         <div className="big">☀️</div>
         <h2>Day {view.round}</h2>
-        <p className="muted">A new day dawns. Who seems suspicious?</p>
+        <p className="muted">{view.round === 1 ? "The village wakes. Who's acting strange?" : "Another morning. Talk it through, then put someone on trial."}</p>
       </div>
       <LogFeed log={view.log} players={view.players} />
       <SilencedNote view={view} />
@@ -328,7 +339,11 @@ export function DayBoard({
           Call a vote
         </button>
       )}
-      {!isHost && <p className="muted center small">Waiting for the host to round everyone up…</p>}
+      {!isHost && (
+        <p className="muted center small">
+          {view.players.find((p) => p.isHost)?.name ?? "The host"} calls the vote when the talking's done.
+        </p>
+      )}
     </div>
   );
 }
@@ -503,7 +518,7 @@ export function SilencedNote({ view }: { view: PlayerView }) {
 
 export function PlayerList({ players, youId }: { players: PublicPlayer[]; youId: string }) {
   return (
-    <div className="players">
+    <div className="players grid">
       {players.map((p) => (
         <PlayerChip key={p.id} player={p} you={p.id === youId} />
       ))}
@@ -550,10 +565,10 @@ export function GameOver({
       </div>
       {onPlayAgain ? (
         <button className="primary full lg" onClick={onPlayAgain}>
-          Play again? 🔁
+          Deal another game
         </button>
       ) : (
-        <p className="center muted">Waiting for the host to deal another round…</p>
+        <p className="center muted">{view.players.find((p) => p.isHost)?.name ?? "The host"} can deal another game.</p>
       )}
       <button className="ghost full" onClick={onExit}>
         Leave

@@ -47,7 +47,9 @@ body::before {
   min-height: 100dvh;
   display: flex;
   flex-direction: column;
-  padding: max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom));
+  padding: max(16px, env(safe-area-inset-top)) 16px max(24px, env(safe-area-inset-bottom));
+  /* Every screen is a column of sections; keep them from touching. */
+  gap: 16px;
 }
 
 /* ---- Typography ---- */
@@ -59,6 +61,7 @@ h1 { font-size: 2rem; letter-spacing: -0.5px; }
 .center { text-align: center; }
 .spread { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
 .stack { display: flex; flex-direction: column; gap: 12px; }
+.stack.loose { gap: 20px; }
 .grow { flex: 1; }
 .pad { padding: 16px; }
 
@@ -93,6 +96,8 @@ button.primary {
 }
 button.danger { background: var(--danger); border-color: transparent; color: #2a0b10; font-weight: 700; }
 button.ghost { background: transparent; }
+/* Secondary controls (Leave, kick, back) — a tap target, not a slab. */
+button.small { min-height: 38px; padding: 0 14px; font-size: 0.88rem; border-radius: 10px; }
 button.full { width: 100%; }
 button.lg { min-height: 60px; font-size: 1.1rem; }
 
@@ -167,8 +172,9 @@ label.field { display: flex; flex-direction: column; gap: 6px; }
 .log .entry.big { color: var(--text); font-weight: 600; }
 
 /* ---- Banners / phase headers ---- */
-.phase-banner { text-align: center; padding: 22px 0 8px; }
-.phase-banner .big { font-size: 2.4rem; }
+.phase-banner { text-align: center; padding: 12px 0 4px; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.phase-banner .big { font-size: 2.6rem; line-height: 1; }
+.phase-banner p { margin: 0; max-width: 34ch; line-height: 1.45; }
 .night .phase-banner .big { color: var(--accent-2); }
 
 /* ---- Handoff (pass-the-device) ---- */
@@ -352,14 +358,12 @@ body[data-time="night"] {
   --panel-2: #1d2150;
 }
 body[data-time="night"]::before {
+  /* A faint sky — bright dots read as specks of dust on the screen. */
   background:
-    radial-gradient(1px 1px at 12% 18%, #fff8 50%, transparent 51%),
-    radial-gradient(1px 1px at 72% 9%, #fff9 50%, transparent 51%),
-    radial-gradient(1.5px 1.5px at 85% 32%, #fff7 50%, transparent 51%),
-    radial-gradient(1px 1px at 33% 41%, #fff6 50%, transparent 51%),
-    radial-gradient(1.5px 1.5px at 55% 22%, #fff8 50%, transparent 51%),
-    radial-gradient(1px 1px at 8% 66%, #fff5 50%, transparent 51%),
-    radial-gradient(1px 1px at 91% 74%, #fff6 50%, transparent 51%),
+    radial-gradient(1px 1px at 12% 14%, #fff3 50%, transparent 51%),
+    radial-gradient(1px 1px at 78% 8%, #fff3 50%, transparent 51%),
+    radial-gradient(1px 1px at 92% 22%, #fff2 50%, transparent 51%),
+    radial-gradient(1px 1px at 6% 30%, #fff2 50%, transparent 51%),
     radial-gradient(120% 80% at 50% -10%, #1a1d48 0%, var(--bg) 60%);
 }
 body[data-time="day"] {
@@ -405,3 +409,40 @@ body[data-time="day"] button.primary { color: #2a1700; }
   padding: 12px 14px; border-radius: 12px;
   background: var(--panel); border: 1px solid var(--danger); box-shadow: 0 6px 24px #0006;
 }
+
+/* ---- Section headings inside a screen ---- */
+.section-title { font-weight: 700; font-size: 0.8rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin-top: 4px; }
+
+/* ---- Room code ---- */
+.room-code { font-size: 2.6rem; font-weight: 800; letter-spacing: 0.3em; padding-left: 0.3em; line-height: 1.1; }
+
+/* ---- Compact role toggles (lobby setup) ---- */
+.role-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.role-toggle {
+  display: flex; align-items: center; gap: 8px; text-align: left;
+  min-height: 48px; padding: 8px 10px; font-size: 0.92rem; border-radius: 12px;
+}
+.role-toggle .avatar { font-size: 1.3rem; }
+.role-toggle.on { border-color: var(--accent-2); background: var(--panel-2); font-weight: 600; }
+.role-toggle .check { margin-left: auto; color: var(--accent-2); font-weight: 800; }
+.role-detail { font-size: 0.88rem; color: var(--muted); line-height: 1.45; }
+.role-detail b { color: var(--text); }
+
+.clamp-1 { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ---- Host-only recovery control ---- */
+.host-tools {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding-top: 12px; margin-top: 4px; border-top: 1px dashed var(--line);
+}
+
+/* ---- In-game player grid: two compact columns ---- */
+.players.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.players.grid .chip { padding: 8px 10px; gap: 8px; min-width: 0; }
+.players.grid .chip .avatar { font-size: 1.2rem; width: 24px; }
+.players.grid .chip .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+
+/* ---- Roles in play ---- */
+.roles-summary { width: 100%; text-align: left; min-height: 0; font-weight: 400; }
+.role-pill { border: 1px solid var(--line); min-height: 0; padding: 6px 10px; }
+.role-pill.on { border-color: var(--accent-2); }
