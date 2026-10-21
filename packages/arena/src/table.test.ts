@@ -3,14 +3,16 @@ import { previewComposition } from "@party/werewolf";
 import { tableConfig, describeTable } from "./table.js";
 
 describe("the table", () => {
-  it("defaults to the classic pool, which at seven seats is one fixed deck", () => {
+  it("defaults to the classic pool", () => {
     const config = tableConfig({ peaceful: true }, 7);
     expect(config.selection).toMatchObject({ mode: "pool", pool: ["villager", "seer", "doctor"] });
-    const comp = previewComposition(config, 7);
-    expect(comp).toEqual({ werewolves: 2, villageSpecials: 2, villagers: 3 });
-    // Worth saying out loud: this pool cannot vary, and 95 agent games were
-    // played before anyone noticed every one dealt the same roles.
-    expect(describeTable(config, 7)).toContain("every game deals the same roles");
+    expect(previewComposition(config, 7).werewolves).toBe(2);
+  });
+
+  it("says so when a table can only deal one deck", () => {
+    // A pool of nothing but Villagers can't vary. (95 agent games were once
+    // played before anyone noticed every one dealt the same roles.)
+    expect(describeTable(tableConfig({ roles: "villager" }, 7), 7)).toContain("every game deals the same roles");
   });
 
   it("varies the specials once the pool outgrows the table", () => {

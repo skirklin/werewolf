@@ -13,7 +13,7 @@ import {
   MAX_CHAT_MESSAGES,
 } from "./engine.js";
 import { projectView, publicPlayers } from "./views.js";
-import { recommendedConfig, validateConfig, dealRoles, werewolfCountFor, previewComposition, werewolfRange } from "./setup.js";
+import { recommendedConfig, validateConfig, dealRoles, werewolfCountFor, previewComposition, werewolfRange, deckBalance, dealPreview, possibleRoles, BALANCE_TOLERANCE } from "./setup.js";
 import { makeRng } from "./rng.js";
 
 const exact = (roleCounts: Record<string, number>): GameConfig => ({
@@ -74,50 +74,78 @@ describe("role selection", () => {
     }
   });
 
-  it("pool mode: derives wolf count from ratio, fills rest from pool then villagers", () => {
-    const players: Player[] = Array.from({ length: 7 }, (_, i) => ({
+  const seats = (n: number): Player[] =>
+    Array.from({ length: n }, (_, i) => ({
       id: `p${i}`, name: `P${i}`, roleId: null, alive: true, connected: true, isHost: false,
     }));
-    const config: GameConfig = {
-      selection: { mode: "pool", pool: ["villager", "seer", "doctor"], werewolfRatio: 0.26 },
-      revealRoleOnDeath: true, nightSummary: "discreet", peacefulFirstNight: false,
+  const pool = (ids: string[], balance?: "wolves" | "even" | "village"): GameConfig => ({
+    selection: { mode: "pool", pool: ids, werewolfRatio: 0.3, balance },
+    revealRoleOnDeath: false, nightSummary: "discreet", peacefulFirstNight: false,
+  });
+  const RICH = ["villager", "seer", "auraSeer", "doctor", "hunter", "witch", "detective", "tanner", "henchman"];
+
+  it("pool mode: wolves from the ratio, specials chosen so the deck lands on its balance", () => {
+    for (let seed = 1; seed <= 60; seed++) {
+      const config = pool(RICH);
+      const deck = dealRoles(seats(9), config, makeRng(seed)).map((p) => p.roleId!);
+      const counts = countRoles(dealRoles(seats(9), config, makeRng(seed)));
+      expect(counts.werewolf).toBe(3);
+      expect(Math.abs(deckBalance(deck, config))).toBeLessThanOrEqual(BALANCE_TOLERANCE);
+      for (const [id, n] of Object.entries(counts)) if (id !== "werewolf" && id !== "villager") expect(n).toBe(1);
+    }
+  });
+
+  it("the balance setting moves the deal toward that side", () => {
+    const avg = (b: "wolves" | "even" | "village") => {
+      let sum = 0;
+      for (let seed = 1; seed <= 40; seed++)
+        sum += deckBalance(dealRoles(seats(9), pool(RICH, b), makeRng(seed)).map((p) => p.roleId!), pool(RICH, b));
+      return sum / 40;
     };
-    const dealt = dealRoles(players, config, makeRng(42));
-    const counts = countRoles(dealt);
+    expect(avg("wolves")).toBeLessThan(avg("even"));
+    expect(avg("even")).toBeLessThan(avg("village"));
+  });
+
+  it("a small pool isn't dealt the same way every game any more", () => {
+    const seen = new Set<string>();
+    for (let seed = 1; seed <= 40; seed++) {
+      // The default table: peaceful first night on (worth +2 to the village).
+      const config = { ...pool(["villager", "seer", "doctor"]), peacefulFirstNight: true };
+      const c = countRoles(dealRoles(seats(8), config, makeRng(seed)));
+      seen.add(`${c.seer ?? 0}${c.doctor ?? 0}`);
+    }
+    expect(seen.size).toBeGreaterThan(1);
+  });
+
+  it("never repeats a special: without Villagers ticked, Villagers fill what specials can't", () => {
+    const config = pool(["seer", "doctor"]);
+    const counts = countRoles(dealRoles(seats(7), config, makeRng(7)));
     expect(counts.werewolf).toBe(2);
     expect(counts.seer).toBe(1);
     expect(counts.doctor).toBe(1);
     expect(counts.villager).toBe(3);
-  });
-
-  it("pool mode without villagers fills every slot with (repeated) specials", () => {
-    const players: Player[] = Array.from({ length: 7 }, (_, i) => ({
-      id: `p${i}`, name: `P${i}`, roleId: null, alive: true, connected: true, isHost: false,
-    }));
-    const config: GameConfig = {
-      selection: { mode: "pool", pool: ["seer", "doctor"], werewolfRatio: 0.26 },
-      revealRoleOnDeath: true, nightSummary: "discreet", peacefulFirstNight: false,
-    };
-    const counts = countRoles(dealRoles(players, config, makeRng(7)));
-    expect(counts.werewolf).toBe(2);
-    expect(counts.villager ?? 0).toBe(0); // villager removed from the pool
-    expect((counts.seer ?? 0) + (counts.doctor ?? 0)).toBe(5); // rest are specials
+    expect(possibleRoles(config, 7)).toContain("villager");
+    expect(possibleRoles(pool(["seer", "doctor", "hunter", "witch", "detective"]), 7)).not.toContain("villager");
   });
 
   it("pool mode: a pool larger than the table only draws what fits", () => {
-    const players: Player[] = Array.from({ length: 4 }, (_, i) => ({
-      id: `p${i}`, name: `P${i}`, roleId: null, alive: true, connected: true, isHost: false,
-    }));
-    const config: GameConfig = {
-      selection: { mode: "pool", pool: ["villager", "seer", "doctor"], werewolfRatio: 0.26 },
-      revealRoleOnDeath: true, nightSummary: "discreet", peacefulFirstNight: false,
-    };
-    const counts = countRoles(dealRoles(players, config, makeRng(1)));
-    // 4 players, 1 wolf, 3 non-wolf slots, 2 distinct specials + 1 villager.
-    expect(counts.werewolf).toBe(1);
-    expect((counts.seer ?? 0) + (counts.doctor ?? 0)).toBe(2);
-    expect(counts.villager).toBe(1);
-    expect(dealRoles(players, config, makeRng(1)).length).toBe(4);
+    const config = pool(RICH);
+    for (let seed = 1; seed <= 20; seed++) {
+      const dealt = dealRoles(seats(4), config, makeRng(seed));
+      expect(dealt).toHaveLength(4);
+      expect(countRoles(dealt).werewolf).toBe(1);
+    }
+  });
+
+  it("previews what a setup deals as ranges, with its balance", () => {
+    const p = dealPreview(pool(RICH), 9);
+    expect(p.werewolves).toEqual({ min: 3, max: 3 });
+    expect(p.target).toBe(0);
+    expect(p.balance.min).toBeGreaterThanOrEqual(-BALANCE_TOLERANCE);
+    expect(p.balance.max).toBeLessThanOrEqual(BALANCE_TOLERANCE);
+    const e = dealPreview(exact({ werewolf: 2, seer: 1 }), 6);
+    expect(e).toMatchObject({ werewolves: { min: 2, max: 2 }, villagers: { min: 3, max: 3 }, target: null });
+    expect(e.balance.min).toBe(-12 + 7 + 3 + 2); // two wolves, a Seer, three Villagers, roles revealed on death
   });
 
   it("exact mode: deals configured counts, villagers fill, deterministic", () => {

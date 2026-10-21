@@ -76,13 +76,14 @@ export function livingWerewolves(state: GameState): Player[] {
 
 /**
  * Standard win check. Village: no real wolves left (a wolf-aligned Henchman
- * doesn't keep the wolves alive). Wolves: real wolves reach parity.
+ * doesn't keep the wolves alive). Wolves: the whole wolf team — Henchman
+ * included, since they vote with the pack — is at least half the living.
  */
 export function checkWinner(state: GameState): Team | null {
   const alive = living(state);
-  const wolves = alive.filter((p) => p.roleId && isWolfForWin(p.roleId));
-  if (wolves.length === 0) return "village";
-  if (wolves.length * 2 >= alive.length) return "werewolf";
+  if (!alive.some((p) => p.roleId && isWolfForWin(p.roleId))) return "village";
+  const pack = alive.filter((p) => p.roleId && getRole(p.roleId).team === "werewolf");
+  if (pack.length * 2 >= alive.length) return "werewolf";
   return null;
 }
 

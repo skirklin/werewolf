@@ -54,6 +54,12 @@ export interface RoleDef {
   id: string;
   name: string;
   team: Team;
+  /**
+   * Balance points: how much this role helps the village (positive) or the
+   * wolves (negative), on the Ultimate Werewolf scale where a Villager is +1
+   * and a Werewolf −6. The dealer aims a deck's total at the chosen balance.
+   */
+  weight: number;
   /** One-line description shown on the role-reveal screen. */
   blurb: string;
   /** Emoji used as the role's avatar in the UI. */
@@ -114,7 +120,15 @@ export type RoleSelection =
        * even odds (e.g. 2 or 3), so nobody can be sure when the last wolf is gone.
        */
       wolfCountVaries?: boolean;
+      /**
+       * Which side the deal should favor; the dealer picks specials so the
+       * deck's balance points land near this target. Absent means "even".
+       */
+      balance?: Balance;
     };
+
+/** Which side a pool deal leans toward. */
+export type Balance = "wolves" | "even" | "village";
 
 export interface GameConfig {
   selection: RoleSelection;

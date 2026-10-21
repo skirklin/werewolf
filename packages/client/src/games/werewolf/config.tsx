@@ -4,19 +4,27 @@ import {
   poolEligibleRoles,
   recommendedConfig,
   validateConfig,
-  previewComposition,
-  werewolfRange,
+  dealPreview,
   DEFAULT_WEREWOLF_RATIO,
+  type Balance,
   type GameConfig,
   type RoleSelection,
   type RoleDef,
 } from "@party/werewolf";
 
-const RATIO_PRESETS: { label: string; value: number }[] = [
-  { label: "Light", value: 0.2 },
-  { label: "Standard", value: DEFAULT_WEREWOLF_RATIO },
-  { label: "Heavy", value: 0.38 },
+const BALANCE_PRESETS: { value: Balance; label: string; hint: string }[] = [
+  { value: "wolves", label: "🐺 Wolves", hint: "favored" },
+  { value: "even", label: "⚖️ Even", hint: "fair fight" },
+  { value: "village", label: "🏡 Village", hint: "favored" },
 ];
+
+/** "+3", "−2", "0". */
+const signed = (n: number) => (n > 0 ? `+${n}` : n < 0 ? `−${-n}` : "0");
+/** "3", or "2–3" for a range. */
+const span = ({ min, max }: { min: number; max: number }) => (min === max ? `${min}` : `${min}–${max}`);
+/** "+1", or "−1 to +2" for a range. */
+const signedSpan = ({ min, max }: { min: number; max: number }) =>
+  min === max ? signed(min) : `${signed(min)} to ${signed(max)}`;
 
 const TEAM_SECTIONS: { team: RoleDef["team"]; label: string }[] = [
   { team: "village", label: "🏡 Village team" },
@@ -67,19 +75,14 @@ export function RoleConfigEditor({
 }) {
   const sel = config.selection;
   const problems = validateConfig(config, playerCount);
-  const seats = Math.max(playerCount, 0);
-  const wolfRange = werewolfRange(sel, seats);
-  const comp = previewComposition(config, seats, wolfRange.min);
-  // With a secret wolf count, one more wolf means one fewer villager or special.
-  const most = previewComposition(config, seats, wolfRange.max);
-  const span = (a: number, b: number) => (a === b ? `${a}` : `${Math.min(a, b)}–${Math.max(a, b)}`);
+  const deal = dealPreview(config, Math.max(playerCount, 0));
 
   const setSelection = (selection: RoleSelection) => onChange({ ...config, selection });
 
   const switchMode = (mode: "exact" | "pool") => {
     if (mode === sel.mode) return;
     if (mode === "pool") setSelection(recommendedConfig(playerCount).selection);
-    else setSelection({ mode: "exact", roleCounts: { werewolf: Math.max(1, comp.werewolves), seer: 1 } });
+    else setSelection({ mode: "exact", roleCounts: { werewolf: Math.max(1, deal.werewolves.min), seer: 1 } });
   };
 
   return (
@@ -106,9 +109,18 @@ export function RoleConfigEditor({
 
       <div className="card tight stack" style={{ gap: 6 }}>
         <div className="spread"><b>Tonight's cast · {playerCount} players</b></div>
-        <div className="spread small"><span>🐺 Werewolves</span><b>{span(comp.werewolves, most.werewolves)}</b></div>
-        <div className="spread small"><span>✨ Village specials</span><b>{span(comp.villageSpecials, most.villageSpecials)}</b></div>
-        <div className="spread small"><span>🧑‍🌾 Villagers</span><b>{span(comp.villagers, most.villagers)}</b></div>
+        <div className="spread small"><span>🐺 Werewolves</span><b>{span(deal.werewolves)}</b></div>
+        <div className="spread small"><span>✨ Special roles</span><b>{span(deal.specials)}</b></div>
+        <div className="spread small"><span>🧑‍🌾 Villagers</span><b>{span(deal.villagers)}</b></div>
+        <div className="spread small">
+          <span>⚖️ Balance</span>
+          <b>{signedSpan(deal.balance)}</b>
+        </div>
+        <div className="muted small">
+          {deal.target === null
+            ? "Balance points: above zero favors the village, below favors the wolves."
+            : `Each game deals a different mix of your roles, picked so the balance lands near ${signed(deal.target)} (above zero favors the village).`}
+        </div>
       </div>
 
       {problems.length > 0 && (
@@ -143,17 +155,20 @@ function PoolEditor({
   return (
     <div className="stack">
       <div>
-        <div className="muted small" style={{ marginBottom: 8 }}>How many wolves? It scales with the size of your group.</div>
+        <div className="muted small" style={{ marginBottom: 8 }}>
+          Who should the deal favor? Wolves scale with your group; the dealer picks specials to match.
+        </div>
         <div className="btn-row">
-          {RATIO_PRESETS.map((p) => (
+          {BALANCE_PRESETS.map((p) => (
             <button
-              key={p.label}
-              className={Math.abs(sel.werewolfRatio - p.value) < 0.01 ? "primary" : ""}
-              onClick={() => onChange({ ...sel, werewolfRatio: p.value })}
+              key={p.value}
+              className={(sel.balance ?? "even") === p.value ? "primary" : ""}
+              // The balance does the tuning now, so the wolf share goes back to standard.
+              onClick={() => onChange({ ...sel, balance: p.value, werewolfRatio: DEFAULT_WEREWOLF_RATIO })}
             >
               {p.label}
               <div className="small" style={{ fontWeight: 400, opacity: 0.8 }}>
-                {Math.round(p.value * 100)}%
+                {p.hint}
               </div>
             </button>
           ))}
@@ -188,7 +203,8 @@ function PoolEditor({
       />
       {shownRole && (
         <div className="role-detail">
-          {shownRole.emoji} <b>{shownRole.name}</b> — {shownRole.blurb}
+          {shownRole.emoji} <b>{shownRole.name}</b> — {shownRole.blurb}{" "}
+          <span className="muted">Balance {signed(shownRole.weight)}.</span>
         </div>
       )}
     </div>
