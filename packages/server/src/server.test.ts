@@ -236,6 +236,8 @@ describe("websocket transport", () => {
       await s.awaitView((v) => v.voteTurn === id);
       s.act({ type: "castVote", targetId: id === wolf.playerId ? decoy.playerId : wolf.playerId });
     }
+    await host.awaitView((v) => v.phase === "verdict");
+    host.act({ type: "endVerdict" });
 
     const over = await host.awaitView((v) => v.phase === "gameOver");
     expect(over.winner).toBe("village");

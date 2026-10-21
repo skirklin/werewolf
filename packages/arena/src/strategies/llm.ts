@@ -299,16 +299,13 @@ export class LlmStrategy implements Strategy {
 
       if (prompt.kind === "witch") {
         // She can't see the wolves' pick. One cheap yes/no on whether to brew
-        // tonight, then whom to shield; leave poison alone.
-        const w = prompt.witch;
-        const brew =
-          !!w?.healAvailable &&
-          w.healTargetIds.length > 0 &&
+        // tonight; leave poison alone.
+        const heal =
+          !!prompt.witch?.healAvailable &&
           (await this.yesNo(
             view,
-            "You don't know whom the wolves will attack tonight. Use your one healing potion to shield a player? It is only spent if the wolves actually attack that player."
+            "You don't know whom the wolves will attack tonight. Use your one healing potion tonight? Whoever they attack survives, and it is only spent if they attack someone."
           ));
-        const heal = brew ? await this.choose(view, "Whom do you shield with your healing potion tonight?", w!.healTargetIds) : null;
         return nightMessage(prompt, [], heal);
       }
 

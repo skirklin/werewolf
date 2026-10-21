@@ -40,11 +40,11 @@ export function picksNeeded(kind: NightPrompt["kind"]): number {
 export function nightMessage(
   prompt: NightPrompt,
   picks: PlayerId[],
-  heal: PlayerId | null = null
+  heal = false
 ): WerewolfAction {
   switch (prompt.kind) {
     case "witch":
-      return { type: "witchAction", healTargetId: heal, poisonTargetId: picks[0] ?? null };
+      return { type: "witchAction", heal, poisonTargetId: picks[0] ?? null };
     case "swap":
       return { type: "swapAction", aId: picks[0], bId: picks[1] };
     case "detect":

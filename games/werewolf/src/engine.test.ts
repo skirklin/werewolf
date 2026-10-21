@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { castVotes, voteAll } from "./testutil.js";
+import { castVotes, voteAll, settleVote } from "./testutil.js";
 import type { GameState, Player, GameConfig } from "./types.js";
 import {
   reduce,
@@ -44,7 +44,7 @@ function gameWith(roles: string[], config?: Partial<GameConfig>): GameState {
 function skipDay(s: GameState): GameState {
   let next = reduce(s, { type: "startVote" });
   next = voteAll(next, () => null);
-  return reduce(next, { type: "resolveVote" });
+  return settleVote(next);
 }
 
 function countRoles(players: Player[]): Record<string, number> {
@@ -215,7 +215,7 @@ describe("day vote", () => {
     // p2, p3 vote out the wolf p0; p0 votes p2
     s = castVotes(s, { "p0": "p2", "p2": "p0", "p3": "p0" });
     expect(allVotesIn(s)).toBe(true);
-    s = reduce(s, { type: "resolveVote" });
+    s = settleVote(s);
     expect(s.phase).toBe("gameOver");
     expect(s.winner).toBe("village");
   });
@@ -227,7 +227,7 @@ describe("day vote", () => {
     s = reduce(s, { type: "endNight" });
     s = reduce(s, { type: "startVote" });
     s = castVotes(s, { "p0": "p2", "p2": "p0", "p3": null });  // skip -> 1v1 tie
-    s = reduce(s, { type: "resolveVote" });
+    s = settleVote(s);
     expect(s.log.some((e) => e.type === "voteTie")).toBe(true);
     expect(living(s)).toHaveLength(3);
     expect(s.phase).toBe("night"); // continues to next night
@@ -368,7 +368,7 @@ describe("multi-round games", () => {
     // Town abstains (no lynch).
     s = reduce(s, { type: "startVote" });
     s = voteAll(s, () => null);
-    s = reduce(s, { type: "resolveVote" });
+    s = settleVote(s);
     expect(s.phase).toBe("night"); // continues
     // Second kill reaches parity -> wolves win.
     s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p3" });
@@ -553,7 +553,7 @@ describe("rematch", () => {
     s = reduce(s, { type: "endNight" });
     s = reduce(s, { type: "startVote" });
     s = castVotes(s, { "p0": "p2", "p2": "p0", "p3": "p0" });
-    s = reduce(s, { type: "resolveVote" });
+    s = settleVote(s);
     expect(s.phase).toBe("gameOver");
     return s;
   }

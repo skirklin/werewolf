@@ -401,6 +401,11 @@ describe("werewolf in a room", () => {
       ww(room, c, { type: "castVote", targetId: c.playerId === wolf.playerId ? decoy.playerId : wolf.playerId });
     }
 
+    // The result is announced to everyone first; the host moves them on.
+    expect(host.view!.phase).toBe("verdict");
+    expect(clients[1].view!.verdict).toMatchObject({ outcome: "lynch", playerId: wolf.playerId, next: "gameOver" });
+    expect(finished).toHaveLength(0); // the game isn't over until it's over
+    ww(room, host, { type: "endVerdict" });
     expect(host.view!.phase).toBe("gameOver");
     expect(host.view!.winner).toBe("village");
     expect(host.view!.players.every((p) => p.roleId !== null)).toBe(true);

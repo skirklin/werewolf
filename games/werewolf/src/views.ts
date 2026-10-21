@@ -9,6 +9,7 @@ import type {
   DetectionResult,
   ChatMessage,
   VoteRecord,
+  Verdict,
 } from "./types.js";
 
 /**
@@ -38,6 +39,7 @@ import {
   effectiveRoleId,
   playerById,
   unackedNightResults,
+  SKIPPABLE_KINDS,
   nightIdlers,
   currentVoter,
 } from "./engine.js";
@@ -60,13 +62,13 @@ export interface NightPrompt {
   /** Ids this player may target (for kill/protect/inspect, or the swap pool). */
   targetIds: PlayerId[];
   canTargetSelf: boolean;
+  /** This power may be held for a later night (send nightSkip). */
+  canSkip: boolean;
   /**
    * For the Witch only: what she may do this night. She is never told whom the
    * wolves picked — every night actor chooses blind, with no cross-player info.
    */
   witch?: {
-    /** Who she may shield with her healing potion (herself included). */
-    healTargetIds: PlayerId[];
     healAvailable: boolean;
     poisonAvailable: boolean;
   };
@@ -122,6 +124,8 @@ export interface PlayerView {
   votes: Record<PlayerId, PlayerId | null>;
   /** Every past day's ballot, voter by voter (public). */
   voteHistory: VoteRecord[];
+  /** The vote result being announced (phase "verdict"), else null. Public. */
+  verdict: Verdict | null;
   votesRemaining: number;
   log: LogEntry[];
   winner: Team | null;
@@ -225,10 +229,10 @@ export function projectView(state: GameState, viewerId: PlayerId): PlayerView {
               ? state.players.filter((p) => !p.alive).map((p) => p.id) // dead players to raise
               : validNightTargets(state, viewerId).map((p) => p.id),
         canTargetSelf: !!ability.canTargetSelf,
+        canSkip: SKIPPABLE_KINDS.includes(myStep.kind),
         witch:
           myStep.kind === "witch"
             ? {
-                healTargetIds: living(state).map((p) => p.id),
                 healAvailable: !!state.witchPotions[viewerId]?.heal,
                 poisonAvailable: !!state.witchPotions[viewerId]?.poison,
               }
@@ -284,6 +288,7 @@ export function projectView(state: GameState, viewerId: PlayerId): PlayerView {
     voteTurn: currentVoter(state),
     votes: state.phase === "dayVote" ? { ...state.votes } : {},
     voteHistory: state.voteHistory,
+    verdict: state.verdict,
     votesRemaining,
     log: publicLog(state),
     winner: state.winner,

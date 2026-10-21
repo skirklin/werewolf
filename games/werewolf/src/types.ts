@@ -27,7 +27,8 @@ export type NightActionKind =
  */
 export type NightSubmission =
   | { t: "target"; target: PlayerId } // kill / protect / inspect / silence
-  | { t: "witch"; heal: PlayerId | null; poison: PlayerId | null }
+  | { t: "witch"; heal: boolean; poison: PlayerId | null }
+  | { t: "skip" } // an optional power held back for another night (Troublemaker, Infector)
   | { t: "swap"; a: PlayerId; b: PlayerId }
   | { t: "detect"; a: PlayerId; b: PlayerId }
   | { t: "raise"; target: PlayerId | null }; // Medium: a dead player, or skip
@@ -79,6 +80,7 @@ export type Phase =
   | "hunterShot"
   | "dayDiscussion"
   | "dayVote"
+  | "verdict"
   | "gameOver";
 
 export interface Player {
@@ -174,6 +176,21 @@ export interface NightState {
   idleDone: PlayerId[];
 }
 
+/**
+ * The result of a day's vote, announced to everyone before the game moves on.
+ * `next` says what happens when the host continues.
+ */
+export interface Verdict {
+  round: number;
+  /** Someone went out, the vote tied, or nobody voted for anyone. */
+  outcome: "lynch" | "tie" | "noVotes";
+  playerId: PlayerId | null;
+  next: "gameOver" | "hunterShot" | "night";
+  /** Who has won, when the vote ended the game. */
+  winner: Team | null;
+  soloWinnerId: PlayerId | null;
+}
+
 /** How each voter voted in one day's ballot (null = abstained). Public. */
 export interface VoteRecord {
   round: number;
@@ -215,6 +232,10 @@ export interface GameState {
   silenced: PlayerId[];
   /** Per-Medium: whether their one-time raise has been spent. */
   mediumUsed: Record<PlayerId, boolean>;
+  /** Per-Troublemaker: whether their one-time swap has been spent. */
+  swapUsed: Record<PlayerId, boolean>;
+  /** The vote result being announced (phase "verdict"), else null. */
+  verdict: Verdict | null;
   /** Per-Infector: whether their one-time conversion has been spent. */
   convertUsed: Record<PlayerId, boolean>;
   /** Per-Drunk: the role they've been dealt to secretly impersonate. */

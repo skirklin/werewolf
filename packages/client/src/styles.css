@@ -469,3 +469,7 @@ button.info { min-height: 32px; padding: 0 8px; color: var(--muted); border: non
 .chip.dead .who .sub { text-decoration: none; }
 .chip:not(:has(.avatar)) { padding-left: 14px; }
 .host-tools button { white-space: nowrap; flex: none; }
+
+/* ---- Vote result ---- */
+.verdict-next { font-size: 1.05rem; padding: 16px; }
+.verdict-next.over { border-color: var(--accent-2); }

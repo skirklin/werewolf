@@ -206,6 +206,12 @@ export class Arena {
           break;
         }
 
+        case "verdict":
+          // Everyone has the result on screen; the host moves the table on.
+          host.send({ type: "endVerdict" });
+          await host.waitFor((v) => v.phase !== "verdict", "the table to move on from the vote");
+          break;
+
         case "hunterShot": {
           const shooter = clients.find((c) => c.view?.shootPrompt);
           if (shooter) {
