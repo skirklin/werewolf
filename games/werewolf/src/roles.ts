@@ -5,9 +5,15 @@ import type { RoleDef } from "./types.js";
  * existing night `kind` (kill/protect/inspect) no engine changes are needed;
  * a brand-new mechanic is the one place you extend resolveNight in engine.ts.
  */
+/*
+ * Weights follow Ultimate Werewolf's published scale as a starting point, then
+ * adjusted for how these roles work here (e.g. the Witch's heal is blind, the
+ * Infector adds a wolf). They're a prior, meant to be tuned from real games.
+ */
 export const ROLES: Record<string, RoleDef> = {
   villager: {
     id: "villager",
+    weight: 1,
     name: "Villager",
     team: "village",
     emoji: "🧑‍🌾",
@@ -16,6 +22,7 @@ export const ROLES: Record<string, RoleDef> = {
   },
   werewolf: {
     id: "werewolf",
+    weight: -6,
     name: "Werewolf",
     team: "werewolf",
     emoji: "🐺",
@@ -25,6 +32,7 @@ export const ROLES: Record<string, RoleDef> = {
   },
   henchman: {
     id: "henchman",
+    weight: -4,
     name: "Henchman",
     team: "werewolf",
     emoji: "🦹",
@@ -34,6 +42,7 @@ export const ROLES: Record<string, RoleDef> = {
   },
   infector: {
     id: "infector",
+    weight: -8,
     name: "Infector",
     team: "werewolf",
     emoji: "🧛",
@@ -43,6 +52,7 @@ export const ROLES: Record<string, RoleDef> = {
   },
   seer: {
     id: "seer",
+    weight: 7,
     name: "Seer",
     team: "village",
     emoji: "🔮",
@@ -52,6 +62,7 @@ export const ROLES: Record<string, RoleDef> = {
   },
   auraSeer: {
     id: "auraSeer",
+    weight: 4,
     name: "Aura Seer",
     team: "village",
     emoji: "👁️",
@@ -61,6 +72,7 @@ export const ROLES: Record<string, RoleDef> = {
   },
   doctor: {
     id: "doctor",
+    weight: 4,
     name: "Doctor",
     team: "village",
     emoji: "💉",
@@ -71,6 +83,7 @@ export const ROLES: Record<string, RoleDef> = {
   },
   hunter: {
     id: "hunter",
+    weight: 3,
     name: "Hunter",
     team: "village",
     emoji: "🏹",
@@ -82,6 +95,7 @@ export const ROLES: Record<string, RoleDef> = {
   },
   drunk: {
     id: "drunk",
+    weight: -1,
     name: "Village Drunk",
     team: "village",
     emoji: "🍺",
@@ -93,6 +107,7 @@ export const ROLES: Record<string, RoleDef> = {
   },
   tanner: {
     id: "tanner",
+    weight: -2,
     name: "Tanner",
     team: "solo",
     emoji: "🃏",
@@ -101,6 +116,7 @@ export const ROLES: Record<string, RoleDef> = {
   },
   witch: {
     id: "witch",
+    weight: 4,
     name: "Witch",
     team: "village",
     emoji: "🧪",
@@ -110,6 +126,7 @@ export const ROLES: Record<string, RoleDef> = {
   },
   troublemaker: {
     id: "troublemaker",
+    weight: -1,
     name: "Troublemaker",
     team: "village",
     emoji: "🎭",
@@ -121,6 +138,7 @@ export const ROLES: Record<string, RoleDef> = {
   // Id kept as "silencer" so saved setups and stats still line up.
   silencer: {
     id: "silencer",
+    weight: 1,
     name: "Gossip",
     team: "village",
     emoji: "🗣️",
@@ -131,6 +149,7 @@ export const ROLES: Record<string, RoleDef> = {
   },
   detective: {
     id: "detective",
+    weight: 4,
     name: "Detective",
     team: "village",
     emoji: "🕵️",
@@ -141,6 +160,7 @@ export const ROLES: Record<string, RoleDef> = {
   },
   medium: {
     id: "medium",
+    weight: 2,
     name: "Medium",
     team: "village",
     emoji: "👻",

@@ -702,6 +702,18 @@ describe("Henchman", () => {
     expect(checkWinner(gameWith(["werewolf", "henchman"]))).toBe("werewolf");
   });
 
+  it("counts toward the wolves' majority, since they vote with the pack", () => {
+    // One wolf + Henchman against two villagers: the pack holds half the votes.
+    expect(checkWinner(gameWith(["werewolf", "henchman", "villager", "villager"]))).toBe("werewolf");
+    // Against three villagers it's still a game.
+    expect(checkWinner(gameWith(["werewolf", "henchman", "villager", "villager", "villager"]))).toBeNull();
+  });
+
+  it("can't be dealt into a table where the pack would start with half", () => {
+    expect(validateConfig({ ...gameWith([]).config, selection: { mode: "exact", roleCounts: { werewolf: 1, henchman: 1 } } }, 4))
+      .toEqual(expect.arrayContaining([expect.objectContaining({ message: expect.stringMatching(/Too many/) })]));
+  });
+
   it("is hidden from the villagers (no pack leak)", () => {
     const s = gameWith(["werewolf", "henchman", "villager", "villager"]);
     const v = projectView(s, "p2"); // a plain villager
@@ -819,10 +831,15 @@ describe("wolf-team roles in the pool", () => {
     nightSummary: "discreet", peacefulFirstNight: false,
   });
 
-  it("draws the Infector into a wolf slot but keeps a base Werewolf", () => {
-    const counts = countRoles(dealRoles(players(8), poolConfig(["villager", "infector"]), makeRng(3)));
-    expect(counts.werewolf).toBe(1); // one base wolf...
-    expect(counts.infector).toBe(1); // ...plus the infector (2 wolves total for 8 players)
+  it("can draw the Infector into a wolf slot, always keeping a base Werewolf", () => {
+    let infected = 0;
+    for (let seed = 0; seed < 40; seed++) {
+      const counts = countRoles(dealRoles(players(8), poolConfig(["villager", "infector", "seer", "doctor", "witch"]), makeRng(seed)));
+      expect(counts.werewolf).toBeGreaterThanOrEqual(1);
+      expect((counts.werewolf ?? 0) + (counts.infector ?? 0)).toBe(2); // 2 wolf seats at 8 players
+      infected += counts.infector ?? 0;
+    }
+    expect(infected).toBeGreaterThan(0);
   });
 
   it("never gives a lone wolf the Infector role (the one wolf must be a killer)", () => {
@@ -834,10 +851,14 @@ describe("wolf-team roles in the pool", () => {
     }
   });
 
-  it("draws the Henchman into a non-wolf slot (wolves still come from the ratio)", () => {
-    const counts = countRoles(dealRoles(players(8), poolConfig(["villager", "henchman"]), makeRng(4)));
-    expect(counts.werewolf).toBe(2); // both wolves are base werewolves
-    expect(counts.henchman).toBe(1); // henchman fills a normal slot (not a wolf slot)
+  it("deals the Henchman into a non-wolf seat (wolves still come from the ratio)", () => {
+    let seen = 0;
+    for (let seed = 0; seed < 40; seed++) {
+      const counts = countRoles(dealRoles(players(8), poolConfig(["villager", "henchman", "seer", "doctor", "witch"]), makeRng(seed)));
+      expect(counts.werewolf).toBe(2);
+      seen += counts.henchman ?? 0;
+    }
+    expect(seen).toBeGreaterThan(0);
   });
 
   it("rejects pooling the base Werewolf (it comes from the ratio)", () => {

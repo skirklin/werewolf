@@ -405,7 +405,7 @@ describe("werewolf in a room", () => {
   it("refuses a setup the engine wouldn't accept", () => {
     const { room, clients } = seatPlayers(4);
     expect(() => room.handle(clients[0].playerId, { type: "startGame", config: exact({ werewolf: 2 }) })).toThrow(
-      /Too many werewolves/
+      /Too many/
     );
     expect(() => room.handle(clients[0].playerId, { type: "startGame", config: "nonsense" })).toThrow(GameError);
   });
