@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { castVotes, settleVote } from "./testutil.js";
+import { castVotes, settleVote, settleNight } from "./testutil.js";
 import type { GameConfig, GameState, Player } from "./types.js";
 import { createGame, reduce } from "./engine.js";
 import { GAME_RECORD_VERSION, parseGameRecord, toGameRecord, type GameRecord } from "./record.js";
@@ -35,7 +35,7 @@ function villageWin(): GameState {
   let s = gameWith(["werewolf", "villager", "villager", "villager"]);
   s = reduce(s, { type: "startNight" });
   s = reduce(s, { type: "nightChoice", actorId: "uuid-secret-0", targetId: "uuid-secret-1" });
-  s = reduce(s, { type: "endNight" });
+  s = settleNight(s);
   s = reduce(s, { type: "startVote" });
   s = castVotes(s, { "uuid-secret-0": "uuid-secret-2", "uuid-secret-2": "uuid-secret-0", "uuid-secret-3": "uuid-secret-0" });
   return settleVote(s);
@@ -84,7 +84,7 @@ describe("game records", () => {
     let s = gameWith(["werewolf", "tanner", "villager", "villager"]);
     s = reduce(s, { type: "startNight" });
     s = reduce(s, { type: "nightChoice", actorId: "uuid-secret-0", targetId: "uuid-secret-2" });
-    s = reduce(s, { type: "endNight" });
+    s = settleNight(s);
     s = reduce(s, { type: "startVote" });
     s = castVotes(s, { "uuid-secret-0": "uuid-secret-1", "uuid-secret-1": "uuid-secret-0", "uuid-secret-3": "uuid-secret-1" });
     s = settleVote(s);

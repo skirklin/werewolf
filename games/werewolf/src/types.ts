@@ -19,7 +19,8 @@ export type NightActionKind =
   | "silence"
   | "detect"
   | "raise"
-  | "convert";
+  | "convert"
+  | "mark"; // the Hunter: who goes down with them if they die before the next night
 
 /**
  * What a single actor submitted for their night step. Most roles pick one
@@ -77,10 +78,9 @@ export type Phase =
   | "lobby"
   | "roleReveal"
   | "night"
-  | "hunterShot"
   | "dayDiscussion"
   | "dayVote"
-  | "verdict"
+  | "announce" // what just happened (dawn, or a vote's result), before play moves on
   | "gameOver";
 
 export interface Player {
@@ -176,19 +176,45 @@ export interface NightState {
   idleDone: PlayerId[];
 }
 
+/** One public thing that happened, as read out on an announcement. */
+export type AnnouncementEvent =
+  | { t: "killed"; playerId: PlayerId } // by the wolves
+  | { t: "poisoned"; playerId: PlayerId }
+  | { t: "saved"; playerId: PlayerId } // only shown when the setup announces saves
+  | { t: "quiet" } // the wolves took nobody
+  | { t: "raised"; playerId: PlayerId }
+  | { t: "votedOut"; playerId: PlayerId }
+  | { t: "tie" }
+  | { t: "noVotes" }
+  | { t: "shot"; shooterId: PlayerId; playerId: PlayerId }; // a dying Hunter's shot
+
 /**
- * The result of a day's vote, announced to everyone before the game moves on.
- * `next` says what happens when the host continues.
+ * What just happened, shown to everyone before play moves on: the dawn after
+ * a night, or the result of a day's vote. The outcome is already applied; the
+ * host continues to `next`.
  */
-export interface Verdict {
+export interface Announcement {
+  kind: "dawn" | "vote";
   round: number;
-  /** Someone went out, the vote tied, or nobody voted for anyone. */
-  outcome: "lynch" | "tie" | "noVotes";
-  playerId: PlayerId | null;
-  next: "gameOver" | "hunterShot" | "night";
-  /** Who has won, when the vote ended the game. */
+  events: AnnouncementEvent[];
+  next: "day" | "night" | "gameOver";
+  /** Who has won, when this ends the game. */
   winner: Team | null;
   soloWinnerId: PlayerId | null;
+}
+
+/**
+ * Something that changed for one player overnight, told to them alone at
+ * dawn. Everyone else gets "nothing changed for you", so a longer screen
+ * gives nobody away.
+ */
+export interface Notice {
+  /** Your role changed (a swap, or an infection): what you are now. */
+  roleId?: string;
+  infected?: boolean;
+  raised?: boolean;
+  /** Your pack changed (someone joined or left it). */
+  packChanged?: boolean;
 }
 
 /** How each voter voted in one day's ballot (null = abstained). Public. */
@@ -234,14 +260,21 @@ export interface GameState {
   mediumUsed: Record<PlayerId, boolean>;
   /** Per-Troublemaker: whether their one-time swap has been spent. */
   swapUsed: Record<PlayerId, boolean>;
-  /** The vote result being announced (phase "verdict"), else null. */
-  verdict: Verdict | null;
+  /** What's being announced (phase "announce"), else null. */
+  announcement: Announcement | null;
+  /** Private dawn notices, per player: kept through the day, cleared at nightfall. */
+  notices: Record<PlayerId, Notice>;
+  /** Per-Hunter: who they'll take down with them if they die (chosen each night). */
+  hunterMark: Record<PlayerId, PlayerId>;
   /** Per-Infector: whether their one-time conversion has been spent. */
   convertUsed: Record<PlayerId, boolean>;
   /** Per-Drunk: the role they've been dealt to secretly impersonate. */
   drunkDisguise: Record<PlayerId, string>;
-  /** Per-protector: who they shielded last night (can't be shielded again). */
-  lastProtect: Record<PlayerId, PlayerId>;
+  /**
+   * Per-actor: who they picked last night, for powers that can't pick the same
+   * player two nights running (the Doctor's shield, the Gossip's rumor).
+   */
+  lastTarget: Record<PlayerId, PlayerId>;
   /**
    * The role dealt to each seat at game start, by index into `players`. Roles
    * move around mid-game (swaps, conversions), so this is the only surviving
@@ -261,10 +294,6 @@ export interface GameState {
   voteHistory: VoteRecord[];
   /** Per-Witch remaining potions (heal/poison), each usable once all game. */
   witchPotions: Record<PlayerId, { heal: boolean; poison: boolean }>;
-  /** Hunters who have died and owe a dying shot, resolved front-first. */
-  pendingShots: PlayerId[];
-  /** Where to continue once all pending shots resolve. */
-  afterReckoning: "day" | "night" | null;
   log: LogEntry[];
   seed: number;
   winner: Team | null;

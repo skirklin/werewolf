@@ -20,7 +20,8 @@ export const werewolfModule: GameModule<GameConfig, GameState, PlayerView> & {
   minPlayers: 3,
   maxPlayers: 30,
   // Bump when GameState changes shape (see GameModule.stateVersion).
-  stateVersion: 3, // 3: blind witch heal, one-time Troublemaker (swapUsed), vote verdicts
+  // 4: announcements (dawn + vote), Hunter's nightly mark, lastTarget, no shot phase
+  stateVersion: 4,
 
   parseConfig(raw, players) {
     let problems;
@@ -116,16 +117,11 @@ function toEngineAction(actorId: string, msg: WerewolfAction, isHost: boolean): 
     case "resolveVote":
       hostOnly();
       return { type: "resolveVote" };
-    case "endVerdict":
-      hostOnly(); // the host moves the table on once everyone has seen the result
-      return { type: "endVerdict" };
+    case "proceed":
+      hostOnly(); // the host moves the table on once everyone has read the news
+      return { type: "proceed" };
     case "say":
       return { type: "say", speakerId: actorId, text: msg.text };
-    case "shoot":
-      return { type: "shoot", hunterId: actorId, targetId: msg.targetId };
-    case "skipShot":
-      hostOnly(); // recovery when a fallen Hunter has left before shooting
-      return { type: "skipShot" };
     default:
       throw new GameError("Unsupported action.");
   }

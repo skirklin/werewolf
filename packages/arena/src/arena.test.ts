@@ -26,9 +26,6 @@ class Spy implements Strategy {
   vote(v: PlayerView): Promise<PlayerId | null> {
     return this.inner.vote(this.watch(v));
   }
-  shoot(v: PlayerView): Promise<PlayerId> {
-    return this.inner.shoot(this.watch(v));
-  }
 }
 
 /** Says its own distinctive line every time it is asked, exercising the chat path. */

@@ -74,8 +74,11 @@ export const ROLES: Record<string, RoleDef> = {
     name: "Hunter",
     team: "village",
     emoji: "🏹",
-    blurb: "Nobody takes you quietly. The instant you die — fangs or pitchforks — you fire one last shot and drag someone down with you.",
+    blurb:
+      "Nobody takes you quietly. Each night, pick who you'd take with you. If you die before the next night — fangs or pitchforks — they go down with you.",
     onDeathShoot: true,
+    // Picked every night, while still alive: the shot fires automatically on death.
+    night: { kind: "mark", order: 45, canTargetSelf: false },
   },
   drunk: {
     id: "drunk",
@@ -115,13 +118,14 @@ export const ROLES: Record<string, RoleDef> = {
     drunkMimicable: true,
     night: { kind: "swap", order: 40 },
   },
+  // Id kept as "silencer" so saved setups and stats still line up.
   silencer: {
     id: "silencer",
-    name: "Silencer",
+    name: "Gossip",
     team: "village",
-    emoji: "🤫",
+    emoji: "🗣️",
     blurb:
-      "Each night, shush one player — no vote for them tomorrow. Perfect for muzzling a smooth talker or a wolf who won't shut up.",
+      "Each night, start a juicy rumor about someone. Tomorrow the town gives them the cold shoulder: they can't speak up or vote. Never the same person two nights running.",
     drunkMimicable: true,
     night: { kind: "silence", order: 35, canTargetSelf: false },
   },

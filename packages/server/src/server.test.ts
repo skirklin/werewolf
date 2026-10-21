@@ -220,6 +220,8 @@ describe("websocket transport", () => {
       const idle = await s.awaitView((v) => v.phase === "night" && !!v.idlePrompt);
       s.act({ type: "nightIdle", targetId: idle.idlePrompt!.targetIds[0] });
     }
+    await host.awaitView((v) => v.phase === "announce");
+    host.act({ type: "proceed" });
     await host.awaitView((v) => v.phase === "dayDiscussion");
 
     // The dead villager's own socket should now see itself as dead.
@@ -236,8 +238,8 @@ describe("websocket transport", () => {
       await s.awaitView((v) => v.voteTurn === id);
       s.act({ type: "castVote", targetId: id === wolf.playerId ? decoy.playerId : wolf.playerId });
     }
-    await host.awaitView((v) => v.phase === "verdict");
-    host.act({ type: "endVerdict" });
+    await host.awaitView((v) => v.phase === "announce");
+    host.act({ type: "proceed" });
 
     const over = await host.awaitView((v) => v.phase === "gameOver");
     expect(over.winner).toBe("village");

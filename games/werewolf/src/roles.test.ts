@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { castVotes, voteAll, settleVote } from "./testutil.js";
+import { castVotes, voteAll, settleVote, settleNight } from "./testutil.js";
 import type { GameState, Player, GameConfig } from "./types.js";
 import { reduce, createGame, checkWinner, living, allVotesIn, validNightTargets, fabricatedReveal, fabricatedInspect, fabricatedSameTeam, DRUNK_MIMIC_KINDS } from "./engine.js";
 import { getRole } from "./roles.js";
@@ -43,93 +43,94 @@ const alive = (s: GameState, id: string) => living(s).some((p) => p.id === id);
 // Hunter
 // ---------------------------------------------------------------------------
 describe("Hunter", () => {
-  it("shoots after being killed by wolves, then the day begins", () => {
+  it("picks a target every night, and is the only one who sees it", () => {
     let s = gameWith(["werewolf", "hunter", "villager", "villager", "villager"]);
     s = reduce(s, { type: "startNight" });
-    s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p1" }); // wolf eats hunter
-    s = reduce(s, { type: "endNight" });
-    expect(s.phase).toBe("hunterShot");
-    expect(s.pendingShots).toEqual(["p1"]);
-    expect(projectView(s, "p1").shootPrompt).not.toBeNull();
-
-    s = reduce(s, { type: "shoot", hunterId: "p1", targetId: "p2" });
-    expect(alive(s, "p2")).toBe(false);
-    expect(s.phase).toBe("dayDiscussion");
-    expect(s.pendingShots).toEqual([]);
-    expect(s.afterReckoning).toBeNull();
-  });
-
-  it("shoots after being lynched, then the next night begins", () => {
-    let s = gameWith(["werewolf", "hunter", "villager", "villager", "villager", "villager"]);
-    s = reduce(s, { type: "startNight" });
+    expect(projectView(s, "p1").nightPrompt).toMatchObject({ kind: "mark" });
+    expect(projectView(s, "p1").nightPrompt!.targetIds).not.toContain("p1");
+    s = reduce(s, { type: "nightChoice", actorId: "p1", targetId: "p3" });
     s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p2" });
     s = reduce(s, { type: "endNight" });
+    expect(projectView(s, "p1").myMark).toBe("p3");
+    expect(projectView(s, "p2").myMark).toBeNull();
+  });
+
+  it("killed at night, takes tonight's pick down too — announced at dawn", () => {
+    let s = gameWith(["werewolf", "hunter", "villager", "villager", "villager"]);
+    s = reduce(s, { type: "startNight" });
+    s = reduce(s, { type: "nightChoice", actorId: "p1", targetId: "p2" });
+    s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p1" }); // wolf eats hunter
+    s = reduce(s, { type: "endNight" });
+    expect(s.phase).toBe("announce");
+    expect(s.announcement!.events).toEqual([
+      { t: "killed", playerId: "p1" },
+      { t: "shot", shooterId: "p1", playerId: "p2" },
+    ]);
+    expect(alive(s, "p2")).toBe(false);
+    s = reduce(s, { type: "proceed" });
+    expect(s.phase).toBe("dayDiscussion");
+  });
+
+  it("voted out, takes last night's pick down too — announced with the vote", () => {
+    let s = gameWith(["werewolf", "hunter", "villager", "villager", "villager", "villager"]);
+    s = reduce(s, { type: "startNight" });
+    s = reduce(s, { type: "nightChoice", actorId: "p1", targetId: "p3" });
+    s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p2" });
+    s = settleNight(s);
     s = reduce(s, { type: "startVote" });
-    s = castVotes(s, Object.fromEntries(living(s).filter((p) => p.id !== "p1").map((p) => [p.id, "p1"]))); // lynch hunter
-    s = settleVote(s);
-    expect(s.phase).toBe("hunterShot");
-    s = reduce(s, { type: "shoot", hunterId: "p1", targetId: "p3" });
-    expect(s.phase).toBe("night"); // continues to a new night
+    s = castVotes(s, Object.fromEntries(living(s).filter((p) => p.id !== "p1").map((p) => [p.id, "p1"])));
+    s = reduce(s, { type: "resolveVote" });
+    expect(s.announcement!.events).toEqual([
+      { t: "votedOut", playerId: "p1" },
+      { t: "shot", shooterId: "p1", playerId: "p3" },
+    ]);
+    s = reduce(s, { type: "proceed" });
+    expect(s.phase).toBe("night");
     expect(s.round).toBe(2);
   });
 
-  it("chains when a Hunter shoots another Hunter", () => {
+  it("chains when a Hunter's pick is another Hunter", () => {
     let s = gameWith(["werewolf", "hunter", "hunter", "villager", "villager", "villager"]);
     s = reduce(s, { type: "startNight" });
+    s = reduce(s, { type: "nightChoice", actorId: "p1", targetId: "p2" });
+    s = reduce(s, { type: "nightChoice", actorId: "p2", targetId: "p3" });
     s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p1" }); // wolf eats hunter p1
     s = reduce(s, { type: "endNight" });
-    s = reduce(s, { type: "shoot", hunterId: "p1", targetId: "p2" }); // p1 shoots hunter p2
-    expect(s.phase).toBe("hunterShot"); // p2 now owes a shot
-    expect(s.pendingShots).toEqual(["p2"]);
-    s = reduce(s, { type: "shoot", hunterId: "p2", targetId: "p3" }); // p2 shoots villager
     expect([alive(s, "p1"), alive(s, "p2"), alive(s, "p3")]).toEqual([false, false, false]);
-    expect(s.phase).toBe("dayDiscussion");
   });
 
-  it("does not shoot if protected from the wolves", () => {
+  it("does not shoot if saved", () => {
     let s = gameWith(["werewolf", "hunter", "doctor", "villager"]);
     s = reduce(s, { type: "startNight" });
+    s = reduce(s, { type: "nightChoice", actorId: "p1", targetId: "p3" });
     s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p1" }); // wolf targets hunter
     s = reduce(s, { type: "nightChoice", actorId: "p2", targetId: "p1" }); // doctor saves hunter
-    s = reduce(s, { type: "endNight" });
-    expect(s.phase).toBe("dayDiscussion");
+    s = settleNight(s);
     expect(alive(s, "p1")).toBe(true);
+    expect(alive(s, "p3")).toBe(true);
   });
 
-  it("a dying Hunter can end the game by shooting the last wolf", () => {
+  it("a dying Hunter's pick can end the game", () => {
     let s = gameWith(["werewolf", "hunter", "villager", "villager"]);
     s = reduce(s, { type: "startNight" });
+    s = reduce(s, { type: "nightChoice", actorId: "p1", targetId: "p0" }); // the Hunter suspects the wolf
     s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p2" });
-    s = reduce(s, { type: "endNight" });
+    s = settleNight(s);
     s = reduce(s, { type: "startVote" });
-    s = castVotes(s, Object.fromEntries(living(s).filter((p) => p.id !== "p1").map((p) => [p.id, "p1"]))); // lynch hunter
-    s = settleVote(s);
-    s = reduce(s, { type: "shoot", hunterId: "p1", targetId: "p0" }); // shoot the wolf
+    s = castVotes(s, Object.fromEntries(living(s).filter((p) => p.id !== "p1").map((p) => [p.id, "p1"])));
+    s = reduce(s, { type: "resolveVote" });
+    expect(s.announcement).toMatchObject({ next: "gameOver", winner: "village" });
+    s = reduce(s, { type: "proceed" });
     expect(s.phase).toBe("gameOver");
-    expect(s.winner).toBe("village");
   });
 
-  it("rejects illegal shots", () => {
+  it("with no pick (or a pick already dead), dies without shooting", () => {
     let s = gameWith(["werewolf", "hunter", "villager", "villager", "villager"]);
     s = reduce(s, { type: "startNight" });
-    s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p1" });
+    s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p1" }); // the Hunter never picked
     s = reduce(s, { type: "endNight" });
-    expect(() => reduce(s, { type: "shoot", hunterId: "p1", targetId: "p1" })).toThrow(); // self
-    expect(() => reduce(s, { type: "shoot", hunterId: "p2", targetId: "p3" })).toThrow(); // not the shooter
-    expect(() => reduce(s, { type: "shoot", hunterId: "p1", targetId: "p1" })).toThrow(); // p1 is dead
-  });
-
-  it("can have its shot skipped (host recovery when the Hunter is away)", () => {
-    let s = gameWith(["werewolf", "hunter", "villager", "villager", "villager"]);
-    s = reduce(s, { type: "startNight" });
-    s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p1" });
-    s = reduce(s, { type: "endNight" });
-    expect(s.phase).toBe("hunterShot");
-    const livingBefore = living(s).length;
-    s = reduce(s, { type: "skipShot" });
-    expect(s.phase).toBe("dayDiscussion"); // no extra death
-    expect(living(s).length).toBe(livingBefore);
-    expect(s.pendingShots).toEqual([]);
+    expect(living(s)).toHaveLength(4);
+    expect(s.announcement!.events).toEqual([{ t: "killed", playerId: "p1" }]);
   });
 });
 
@@ -141,7 +142,7 @@ describe("Tanner", () => {
     let s = gameWith(["werewolf", "tanner", "villager", "villager"]);
     s = reduce(s, { type: "startNight" });
     s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p2" });
-    s = reduce(s, { type: "endNight" });
+    s = settleNight(s);
     s = reduce(s, { type: "startVote" });
     s = castVotes(s, Object.fromEntries(living(s).filter((p) => p.id !== "p1").map((p) => [p.id, "p1"])));
     s = settleVote(s);
@@ -154,7 +155,7 @@ describe("Tanner", () => {
     let s = gameWith(["werewolf", "tanner", "villager", "villager"]);
     s = reduce(s, { type: "startNight" });
     s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p2" });
-    s = reduce(s, { type: "endNight" });
+    s = settleNight(s);
     s = reduce(s, { type: "startVote" });
     // Everyone else votes out the Tanner (p1), who votes for p3.
     s = castVotes(s, { ...Object.fromEntries(living(s).filter((p) => p.id !== "p1").map((p) => [p.id, "p1"])), p1: "p3" });
@@ -169,7 +170,7 @@ describe("Tanner", () => {
     let s = gameWith(["werewolf", "tanner", "villager", "villager", "villager"]);
     s = reduce(s, { type: "startNight" });
     s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p1" }); // wolves eat the tanner
-    s = reduce(s, { type: "endNight" });
+    s = settleNight(s);
     expect(s.phase).toBe("dayDiscussion");
     expect(s.winner).toBeNull();
   });
@@ -224,7 +225,7 @@ describe("Village Drunk (mimics any role)", () => {
     s = reduce(s, { type: "startNight" });
     s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p2" }); // wolf targets p2
     s = reduce(s, { type: "nightChoice", actorId: "p1", targetId: "p2" }); // drunk "protects" p2
-    s = reduce(s, { type: "endNight" });
+    s = settleNight(s);
     expect(alive(s, "p2")).toBe(false); // the fake protection did nothing
   });
 
@@ -233,7 +234,7 @@ describe("Village Drunk (mimics any role)", () => {
     s = reduce(s, { type: "startNight" });
     s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p2" });
     s = reduce(s, { type: "nightChoice", actorId: "p1", targetId: "p3" }); // drunk "protects" p3
-    s = reduce(s, { type: "endNight" });
+    s = settleNight(s);
     s = reduce(s, { type: "startVote" });
     s = voteAll(s, () => null);
     s = settleVote(s);
@@ -248,7 +249,7 @@ describe("Village Drunk (mimics any role)", () => {
     s = reduce(s, { type: "startNight" });
     s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p2" });
     s = reduce(s, { type: "nightChoice", actorId: "p1", targetId: "p3" }); // drunk "silences" p3
-    s = reduce(s, { type: "endNight" });
+    s = settleNight(s);
     expect(s.silenced).toEqual([]);
   });
 
@@ -257,7 +258,7 @@ describe("Village Drunk (mimics any role)", () => {
     s = reduce(s, { type: "startNight" });
     s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p2" });
     s = reduce(s, { type: "swapAction", actorId: "p1", aId: "p2", bId: "p3" }); // drunk "swaps"
-    s = reduce(s, { type: "endNight" });
+    s = settleNight(s);
     expect(s.players.find((p) => p.id === "p3")!.roleId).toBe("villager"); // unchanged
   });
 
@@ -274,13 +275,13 @@ describe("Village Drunk (mimics any role)", () => {
     s = reduce(s, { type: "startNight" });
     expect(projectView(s, "p1").nightPrompt).toBeNull(); // no dead to 'raise' yet
     s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p2" }); // p2 dies
-    s = reduce(s, { type: "endNight" });
+    s = settleNight(s);
     s = reduce(s, { type: "startVote" });
     s = voteAll(s, () => null);
     s = settleVote(s); // night 2
     s = reduce(s, { type: "raiseAction", actorId: "p1", targetId: "p2" }); // drunk "raises" p2
     s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p3" });
-    s = reduce(s, { type: "endNight" });
+    s = settleNight(s);
     expect(alive(s, "p2")).toBe(false); // stayed dead
     expect(s.mediumUsed["p1"]).toBe(true); // ...but the fake power is spent
   });
@@ -300,7 +301,7 @@ describe("Village Drunk (mimics any role)", () => {
     s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p3" }); // wolf targets p3
     s = reduce(s, { type: "nightChoice", actorId: "p1", targetId: "p3" }); // REAL doctor saves p3
     s = reduce(s, { type: "nightChoice", actorId: "p2", targetId: "p3" }); // drunk "saves" p3 too
-    s = reduce(s, { type: "endNight" });
+    s = settleNight(s);
     expect(alive(s, "p3")).toBe(true); // the real doctor's save counted
   });
 
@@ -312,7 +313,7 @@ describe("Village Drunk (mimics any role)", () => {
     s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p3" });
     s = reduce(s, { type: "swapAction", actorId: "p1", aId: "p2", bId: "p3" }); // real: swap the drunk's seat
     s = reduce(s, { type: "swapAction", actorId: "p2", aId: "p4", bId: "p5" }); // drunk: should do nothing
-    s = reduce(s, { type: "endNight" });
+    s = settleNight(s);
     expect(s.players.find((p) => p.id === "p4")!.roleId).toBe("seer"); // drunk's swap fizzled
   });
 
@@ -324,7 +325,7 @@ describe("Village Drunk (mimics any role)", () => {
     s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p3" }); // wolf kills p3
     s = reduce(s, { type: "nightChoice", actorId: "p2", targetId: "p4" }); // drunk-as-seer "inspects" (fake)
     s = reduce(s, { type: "nightChoice", actorId: "p1", targetId: "p2" }); // infector converts the drunk
-    s = reduce(s, { type: "endNight" });
+    s = settleNight(s);
     expect(s.players.find((p) => p.id === "p2")!.roleId).toBe("werewolf");
     expect(s.drunkDisguise["p2"]).toBeUndefined();
     // Next night the ex-Drunk wakes as a real wolf (kill step + sees the pack).
@@ -352,13 +353,28 @@ describe("Village Drunk (mimics any role)", () => {
       id: `p${i}`, name: `P${i}`, roleId: null, alive: true, connected: true, isHost: false,
     }));
     const cfg: GameConfig = {
-      selection: { mode: "exact", roleCounts: { werewolf: 1, drunk: 1 } },
+      selection: { mode: "exact", roleCounts: { werewolf: 1, drunk: 1, seer: 1 } },
       revealRoleOnDeath: false,
       nightSummary: "discreet", peacefulFirstNight: false,
     };
     const s = reduce({ ...createGame("X", 99), phase: "lobby", players }, { type: "startGame", config: cfg });
     const drunk = s.players.find((p) => p.roleId === "drunk")!;
-    expect(mimicableRoleIds()).toContain(s.drunkDisguise[drunk.id]);
+    // Only a role this game could have: anything else would tell the Drunk what they are.
+    expect(s.drunkDisguise[drunk.id]).toBe("seer");
+  });
+
+  it("is dealt as a plain Villager when no believable disguise is in play", () => {
+    const players: Player[] = Array.from({ length: 6 }, (_, i) => ({
+      id: `p${i}`, name: `P${i}`, roleId: null, alive: true, connected: true, isHost: false,
+    }));
+    const cfg: GameConfig = {
+      selection: { mode: "exact", roleCounts: { werewolf: 1, drunk: 1 } },
+      revealRoleOnDeath: false,
+      nightSummary: "discreet", peacefulFirstNight: false,
+    };
+    const s = reduce({ ...createGame("X", 99), phase: "lobby", players }, { type: "startGame", config: cfg });
+    expect(s.players.some((p) => p.roleId === "drunk")).toBe(false);
+    expect(s.players.filter((p) => p.roleId === "villager")).toHaveLength(5);
   });
 
   it("is on the village team and reveals as the Drunk at game over", () => {
@@ -394,18 +410,26 @@ describe("Witch", () => {
     s = reduce(s, { type: "startNight" });
     s = reduce(s, { type: "witchAction", actorId: "p1", heal: true, poisonTargetId: null });
     s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p2" });
-    s = reduce(s, { type: "endNight" });
+    s = settleNight(s);
     expect(alive(s, "p2")).toBe(true);
     expect(s.witchPotions["p1"]).toEqual({ heal: false, poison: true });
   });
 
   it("a heal on a night the wolves attack nobody is still spent", () => {
     let s = gameWith(["werewolf", "witch", "villager", "villager", "villager"]);
-    s = { ...s, config: { ...s.config, peacefulFirstNight: true } };
     s = reduce(s, { type: "startNight" });
     s = reduce(s, { type: "witchAction", actorId: "p1", heal: true, poisonTargetId: null });
-    s = reduce(s, { type: "endNight" });
+    s = settleNight(s); // the wolves never chose: nobody was attacked
     expect(s.witchPotions["p1"]).toEqual({ heal: false, poison: true });
+  });
+
+  it("sleeps through a peaceful first night (no killing, and a heal would be wasted)", () => {
+    let s = gameWith(["werewolf", "witch", "villager", "villager", "villager"]);
+    s = { ...s, config: { ...s.config, peacefulFirstNight: true } };
+    s = reduce(s, { type: "startNight" });
+    expect(s.night!.steps.map((st) => st.kind)).not.toContain("witch");
+    expect(projectView(s, "p1").nightPrompt).toBeNull();
+    expect(projectView(s, "p1").idlePrompt).not.toBeNull(); // a decoy, like anyone else
   });
 
   it("poisons a chosen player, spending the poison potion", () => {
@@ -413,7 +437,7 @@ describe("Witch", () => {
     s = reduce(s, { type: "startNight" });
     s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p2" });
     s = reduce(s, { type: "witchAction", actorId: "p1", heal: false, poisonTargetId: "p3" });
-    s = reduce(s, { type: "endNight" });
+    s = settleNight(s);
     expect(alive(s, "p2")).toBe(false); // wolf kill
     expect(alive(s, "p3")).toBe(false); // poisoned
     expect(s.witchPotions["p1"]).toEqual({ heal: true, poison: false });
@@ -425,7 +449,7 @@ describe("Witch", () => {
     s = reduce(s, { type: "startNight" });
     s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p2" });
     s = reduce(s, { type: "witchAction", actorId: "p1", heal: true, poisonTargetId: null });
-    s = reduce(s, { type: "endNight" }); // heal spent
+    s = settleNight(s); // heal spent
     // Day, then a new night.
     s = reduce(s, { type: "startVote" });
     s = castVotes(s, Object.fromEntries(living(s).filter((p) => p.id !== "p3").map((p) => [p.id, "p3"])));
@@ -450,7 +474,7 @@ describe("Witch", () => {
     s = reduce(s, { type: "startNight" });
     s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p2" }); // wolves target p2
     s = reduce(s, { type: "witchAction", actorId: "p1", heal: true, poisonTargetId: "p2" }); // heal + poison p2
-    s = reduce(s, { type: "endNight" });
+    s = settleNight(s);
     expect(alive(s, "p2")).toBe(false); // poison bypasses the heal
     expect(s.log.some((e) => e.type === "poisoned" && e.playerId === "p2")).toBe(true);
     expect(s.log.some((e) => e.type === "saved" && (e as any).playerId === "p2")).toBe(false);
@@ -466,7 +490,7 @@ describe("Troublemaker", () => {
     s = reduce(s, { type: "startNight" });
     s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p2" }); // wolf kills p2
     s = reduce(s, { type: "swapAction", actorId: "p1", aId: "p0", bId: "p3" }); // swap wolf & villager
-    s = reduce(s, { type: "endNight" });
+    s = settleNight(s);
     expect(s.players.find((p) => p.id === "p0")!.roleId).toBe("villager"); // former wolf is now a villager
     expect(s.players.find((p) => p.id === "p3")!.roleId).toBe("werewolf"); // the villager is now the wolf
   });
@@ -476,7 +500,7 @@ describe("Troublemaker", () => {
     s = reduce(s, { type: "startNight" });
     s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p2" }); // p2 will die
     s = reduce(s, { type: "swapAction", actorId: "p1", aId: "p2", bId: "p3" }); // p2 dies this night
-    s = reduce(s, { type: "endNight" });
+    s = settleNight(s);
     // The swap fizzles because a target died; roles unchanged.
     expect(s.players.find((p) => p.id === "p3")!.roleId).toBe("villager");
   });
@@ -496,7 +520,7 @@ describe("Troublemaker", () => {
     s = reduce(s, { type: "swapAction", actorId: "p1", aId: "p2", bId: "p4" }); // swap witch & villager
     // Witch (p2) must act before night ends; she does nothing this round.
     s = reduce(s, { type: "witchAction", actorId: "p2", heal: false, poisonTargetId: null });
-    s = reduce(s, { type: "endNight" });
+    s = settleNight(s);
     // p4 is now the Witch and holds the potions; p2 no longer does.
     expect(s.players.find((p) => p.id === "p4")!.roleId).toBe("witch");
     expect(s.witchPotions["p4"]).toEqual({ heal: true, poison: true });
@@ -513,7 +537,7 @@ describe("Silencer", () => {
     s = reduce(s, { type: "startNight" });
     s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p2" }); // wolf kills p2
     s = reduce(s, { type: "nightChoice", actorId: "p1", targetId: "p3" }); // silence p3
-    s = reduce(s, { type: "endNight" });
+    s = settleNight(s);
     expect(s.silenced).toContain("p3");
     expect(projectView(s, "p0").silencedIds).toContain("p3"); // public
 
@@ -540,7 +564,7 @@ describe("Silencer", () => {
     s = reduce(s, { type: "startNight" });
     s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p2" }); // wolves kill p2
     s = reduce(s, { type: "nightChoice", actorId: "p1", targetId: "p2" }); // silencer also picked p2
-    s = reduce(s, { type: "endNight" });
+    s = settleNight(s);
     expect(projectView(s, "p0").silencedIds).not.toContain("p2"); // dead, so not shown
   });
 
@@ -549,7 +573,7 @@ describe("Silencer", () => {
     s = reduce(s, { type: "startNight" });
     s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p2" });
     s = reduce(s, { type: "nightChoice", actorId: "p1", targetId: "p3" });
-    s = reduce(s, { type: "endNight" });
+    s = settleNight(s);
     s = reduce(s, { type: "startVote" });
     s = voteAll(s, () => null);
     s = settleVote(s); // -> next night
@@ -602,7 +626,7 @@ describe("Medium", () => {
     let s = gameWith(["werewolf", "medium", "villager", "villager", "villager"]);
     s = reduce(s, { type: "startNight" });
     s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p2" }); // p2 dies
-    s = reduce(s, { type: "endNight" });
+    s = settleNight(s);
     // Skip the day.
     s = reduce(s, { type: "startVote" });
     s = voteAll(s, () => null);
@@ -612,7 +636,7 @@ describe("Medium", () => {
     expect(projectView(s, "p1").nightPrompt!.kind).toBe("raise");
     s = reduce(s, { type: "raiseAction", actorId: "p1", targetId: "p2" });
     s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p3" });
-    s = reduce(s, { type: "endNight" });
+    s = settleNight(s);
     expect(alive(s, "p2")).toBe(true); // back from the dead
     expect(s.mediumUsed["p1"]).toBe(true);
     expect(s.log.some((e) => e.type === "raised" && e.playerId === "p2")).toBe(true);
@@ -628,7 +652,7 @@ describe("Medium", () => {
     let s = gameWith(["werewolf", "medium", "troublemaker", "villager", "villager", "villager"]);
     s = reduce(s, { type: "startNight" });
     s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p3" }); // p3 dies
-    s = reduce(s, { type: "endNight" });
+    s = settleNight(s);
     s = reduce(s, { type: "startVote" });
     s = voteAll(s, () => null);
     s = settleVote(s); // -> night 2
@@ -636,7 +660,7 @@ describe("Medium", () => {
     s = reduce(s, { type: "raiseAction", actorId: "p1", targetId: "p3" });
     s = reduce(s, { type: "swapAction", actorId: "p2", aId: "p1", bId: "p5" });
     s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p4" });
-    s = reduce(s, { type: "endNight" });
+    s = settleNight(s);
     expect(alive(s, "p3")).toBe(true); // raised
     expect(s.players.find((p) => p.id === "p5")!.roleId).toBe("medium"); // role moved
     expect(s.mediumUsed["p5"]).toBe(true); // ...carrying the SPENT flag
@@ -652,7 +676,7 @@ describe("Medium", () => {
     let s = gameWith(["werewolf", "medium", "villager", "villager", "villager"]);
     s = reduce(s, { type: "startNight" });
     s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p2" });
-    s = reduce(s, { type: "endNight" });
+    s = settleNight(s);
     s = reduce(s, { type: "startVote" });
     s = voteAll(s, () => null);
     s = settleVote(s); // night 2
@@ -732,7 +756,7 @@ describe("Infector", () => {
     s = reduce(s, { type: "startNight" });
     s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p2" }); // wolf eats p2
     s = reduce(s, { type: "nightChoice", actorId: "p1", targetId: "p3" }); // infector converts p3
-    s = reduce(s, { type: "endNight" });
+    s = settleNight(s);
     expect(s.players.find((p) => p.id === "p3")!.roleId).toBe("werewolf");
     expect(s.convertUsed["p1"]).toBe(true);
     // Power spent — no convert prompt next night.
@@ -753,7 +777,7 @@ describe("Infector", () => {
     s = reduce(s, { type: "startNight" });
     s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p3" }); // wolf eats p3
     s = reduce(s, { type: "nightChoice", actorId: "p1", targetId: "p3" }); // infector tries to convert p3
-    s = reduce(s, { type: "endNight" });
+    s = settleNight(s);
     expect(alive(s, "p3")).toBe(false);
     expect(s.players.find((p) => p.id === "p3")!.roleId).toBe("villager"); // not a wolf — stayed dead
     expect(s.convertUsed["p1"]).toBe(false); // power preserved
@@ -765,7 +789,7 @@ describe("Infector", () => {
     s = reduce(s, { type: "startNight" });
     s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p2" }); // eat p2
     s = reduce(s, { type: "nightChoice", actorId: "p1", targetId: "p3" }); // convert p3
-    s = reduce(s, { type: "endNight" });
+    s = settleNight(s);
     expect(s.phase).toBe("gameOver");
     expect(s.winner).toBe("werewolf");
   });
@@ -777,7 +801,7 @@ describe("Infector", () => {
     s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p3" });
     s = reduce(s, { type: "nightChoice", actorId: "p1", targetId: "p4" }); // infector converts p4
     s = reduce(s, { type: "swapAction", actorId: "p2", aId: "p1", bId: "p5" }); // swap infector p1 <-> p5
-    s = reduce(s, { type: "endNight" });
+    s = settleNight(s);
     // Conversion happened; the spent flag moved to whoever holds the infector role.
     expect(s.players.find((p) => p.id === "p4")!.roleId).toBe("werewolf");
     expect(s.players.find((p) => p.id === "p5")!.roleId).toBe("infector");

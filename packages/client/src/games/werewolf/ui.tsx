@@ -4,7 +4,7 @@ import { ROLES, type Phase, type PlayerView, type PublicPlayer, type LogEntry, t
 /** Whether the table should be quiet (night) or talking (day) in a phase. */
 export function timeOfDay(phase: Phase): "day" | "night" | null {
   if (phase === "roleReveal" || phase === "night") return "night";
-  if (phase === "dayDiscussion" || phase === "dayVote" || phase === "verdict" || phase === "hunterShot") return "day";
+  if (phase === "dayDiscussion" || phase === "dayVote" || phase === "announce") return "day";
   return null;
 }
 

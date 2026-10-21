@@ -398,6 +398,9 @@ describe("werewolf in a room", () => {
     ww(room, wolf, { type: "nightChoice", targetId: victimId });
     idleAll(room, clients);
 
+    // Dawn is announced to everyone; the host moves them on to the day.
+    expect(clients[1].view!.announcement).toMatchObject({ kind: "dawn", events: [{ t: "killed", playerId: victimId }] });
+    ww(room, host, { type: "proceed" });
     expect(host.view!.phase).toBe("dayDiscussion");
     expect(byId(victimId).view!.you.alive).toBe(false);
 
@@ -411,10 +414,14 @@ describe("werewolf in a room", () => {
     }
 
     // The result is announced to everyone first; the host moves them on.
-    expect(host.view!.phase).toBe("verdict");
-    expect(clients[1].view!.verdict).toMatchObject({ outcome: "lynch", playerId: wolf.playerId, next: "gameOver" });
+    expect(host.view!.phase).toBe("announce");
+    expect(clients[1].view!.announcement).toMatchObject({
+      kind: "vote",
+      events: [{ t: "votedOut", playerId: wolf.playerId }],
+      next: "gameOver",
+    });
     expect(finished).toHaveLength(0); // the game isn't over until it's over
-    ww(room, host, { type: "endVerdict" });
+    ww(room, host, { type: "proceed" });
     expect(host.view!.phase).toBe("gameOver");
     expect(host.view!.winner).toBe("village");
     expect(host.view!.players.every((p) => p.roleId !== null)).toBe(true);
@@ -438,23 +445,26 @@ describe("werewolf in a room", () => {
     ww(room, doctor, { type: "nightChoice", targetId: victimId });
     ww(room, wolf, { type: "nightChoice", targetId: victimId });
     idleAll(room, clients);
-    expect(clients[0].view!.phase).toBe("dayDiscussion");
+    expect(clients[0].view!.announcement!.events).toEqual([{ t: "quiet" }]); // a discreet save
     expect(clients.find((c) => c.playerId === victimId)!.view!.you.alive).toBe(true);
   });
 
-  it("auto-advances into hunterShot and resolves the shot", () => {
+  it("a Hunter killed at night takes their pick down too, and it's announced at dawn", () => {
     const { room, clients } = seatPlayers(5);
     room.handle(clients[0].playerId, { type: "startGame", config: exact({ werewolf: 1, hunter: 1 }) });
     ww(room, clients[0], { type: "startNight" });
     const wolf = clients.find((c) => c.view!.you.roleId === "werewolf")!;
     const hunter = clients.find((c) => c.view!.you.roleId === "hunter")!;
+    expect(hunter.view!.nightPrompt!.kind).toBe("mark");
+    const pick = hunter.view!.nightPrompt!.targetIds.find((id) => id !== wolf.playerId)!;
+    ww(room, hunter, { type: "nightChoice", targetId: pick });
     ww(room, wolf, { type: "nightChoice", targetId: hunter.playerId });
     idleAll(room, clients);
-    expect(clients[0].view!.phase).toBe("hunterShot");
-    const victim = hunter.view!.shootPrompt!.targetIds.find((id) => id !== wolf.playerId)!;
-    ww(room, hunter, { type: "shoot", targetId: victim });
-    expect(clients[0].view!.phase).toBe("dayDiscussion");
-    expect(clients.find((c) => c.playerId === victim)!.view!.you.alive).toBe(false);
+    expect(clients[0].view!.announcement!.events).toEqual([
+      { t: "killed", playerId: hunter.playerId },
+      { t: "shot", shooterId: hunter.playerId, playerId: pick },
+    ]);
+    expect(clients.find((c) => c.playerId === pick)!.view!.you.alive).toBe(false);
   });
 
   it("shows presence and host changes inside the game view", () => {

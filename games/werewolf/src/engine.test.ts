@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { castVotes, voteAll, settleVote } from "./testutil.js";
+import { castVotes, voteAll, settleVote, settleNight } from "./testutil.js";
 import type { GameState, Player, GameConfig } from "./types.js";
 import {
   reduce,
@@ -171,7 +171,7 @@ describe("night resolution", () => {
     s = reduce(s, { type: "startNight" });
     s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p1" });
     expect(allNightStepsDone(s)).toBe(true);
-    s = reduce(s, { type: "endNight" });
+    s = settleNight(s);
     expect(living(s).find((p) => p.id === "p1")).toBeUndefined();
   });
 
@@ -180,7 +180,7 @@ describe("night resolution", () => {
     s = reduce(s, { type: "startNight" });
     s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p2" }); // wolf targets p2
     s = reduce(s, { type: "nightChoice", actorId: "p1", targetId: "p2" }); // doctor saves p2
-    s = reduce(s, { type: "endNight" });
+    s = settleNight(s);
     expect(living(s).some((p) => p.id === "p2")).toBe(true);
     expect(s.log.some((e) => e.type === "saved")).toBe(true);
   });
@@ -209,7 +209,7 @@ describe("day vote", () => {
     let s = gameWith(["werewolf", "villager", "villager", "villager"]);
     s = reduce(s, { type: "startNight" });
     s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p1" });
-    s = reduce(s, { type: "endNight" });
+    s = settleNight(s);
     expect(s.phase).toBe("dayDiscussion");
     s = reduce(s, { type: "startVote" });
     // p2, p3 vote out the wolf p0; p0 votes p2
@@ -224,7 +224,7 @@ describe("day vote", () => {
     let s = gameWith(["werewolf", "villager", "villager", "villager"]);
     s = reduce(s, { type: "startNight" });
     s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p1" });
-    s = reduce(s, { type: "endNight" });
+    s = settleNight(s);
     s = reduce(s, { type: "startVote" });
     s = castVotes(s, { "p0": "p2", "p2": "p0", "p3": null });  // skip -> 1v1 tie
     s = settleVote(s);
@@ -259,7 +259,7 @@ describe("night edge cases", () => {
     s = reduce(s, { type: "startNight" });
     s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p2" });
     s = reduce(s, { type: "nightChoice", actorId: "p1", targetId: "p2" });
-    s = reduce(s, { type: "endNight" });
+    s = settleNight(s);
     expect(living(s).some((p) => p.id === "p2")).toBe(false);
   });
 
@@ -268,7 +268,7 @@ describe("night edge cases", () => {
     s = reduce(s, { type: "startNight" });
     s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p2" });
     s = reduce(s, { type: "nightChoice", actorId: "p1", targetId: "p3" });
-    s = reduce(s, { type: "endNight" });
+    s = settleNight(s);
     const deaths = s.players.filter((p) => !p.alive);
     expect(deaths).toHaveLength(1);
     expect(["p2", "p3"]).toContain(deaths[0].id);
@@ -279,7 +279,7 @@ describe("night edge cases", () => {
     s = reduce(s, { type: "startNight" });
     s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p1" }); // wolf targets doctor
     s = reduce(s, { type: "nightChoice", actorId: "p1", targetId: "p1" }); // doctor self-protects
-    s = reduce(s, { type: "endNight" });
+    s = settleNight(s);
     expect(living(s).some((p) => p.id === "p1")).toBe(true);
   });
 
@@ -329,7 +329,7 @@ describe("illegal moves are rejected", () => {
     let s = gameWith(["werewolf", "villager", "villager", "villager"]);
     s = reduce(s, { type: "startNight" });
     s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p1" });
-    s = reduce(s, { type: "endNight" });
+    s = settleNight(s);
     s = reduce(s, { type: "startVote" });
     expect(() => reduce(s, { type: "castVote", voterId: "p1", targetId: "p0" })).toThrow();
   });
@@ -338,7 +338,7 @@ describe("illegal moves are rejected", () => {
     let s = gameWith(["werewolf", "villager", "villager", "villager"]);
     s = reduce(s, { type: "startNight" });
     s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p1" });
-    s = reduce(s, { type: "endNight" });
+    s = settleNight(s);
     s = reduce(s, { type: "startVote" });
     expect(() => reduce(s, { type: "castVote", voterId: "p2", targetId: "p2" })).toThrow();
   });
@@ -347,7 +347,7 @@ describe("illegal moves are rejected", () => {
     let s = gameWith(["werewolf", "villager", "villager", "villager"]);
     s = reduce(s, { type: "startNight" });
     s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p1" });
-    s = reduce(s, { type: "endNight" });
+    s = settleNight(s);
     s = reduce(s, { type: "startVote" });
     expect(() => reduce(s, { type: "castVote", voterId: "p2", targetId: "p1" })).toThrow();
   });
@@ -361,7 +361,7 @@ describe("multi-round games", () => {
       s = reduce(s, { type: "startNight" });
       s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: target });
       s = reduce(s, { type: "nightChoice", actorId: "p1", targetId: target });
-      s = reduce(s, { type: "endNight" });
+      s = settleNight(s);
     };
     wolfKill("p2");
     expect(s.phase).toBe("dayDiscussion");
@@ -373,7 +373,7 @@ describe("multi-round games", () => {
     // Second kill reaches parity -> wolves win.
     s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p3" });
     s = reduce(s, { type: "nightChoice", actorId: "p1", targetId: "p3" });
-    s = reduce(s, { type: "endNight" });
+    s = settleNight(s);
     expect(s.phase).toBe("gameOver");
     expect(s.winner).toBe("werewolf");
   });
@@ -391,7 +391,7 @@ describe("multi-round games", () => {
       s = reduce(s, { type: "startNight" });
       // Wolf splits nothing (single wolf); vote ties deterministically.
       s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p1" });
-      s = reduce(s, { type: "endNight" });
+      s = settleNight(s);
       return s.players.filter((p) => !p.alive).map((p) => p.id);
     };
     expect(play(777)).toEqual(play(777));
@@ -423,7 +423,7 @@ describe("view redaction", () => {
       });
       s = reduce(s, { type: "startNight" });
       s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p1" }); // kill seer
-      s = reduce(s, { type: "endNight" });
+      s = settleNight(s);
       return projectView(s, "p2").players.find((p) => p.id === "p1")!.roleId;
     };
     expect(dead(true)).toBe("seer");
@@ -451,7 +451,7 @@ describe("view redaction", () => {
       s = reduce(s, { type: "startNight" });
       s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p2" }); // wolf targets p2
       s = reduce(s, { type: "nightChoice", actorId: "p1", targetId: "p2" }); // doctor saves p2
-      s = reduce(s, { type: "endNight" });
+      s = settleNight(s);
       return projectView(s, "p3"); // a plain villager's view
     };
     const discreet = play("discreet");
@@ -474,7 +474,7 @@ describe("peaceful first night", () => {
     s = reduce(s, { type: "startNight" });
     expect(s.night!.steps.some((st) => st.kind === "kill")).toBe(false);
     expect(allNightStepsDone(s)).toBe(true); // nothing to wait on
-    s = reduce(s, { type: "endNight" });
+    s = settleNight(s);
     expect(living(s)).toHaveLength(4);
     expect(s.log.some((e) => e.type === "noDeath" && e.round === 1)).toBe(true);
 
@@ -483,7 +483,7 @@ describe("peaceful first night", () => {
     expect(s.round).toBe(2);
     expect(s.night!.steps.some((st) => st.kind === "kill")).toBe(true);
     s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p1" });
-    s = reduce(s, { type: "endNight" });
+    s = settleNight(s);
     expect(living(s)).toHaveLength(3);
   });
 
@@ -501,7 +501,7 @@ describe("doctor cooldown", () => {
     s = reduce(s, { type: "startNight" });
     s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p2" });
     s = reduce(s, { type: "nightChoice", actorId: "p1", targetId: "p2" }); // doctor shields p2
-    s = reduce(s, { type: "endNight" });
+    s = settleNight(s);
     expect(living(s)).toHaveLength(5);
 
     s = skipDay(s);
@@ -510,7 +510,7 @@ describe("doctor cooldown", () => {
     expect(() => reduce(s, { type: "nightChoice", actorId: "p1", targetId: "p2" })).toThrow();
     s = reduce(s, { type: "nightChoice", actorId: "p1", targetId: "p3" }); // someone else is fine
     s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p4" });
-    s = reduce(s, { type: "endNight" });
+    s = settleNight(s);
 
     s = skipDay(s);
     expect(s.round).toBe(3);
@@ -523,11 +523,11 @@ describe("doctor cooldown", () => {
     s = reduce(s, { type: "startNight" });
     s = reduce(s, { type: "nightChoice", actorId: "p1", targetId: "p2" });
     s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p3" });
-    s = reduce(s, { type: "endNight" });
+    s = settleNight(s);
     s = skipDay(s);
     // Night 2: the doctor is AFK and the host forces the night to end.
     s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p4" });
-    s = reduce(s, { type: "endNight" });
+    s = settleNight(s);
     s = skipDay(s);
     expect(validNightTargets(s, "p1").map((p) => p.id)).toContain("p2");
   });
@@ -538,7 +538,7 @@ describe("doctor cooldown", () => {
       players: gameWith(["doctor", "villager"]).players.map((p) =>
         p.id === "p1" ? { ...p, alive: false } : p
       ),
-      lastProtect: { p0: "p0" },
+      lastTarget: { p0: "p0" },
     };
     expect(validNightTargets(s, "p0").map((p) => p.id)).toEqual(["p0"]);
   });
@@ -550,7 +550,7 @@ describe("rematch", () => {
     let s = gameWith(["werewolf", "villager", "villager", "villager"], config);
     s = reduce(s, { type: "startNight" });
     s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p1" });
-    s = reduce(s, { type: "endNight" });
+    s = settleNight(s);
     s = reduce(s, { type: "startVote" });
     s = castVotes(s, { "p0": "p2", "p2": "p0", "p3": "p0" });
     s = settleVote(s);
@@ -595,7 +595,7 @@ describe("the town square", () => {
     let s = gameWith(["werewolf", "villager", "villager", "villager"]);
     s = reduce(s, { type: "startNight" });
     s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p1" });
-    return reduce(s, { type: "endNight" });
+    return settleNight(s);
   }
 
   it("carries what was said to everyone, tagged with the round", () => {

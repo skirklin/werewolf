@@ -16,7 +16,7 @@ import {
 import { useLocalGame } from "./local.js";
 import { RoleConfigEditor } from "./config.js";
 import { RoleCard, LogFeed, RolesInPlay, TownNews, BallotLines, useTimeTheme } from "./ui.js";
-import { TargetGrid, WitchPanel, SwapPanel, RaisePanel, SilencedNote, GameOver, PlayerList, VerdictScreen } from "./phases.js";
+import { TargetGrid, WitchPanel, SwapPanel, RaisePanel, SilencedNote, GameOver, PlayerList, AnnouncementScreen, NoticeCard } from "./phases.js";
 
 export function LocalApp({ onExit }: { onExit: () => void }) {
   const game = useLocalGame();
@@ -183,10 +183,11 @@ function LocalPlay({
 
   // Public: the vote's result, read out to the table. Built from public
   // players only, so the role shown is one the whole table may see.
-  if (state.phase === "verdict") {
+  if (state.phase === "announce") {
     return (
       <div className="app">
-        <VerdictScreen view={{ ...view, players: publicPlayers(state) }} onContinue={game.endVerdict} />
+        {/* Private news waits for each player's own turn (see VoteTurn). */}
+        <AnnouncementScreen view={{ ...view, players: publicPlayers(state) }} onContinue={game.proceed} privateNews={false} />
       </div>
     );
   }
@@ -233,8 +234,6 @@ function LocalPlay({
           <button className="primary full lg" onClick={game.passNight}>Tap to pass the phone</button>
         </div>
       );
-    case "shoot":
-      return <ShootTurn view={view} onSubmit={game.submitShoot} />;
     case "vote":
       return <VoteTurn view={view} onSubmit={game.submitVote} />;
     default:
@@ -288,15 +287,6 @@ function DetectTurn({
   );
 }
 
-function ShootTurn({ view, onSubmit }: { view: PlayerView; onSubmit: (id: string) => void }) {
-  return (
-    <div className="app">
-      <div className="phase-banner"><div className="big">🏹</div><h2>{view.you.name}, your dying shot</h2><p className="muted">You've fallen — take one player down with you.</p></div>
-      <TargetGrid view={view} ids={view.shootPrompt!.targetIds} selected={null} onPick={onSubmit} />
-    </div>
-  );
-}
-
 function NightTurn({
   view,
   resolveInspect,
@@ -332,7 +322,8 @@ function NightTurn({
   const promptText =
     prompt.kind === "kill" ? "Choose tonight's victim"
     : prompt.kind === "protect" ? "Choose someone to protect — never the same patient twice running"
-    : prompt.kind === "silence" ? "Choose whose vote to silence tomorrow"
+    : prompt.kind === "silence" ? "Who gets the cold shoulder tomorrow? Not the same person two nights running"
+    : prompt.kind === "mark" ? "If you die before tomorrow night, who do you take down with you?"
     : prompt.kind === "convert" ? "Choose someone to turn into a werewolf"
     : "Choose someone to inspect";
 
@@ -365,6 +356,8 @@ function VoteTurn({ view, onSubmit }: { view: PlayerView; onSubmit: (id: string 
   return (
     <div className="app">
       <div className="phase-banner"><div className="big">🗳️</div><h2>{view.you.name}, cast your vote</h2><p className="muted">Who should the town eliminate?</p></div>
+      {/* Overnight news meant only for this player (a new role, a raise). */}
+      <NoticeCard view={view} />
       <TargetGrid view={view} ids={others.map((p) => p.id)} selected={null} onPick={(id) => onSubmit(id)} />
       <div className="spacer" />
       <button className="ghost full" onClick={() => onSubmit(null)}>Abstain</button>

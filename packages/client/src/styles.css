@@ -473,3 +473,5 @@ button.info { min-height: 32px; padding: 0 8px; color: var(--muted); border: non
 /* ---- Vote result ---- */
 .verdict-next { font-size: 1.05rem; padding: 16px; }
 .verdict-next.over { border-color: var(--accent-2); }
+
+.notice { border-color: var(--accent-2); }

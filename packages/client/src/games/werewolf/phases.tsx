@@ -46,16 +46,18 @@ const NIGHT_VERB: Record<string, string> = {
   kill: "Attack",
   protect: "Protect",
   inspect: "Look into",
-  silence: "Silence",
+  silence: "Start a rumor about",
   convert: "Infect",
+  mark: "Take",
 };
 
 const NIGHT_PROMPT: Record<string, string> = {
   kill: "Choose tonight's victim",
   protect: "Choose someone to protect — never the same patient twice running",
   inspect: "Choose someone to inspect",
-  silence: "Choose whose vote to silence",
+  silence: "Who gets the cold shoulder tomorrow? Not the same person two nights running",
   convert: "Choose someone to infect",
+  mark: "If you die before tomorrow night, who do you take down with you?",
 };
 
 /** The acting player's night UI. Assumes view.nightPrompt is present. */
@@ -339,7 +341,10 @@ function RevealGroup({ title, players }: { title: string; players: PublicPlayer[
             {roleEmoji(p.roleId)} {p.name}
             {p.alive ? "" : " 💀"}
           </span>
-          <span className="muted">{p.roleId ? ROLES[p.roleId].name : "?"}</span>
+          <span className="muted">
+            {p.dealtRoleId && p.dealtRoleId !== p.roleId && <>{ROLES[p.dealtRoleId]?.name ?? "?"} → </>}
+            {p.roleId ? ROLES[p.roleId].name : "?"}
+          </span>
         </div>
       ))}
     </div>
@@ -347,51 +352,81 @@ function RevealGroup({ title, players }: { title: string; players: PublicPlayer[
 }
 
 /**
- * The vote's result, announced to everyone before the game moves on: who went
- * out (and their role, if roles are revealed), or that nobody did — then
- * whether the game is over. The host taps through for the table.
+ * What just happened — the dawn, or a vote's result — read out to everyone
+ * before play moves on, then whether the game is over. Dead players' roles are
+ * named only when the setup reveals roles on death: a wolf's view also knows
+ * its packmates, so going by the view alone would make some phones say more
+ * than others. The host taps through for the table.
  */
-export function VerdictScreen({ view, onContinue }: { view: PlayerView; onContinue: (() => void) | null }) {
-  const v = view.verdict!;
-  const out = v.playerId ? view.players.find((p) => p.id === v.playerId) : null;
-  // Only a role the whole table is told. A wolf's view also knows its packmates
-  // (and everyone knows their own role), so going by the view alone would make
-  // some phones announce a role while others say "secret" — a tell.
-  const role = view.config.revealRoleOnDeath && out?.roleId ? ROLES[out.roleId] : null;
-  const isYou = out?.id === view.you.id;
-  const host = view.players.find((p) => p.isHost)?.name ?? "The host";
-  const { emoji, headline, detail } =
-    v.outcome === "lynch"
-      ? {
-          emoji: "⚖️",
-          headline: isYou ? "You're out" : `${out?.name ?? "Someone"} is out`,
-          detail: role ? `${isYou ? "You were" : "They were"} the ${role.name}.` : isYou ? "The town voted you out." : "Their role stays a secret.",
-        }
-      : v.outcome === "tie"
-        ? { emoji: "🤝", headline: "A tie — nobody goes", detail: "The town couldn't agree, so everyone lives another night." }
-        : { emoji: "🤐", headline: "Nobody voted anyone out", detail: "Everyone lives another night." };
+export function AnnouncementScreen({
+  view,
+  onContinue,
+  privateNews = true,
+}: {
+  view: PlayerView;
+  onContinue: (() => void) | null;
+  /** Show this player's own overnight news (off on a shared pass-the-device screen). */
+  privateNews?: boolean;
+}) {
+  const a = view.announcement!;
+  const you = view.you.id;
+  const name = (id: string) => (id === you ? "you" : nameOf(view, id));
+  const Name = (id: string) => (id === you ? "You" : nameOf(view, id));
+  const was = (id: string) => {
+    const roleId = view.config.revealRoleOnDeath ? view.players.find((p) => p.id === id)?.roleId : null;
+    const role = roleId ? ROLES[roleId] : null;
+    return role ? ` ${id === you ? "You were" : "They were"} the ${role.name}.` : "";
+  };
+  const line = (e: (typeof a.events)[number]): string => {
+    switch (e.t) {
+      case "killed":
+        return `🐺 The wolves got ${name(e.playerId)}.${was(e.playerId)}`;
+      case "poisoned":
+        return `☠️ ${Name(e.playerId)} ${e.playerId === you ? "were" : "was"} found dead — and not by the wolves.${was(e.playerId)}`;
+      case "saved":
+        return `🩹 The wolves struck ${name(e.playerId)}, but ${e.playerId === you ? "you" : "they"} pulled through.`;
+      case "quiet":
+        return "🌅 Everyone woke up in one piece.";
+      case "raised":
+        return `👻 ${Name(e.playerId)} ${e.playerId === you ? "are" : "is"} back from the dead!`;
+      case "votedOut":
+        return `⚖️ The town voted out ${name(e.playerId)}.${was(e.playerId)}`;
+      case "tie":
+        return "🤝 A tie — nobody goes. Everyone lives another night.";
+      case "noVotes":
+        return "🤐 Nobody was voted out. Everyone lives another night.";
+      case "shot":
+        return `🏹 With a last breath, ${name(e.shooterId)} took ${name(e.playerId)} down too.${was(e.playerId)}`;
+    }
+  };
+  const winnerLine =
+    a.winner === "solo"
+      ? `${a.soloWinnerId ? nameOf(view, a.soloWinnerId) : "The Tanner"} wins alone!`
+      : a.winner === "village"
+        ? "The Village wins!"
+        : "The Werewolves win!";
   const next =
-    v.next === "gameOver"
-      ? {
-          line:
-            v.winner === "solo"
-              ? `Game over — ${out?.name ?? "the Tanner"} wins alone!`
-              : v.winner === "village"
-                ? "Game over — the Village wins!"
-                : "Game over — the Werewolves win!",
-          button: "See the final reveal",
-        }
-      : v.next === "hunterShot"
-        ? { line: "The game continues — but a Hunter takes a parting shot first.", button: "On to the Hunter's shot" }
+    a.next === "gameOver"
+      ? { line: `Game over — ${winnerLine}`, button: "See the final reveal" }
+      : a.next === "day"
+        ? { line: "The game continues. Time to talk.", button: "Start the day" }
         : { line: "The game continues. Night falls.", button: "Start the night" };
+  const host = view.players.find((p) => p.isHost)?.name ?? "The host";
   return (
     <div className="stack">
       <div className="phase-banner">
-        <div className="big">{emoji}</div>
-        <h2>{headline}</h2>
-        <p className="muted">{detail}</p>
+        <div className="big">{a.kind === "dawn" ? "🌅" : "⚖️"}</div>
+        <h2>{a.kind === "dawn" ? `Morning of day ${a.round}` : "The town has voted"}</h2>
       </div>
-      <div className={`card tight center verdict-next ${v.next === "gameOver" ? "over" : ""}`}>
+      <div className="card tight stack" style={{ gap: 10 }}>
+        {a.events.map((e, i) => (
+          <div key={i}>{line(e)}</div>
+        ))}
+      </div>
+      {/* Everyone alive gets a private line at dawn, news or not, so nobody's
+          screen is visibly different from their neighbour's. */}
+      {privateNews && a.kind === "dawn" && view.you.alive && <NoticeCard view={view} always />}
+      <div className={`card tight center verdict-next ${a.next === "gameOver" ? "over" : ""}`}>
         <b>{next.line}</b>
       </div>
       {onContinue ? (
@@ -400,6 +435,37 @@ export function VerdictScreen({ view, onContinue }: { view: PlayerView; onContin
         </button>
       ) : (
         <p className="center muted small">{host} will move everyone on.</p>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Your own overnight news: a new role (a swap, an infection), coming back from
+ * the dead, or a pack that changed. With `always`, says so when there's none.
+ */
+export function NoticeCard({ view, always = false }: { view: PlayerView; always?: boolean }) {
+  const n = view.myNotice;
+  if (!n) return always ? <div className="card tight small muted center">🔒 For you only: nothing changed for you overnight.</div> : null;
+  const role = n.roleId ? ROLES[n.roleId] : null;
+  const pack = view.players.filter((p) => view.packmates.includes(p.id)).map((p) => p.name);
+  return (
+    <div className="card tight stack notice" style={{ gap: 6 }}>
+      <b className="small">🔒 For you only</b>
+      {n.raised && <div>👻 You're back from the dead!</div>}
+      {n.infected ? (
+        <div>🧛 You were infected in the night. You're a <b>Werewolf</b> now — you win with the pack.</div>
+      ) : (
+        role && (
+          <div>
+            🎭 Your role changed overnight. You're now the <b>{role.name}</b> {role.emoji}.
+            <div className="muted small">{role.blurb}</div>
+          </div>
+        )
+      )}
+      {n.packChanged && !n.infected && <div>🐺 Your pack changed in the night.</div>}
+      {pack.length > 0 && (n.infected || n.packChanged || role) && (
+        <div className="small">🐺 Your pack: <b>{pack.join(", ")}</b></div>
       )}
     </div>
   );
@@ -418,6 +484,7 @@ export function DayBoard({
   return (
     <div className="stack">
       <TownNews log={view.log} voteHistory={view.voteHistory} round={view.round} players={view.players} />
+      <NoticeCard view={view} />
       <SilencedNote view={view} />
       <InspectHistory view={view} />
       <DetectionHistory view={view} />
@@ -565,30 +632,15 @@ function VoteOrder({ view, name }: { view: PlayerView; name: (id: string) => str
   );
 }
 
-/** A fallen Hunter's dying shot. Assumes view.shootPrompt is present. */
-export function ShootAction({ view, send }: { view: PlayerView; send: Send }) {
-  return (
-    <div className="stack">
-      <div className="phase-banner">
-        <div className="big">🏹</div>
-        <h2>Your dying shot</h2>
-        <p className="muted">You've fallen — take one player down with you.</p>
-      </div>
-      <TargetGrid
-        view={view}
-        ids={view.shootPrompt!.targetIds}
-        selected={null}
-        onPick={(id) => send({ type: "shoot", targetId: id })}
-      />
-    </div>
-  );
-}
-
-/** Public banner: who can't vote today (set by the Silencer). */
+/** Public banner: who's getting the cold shoulder today (the Gossip's mark). */
 export function SilencedNote({ view }: { view: PlayerView }) {
   if (view.silencedIds.length === 0) return null;
   const names = view.silencedIds.map((id) => view.players.find((p) => p.id === id)?.name ?? "someone");
-  return <div className="card tight small">🤫 Lost their voice today (no vote): <b>{names.join(", ")}</b></div>;
+  return (
+    <div className="card tight small">
+      🗣️ The rumor mill has been busy. Getting the cold shoulder today — no talking, no vote: <b>{names.join(", ")}</b>
+    </div>
+  );
 }
 
 export function PlayerList({

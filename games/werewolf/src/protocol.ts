@@ -24,7 +24,6 @@ export type WerewolfAction =
   | { type: "castVote"; targetId: PlayerId | null }
   | { type: "skipVoter" }
   | { type: "resolveVote" }
-  | { type: "endVerdict" }
-  | { type: "shoot"; targetId: PlayerId }
-  | { type: "skipShot" }
+  /** Host: move the table on from an announcement (dawn, or a vote's result). */
+  | { type: "proceed" }
   | { type: "say"; text: string };

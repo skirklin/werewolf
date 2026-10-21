@@ -31,13 +31,12 @@ export interface LocalGame {
   submitWitch: (heal: boolean, poisonTargetId: string | null) => void;
   /** Hold a one-time power (Troublemaker, Infector) for another night. */
   submitSkip: () => void;
-  /** Move on from the announced vote result. */
-  endVerdict: () => void;
+  /** Move on from an announcement (dawn, or a vote's result). */
+  proceed: () => void;
   submitSwap: (aId: string, bId: string) => void;
   submitDetect: (aId: string, bId: string) => void;
   submitRaise: (targetId: string | null) => void;
   passNight: () => void;
-  submitShoot: (targetId: string) => void;
   callVote: () => void;
   submitVote: (targetId: string | null) => void;
   reset: () => void;
@@ -111,8 +110,8 @@ export function useLocalGame(): LocalGame {
     setState(advanceNight(acted, turn.seatId));
   };
 
-  const endVerdict = () => {
-    if (state?.phase === "verdict") setState(reduce(state, { type: "endVerdict" }));
+  const proceed = () => {
+    if (state?.phase === "announce") setState(reduce(state, { type: "proceed" }));
   };
 
   const submitSwap = (aId: string, bId: string) => {
@@ -138,11 +137,6 @@ export function useLocalGame(): LocalGame {
     setState(advanceNight(state, turn.seatId));
   };
 
-  const submitShoot = (targetId: string) => {
-    if (!state || turn.kind !== "shoot") return;
-    setState(reduce(state, { type: "shoot", hunterId: turn.seatId, targetId }));
-  };
-
   const callVote = () => {
     if (!state) return;
     let next = reduce(state, { type: "startVote" });
@@ -166,8 +160,8 @@ export function useLocalGame(): LocalGame {
 
   return {
     state, turn, view, start,
-    submitNight, submitWitch, submitSkip, submitSwap, submitDetect, submitRaise, endVerdict,
-    passNight, submitShoot, callVote, submitVote, reset,
+    submitNight, submitWitch, submitSkip, submitSwap, submitDetect, submitRaise, proceed,
+    passNight, callVote, submitVote, reset,
   };
 }
 

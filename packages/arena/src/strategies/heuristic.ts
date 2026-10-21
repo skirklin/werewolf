@@ -20,10 +20,6 @@ export class HeuristicStrategy implements Strategy {
     this.name = name;
   }
 
-  private pick<T>(items: readonly T[]): T {
-    return items[Math.floor(this.rng() * items.length)];
-  }
-
   /** Players this seat has personally confirmed as wolves (its own visions only). */
   private knownWolves(view: PlayerView): Set<PlayerId> {
     const wolves = new Set<PlayerId>();
@@ -66,7 +62,8 @@ export class HeuristicStrategy implements Strategy {
         } else if (prompt.kind === "protect") {
           // Shield the cleared — they're the town's known-good information.
           score += clear.has(id) ? 1 : 0;
-        } else if (prompt.kind === "silence") {
+        } else if (prompt.kind === "silence" || prompt.kind === "mark") {
+          // Mute a known wolf, or mark one to take down if the Hunter dies.
           score += wolves.has(id) ? 2 : 0;
         }
         return { id, score };
@@ -123,11 +120,5 @@ export class HeuristicStrategy implements Strategy {
     });
     scored.sort((a, b) => b.score - a.score);
     return scored[0].id;
-  }
-
-  async shoot(view: PlayerView): Promise<PlayerId> {
-    const targets = view.shootPrompt!.targetIds;
-    const wolves = [...this.knownWolves(view)].filter((id) => targets.includes(id));
-    return wolves.length ? wolves[0] : this.pick(targets);
   }
 }

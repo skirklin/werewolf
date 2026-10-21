@@ -1,7 +1,7 @@
 import type { PlayerView, WerewolfAction } from "@party/werewolf";
 import type { TableProps } from "../../shell/game.js";
 import { RoleCard, InspectHistory, RolesInPlay, TimeBadge, TownNews, useTimeTheme } from "./ui.js";
-import { NightAction, NightResult, IdleNight, VerdictScreen, DayBoard, VoteAction, ShootAction, DetectionHistory, GameOver, PlayerList } from "./phases.js";
+import { NightAction, NightResult, IdleNight, AnnouncementScreen, DayBoard, VoteAction, DetectionHistory, GameOver, PlayerList } from "./phases.js";
 
 type Send = (action: WerewolfAction) => void;
 
@@ -58,18 +58,6 @@ function renderPhase(view: PlayerView, send: Send, playAgain: () => void, onExit
         </div>
       );
 
-    case "hunterShot":
-      if (view.shootPrompt) return <ShootAction view={view} send={send} />;
-      return (
-        <div className="stack">
-          <div className="phase-banner">
-            <div className="big">🏹</div>
-            <h2>A shot rings out</h2>
-            <p className="muted">A fallen Hunter is choosing who to take down with them.</p>
-          </div>
-        </div>
-      );
-
     case "dayDiscussion":
       return <DayBoard view={view} send={send} isHost={view.you.isHost} />;
 
@@ -84,8 +72,8 @@ function renderPhase(view: PlayerView, send: Send, playAgain: () => void, onExit
         );
       return <VoteAction view={view} send={send} />;
 
-    case "verdict":
-      return <VerdictScreen view={view} onContinue={view.you.isHost ? () => send({ type: "endVerdict" }) : null} />;
+    case "announce":
+      return <AnnouncementScreen view={view} onContinue={view.you.isHost ? () => send({ type: "proceed" }) : null} />;
 
     case "gameOver":
       // The host deals a rematch in place — everyone stays in the room, so no
@@ -115,9 +103,7 @@ function HostRecovery({ view, send }: { view: PlayerView; send: Send }) {
       ? { label: "End the night now", hint: "if someone has wandered off", msg: { type: "endNight" } as WerewolfAction }
       : view.phase === "dayVote" && turnName
         ? { label: `Skip ${turnName}'s vote`, hint: "counts as an abstain", msg: { type: "skipVoter" } as WerewolfAction }
-        : view.phase === "hunterShot"
-          ? { label: "Skip the Hunter's shot", hint: "if they've left", msg: { type: "skipShot" } as WerewolfAction }
-          : null;
+        : null;
   if (!action) return null;
   return (
     <div className="host-tools">

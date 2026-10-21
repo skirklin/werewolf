@@ -44,10 +44,6 @@ export class RandomStrategy implements Strategy {
     const others = otherLiving(view);
     return others.length ? this.pick(others) : null;
   }
-
-  async shoot(view: PlayerView): Promise<PlayerId> {
-    return this.pick(view.shootPrompt!.targetIds);
-  }
 }
 
 /** Handy for log lines: who a strategy just picked. */

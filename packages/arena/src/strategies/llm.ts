@@ -334,7 +334,9 @@ export class LlmStrategy implements Strategy {
       case "inspect":
         return `Whose true role do you want to see tonight?${nth}`;
       case "silence":
-        return `Whose vote will you silence tomorrow?${nth}`;
+        return `Who gets the cold shoulder tomorrow (no talking, no vote)?${nth}`;
+      case "mark":
+        return `If you die before tomorrow night, who do you take down with you?${nth}`;
       case "convert":
         return `Which player will you turn into a werewolf?${nth}`;
       case "detect":
@@ -398,16 +400,6 @@ export class LlmStrategy implements Strategy {
     } catch (err) {
       this.note(err);
       return this.fallback.vote(view);
-    }
-  }
-
-  async shoot(view: PlayerView): Promise<PlayerId> {
-    const targets = view.shootPrompt!.targetIds;
-    try {
-      return await this.choose(view, "You are dying. Who do you take with you?", targets);
-    } catch (err) {
-      this.note(err);
-      return this.fallback.shoot(view);
     }
   }
 

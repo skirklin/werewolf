@@ -278,7 +278,7 @@ function SharedToggles({
       <Rule
         icon="🕊️"
         label="Peaceful first night"
-        help="The wolves skip night one, so nobody's out before the town has spoken."
+        help="No killing on night one: the wolves don't hunt and the Witch sleeps, so nobody's out before the town has spoken."
         checked={config.peacefulFirstNight}
         onChange={(on) => onChange({ ...config, peacefulFirstNight: on })}
       />
