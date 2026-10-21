@@ -490,7 +490,7 @@ export function DayBoard({
       <DetectionHistory view={view} />
       {view.config.chat !== false && <ChatPanel view={view} send={send} />}
       <PlayerList players={view.players} youId={view.you.id} showPresence={isHost} />
-      <RolesInPlay roleIds={view.possibleRoles} />
+      <RolesInPlay roleIds={view.possibleRoles} wolves={view.wolfCount} />
       {isHost && (
         <button className="primary full lg" onClick={() => send({ type: "startVote" })}>
           Call a vote

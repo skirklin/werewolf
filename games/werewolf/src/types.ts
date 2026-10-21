@@ -105,7 +105,16 @@ export interface Player {
  */
 export type RoleSelection =
   | { mode: "exact"; roleCounts: Record<string, number> }
-  | { mode: "pool"; pool: string[]; werewolfRatio: number };
+  | {
+      mode: "pool";
+      pool: string[];
+      werewolfRatio: number;
+      /**
+       * Keep the pack's size a secret: deal the ratio's count or one more, at
+       * even odds (e.g. 2 or 3), so nobody can be sure when the last wolf is gone.
+       */
+      wolfCountVaries?: boolean;
+    };
 
 export interface GameConfig {
   selection: RoleSelection;
@@ -266,6 +275,11 @@ export interface GameState {
   notices: Record<PlayerId, Notice>;
   /** Per-Hunter: who they'll take down with them if they die (chosen each night). */
   hunterMark: Record<PlayerId, PlayerId>;
+  /**
+   * Players who've read their role card and said so (phase "roleReveal"). The
+   * night falls once everyone has.
+   */
+  ready: PlayerId[];
   /** Per-Infector: whether their one-time conversion has been spent. */
   convertUsed: Record<PlayerId, boolean>;
   /** Per-Drunk: the role they've been dealt to secretly impersonate. */

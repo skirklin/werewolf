@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { GameError, type GameModule, type RoomInfo, type ServerMessage } from "@party/core";
 import {
   ROLES,
@@ -156,16 +156,48 @@ describe("rooms", () => {
     expect(room.rejoin(clients[2].playerId, clients[2].token, clients[2])).toBe(false);
   });
 
-  it("a disconnect in the lobby keeps the seat (so they can rejoin) and reassigns host", () => {
+  it("a disconnect in the lobby keeps the seat (so they can rejoin), and the host keeps the job", () => {
     const { room, clients } = seatPlayers(3, "counter");
     room.disconnect(clients[0]);
     const players = clients[1].room!.players;
     expect(players).toHaveLength(3);
     expect(players.find((p) => p.id === clients[0].playerId)!.connected).toBe(false);
-    expect(players.find((p) => p.isHost)!.id).toBe(clients[1].playerId);
-    // Their phone wakes back up: same seat, same room.
+    expect(players.find((p) => p.isHost)!.id).toBe(clients[0].playerId);
+    // Their phone wakes back up: same seat, same room, still host.
     expect(room.rejoin(clients[0].playerId, clients[0].token, clients[0])).toBe(true);
     expect(clients[0].room!.players.find((p) => p.id === clients[0].playerId)!.connected).toBe(true);
+    expect(clients[0].room!.players.find((p) => p.isHost)!.id).toBe(clients[0].playerId);
+  });
+
+  describe("a host who steps away", () => {
+    beforeEach(() => vi.useFakeTimers());
+    afterEach(() => vi.useRealTimers());
+
+    it("keeps the job through a short absence", () => {
+      const { room, clients } = seatPlayers(3, "counter");
+      room.handle(clients[0].playerId, { type: "startGame", config: { target: 3 } });
+      room.disconnect(clients[0]);
+      vi.advanceTimersByTime(room.hostGraceMs - 1000);
+      expect(room.rejoin(clients[0].playerId, clients[0].token, clients[0])).toBe(true);
+      vi.advanceTimersByTime(room.hostGraceMs * 2);
+      expect(clients[1].room!.players.find((p) => p.isHost)!.id).toBe(clients[0].playerId);
+    });
+
+    it("hands it to someone connected once the grace period runs out", () => {
+      const { room, clients } = seatPlayers(3, "counter");
+      room.handle(clients[0].playerId, { type: "startGame", config: { target: 3 } });
+      room.disconnect(clients[0]);
+      vi.advanceTimersByTime(room.hostGraceMs + 1);
+      const host = clients[1].room!.players.find((p) => p.isHost)!;
+      expect(host.id).not.toBe(clients[0].playerId);
+      expect(host.connected).toBe(true);
+    });
+
+    it("hands it on at once when the host leaves on purpose", () => {
+      const { room, clients } = seatPlayers(3, "counter");
+      room.handle(clients[0].playerId, { type: "leave" });
+      expect(clients[1].room!.players.find((p) => p.isHost)!.id).toBe(clients[1].playerId);
+    });
   });
 
   it("mid-game, joining from the same device takes back that device's seat", () => {
@@ -230,7 +262,7 @@ describe("rooms", () => {
   it("hands off host to a connected player if the host leaves mid-game, and tells the game", () => {
     const { room, clients } = seatPlayers(3, "counter");
     room.handle(clients[0].playerId, { type: "startGame", config: { target: 3 } });
-    room.disconnect(clients[0]);
+    room.handle(clients[0].playerId, { type: "leave" });
     const host = clients[1].room!.players.find((p) => p.isHost)!;
     expect(host.id).not.toBe(clients[0].playerId);
     expect(host.connected).toBe(true);
@@ -470,7 +502,7 @@ describe("werewolf in a room", () => {
   it("shows presence and host changes inside the game view", () => {
     const { room, clients } = seatPlayers(4);
     room.handle(clients[0].playerId, { type: "startGame", config: exact({ werewolf: 1 }) });
-    room.disconnect(clients[0]);
+    room.handle(clients[0].playerId, { type: "leave" });
     const view = clients[1].view!;
     expect(view.players.find((p) => p.id === clients[0].playerId)!.connected).toBe(false);
     expect(view.players.find((p) => p.isHost)!.id).not.toBe(clients[0].playerId);

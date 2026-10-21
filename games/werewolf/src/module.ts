@@ -86,6 +86,8 @@ function toEngineAction(actorId: string, msg: WerewolfAction, isHost: boolean): 
     case "startNight":
       hostOnly();
       return { type: "startNight" };
+    case "ready":
+      return { type: "ready", actorId };
     case "nightChoice":
       return { type: "nightChoice", actorId, targetId: msg.targetId };
     case "witchAction":

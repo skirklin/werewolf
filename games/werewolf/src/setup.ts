@@ -2,8 +2,12 @@ import type { GameConfig, Player, RoleSelection } from "./types.js";
 import { getRole, roleCountsAsWolf, VILLAGER_ROLE_ID } from "./roles.js";
 import { shuffle, pick } from "./rng.js";
 
-/** Default target fraction of werewolves in pool mode (~1 per 4 players). */
-export const DEFAULT_WEREWOLF_RATIO = 0.26;
+/**
+ * Default target fraction of werewolves in pool mode (~3 per 10 players). Was
+ * 0.26; tables kept losing to the village, so the default leans a little
+ * further toward the wolves.
+ */
+export const DEFAULT_WEREWOLF_RATIO = 0.3;
 
 /** A conservative, familiar default pool (the rest can be toggled on). */
 const DEFAULT_POOL = ["villager", "seer", "doctor"];
@@ -16,6 +20,26 @@ function clamp(n: number, lo: number, hi: number): number {
 export function werewolfCountFor(playerCount: number, ratio: number): number {
   const max = Math.max(1, Math.floor((playerCount - 1) / 2)); // wolves*2 < players
   return clamp(Math.round(playerCount * ratio), 1, max);
+}
+
+/**
+ * The fewest and most wolves a setup can deal. Equal unless the count varies,
+ * in which case it's the ratio's whole count or one more (both kept legal).
+ */
+export function werewolfRange(sel: RoleSelection, playerCount: number): { min: number; max: number } {
+  if (sel.mode === "exact") {
+    let n = 0;
+    for (const [roleId, count] of Object.entries(sel.roleCounts))
+      if (roleCountsAsWolf(getRole(roleId))) n += Math.max(0, count);
+    return { min: n, max: n };
+  }
+  if (!sel.wolfCountVaries) {
+    const n = werewolfCountFor(playerCount, sel.werewolfRatio);
+    return { min: n, max: n };
+  }
+  const most = Math.max(1, Math.floor((playerCount - 1) / 2));
+  const min = clamp(Math.floor(playerCount * sel.werewolfRatio), 1, most);
+  return { min, max: Math.min(min + 1, most) };
 }
 
 /**
@@ -87,7 +111,9 @@ export function validateConfig(config: GameConfig, playerCount: number): ConfigP
 /** Human-readable summary of who will be dealt (used by the UI to preview). */
 export function previewComposition(
   config: GameConfig,
-  playerCount: number
+  playerCount: number,
+  /** Preview with this many wolves (pool mode), e.g. each end of werewolfRange. */
+  wolfCount?: number
 ): { werewolves: number; villageSpecials: number; villagers: number } {
   const sel = config.selection;
   if (sel.mode === "exact") {
@@ -104,7 +130,7 @@ export function previewComposition(
       villagers: Math.max(0, playerCount - wolves - specials),
     };
   }
-  const wolves = werewolfCountFor(playerCount, sel.werewolfRatio);
+  const wolves = wolfCount ?? werewolfRange(sel, playerCount).min;
   const restSlots = Math.max(0, playerCount - wolves);
   const restPoolLen = sel.pool.filter(
     (id) => id !== "werewolf" && id !== VILLAGER_ROLE_ID && !roleCountsAsWolf(getRole(id))
@@ -162,7 +188,9 @@ function buildDeck(sel: RoleSelection, playerCount: number, rng: () => number): 
       for (let i = 0; i < Math.max(0, count); i++) deck.push(roleId);
     }
   } else {
-    const wolfCount = werewolfCountFor(playerCount, sel.werewolfRatio);
+    const range = werewolfRange(sel, playerCount);
+    // Only draw when it can vary, so a fixed count leaves the shuffle untouched.
+    const wolfCount = range.max > range.min && rng() < 0.5 ? range.max : range.min;
     // Wolf slots: draw wolf-team specials (Infector) from the pool, but always
     // keep at least one plain Werewolf so the pack has a killer.
     const wolfSpecials = sel.pool.filter((id) => id !== "werewolf" && roleCountsAsWolf(getRole(id)));

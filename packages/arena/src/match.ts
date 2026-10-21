@@ -148,7 +148,8 @@ export class Arena {
             await client.soft((v) => v.phase === "roleReveal" && !!v.you.roleId, 2000);
             if (client.view) strategies[i].observe?.(client.view);
           }
-          host.send({ type: "startNight" });
+          // Everyone says they've read their card; night falls on the last one.
+          for (const client of clients) client.send({ type: "ready" });
           await host.waitFor((v) => v.phase !== "roleReveal", "nightfall");
           break;
 

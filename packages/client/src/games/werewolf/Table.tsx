@@ -19,26 +19,30 @@ export function WerewolfTable({ view, act, playAgain, onExit }: TableProps<Playe
 
 function renderPhase(view: PlayerView, send: Send, playAgain: () => void, onExit: () => void) {
   const dead = !view.you.alive;
-  const host = view.players.find((p) => p.isHost)?.name ?? "The host";
 
   switch (view.phase) {
-    case "roleReveal":
+    case "roleReveal": {
+      const imReady = view.ready.includes(view.you.id);
+      const waiting = view.players.filter((p) => !view.ready.includes(p.id)).map((p) => p.name);
       return (
         <div className="stack">
           <RoleCard view={view} />
-          <RolesInPlay roleIds={view.possibleRoles} open />
-          {view.you.isHost ? (
+          <RolesInPlay roleIds={view.possibleRoles} wolves={view.wolfCount} open />
+          {imReady ? (
+            <p className="center muted">
+              Keep a straight face. Night falls once everyone's ready — waiting on {listNames(waiting)}.
+            </p>
+          ) : (
             <>
-              <p className="center muted small">Start once everyone has seen their card.</p>
-              <button className="primary full lg" onClick={() => send({ type: "startNight" })}>
-                Start the night
+              <p className="center muted small">Read your card. Night falls once everyone has.</p>
+              <button className="primary full lg" onClick={() => send({ type: "ready" })}>
+                I know my role
               </button>
             </>
-          ) : (
-            <p className="center muted">Keep a straight face. {host} starts the night once everyone has seen their card.</p>
           )}
         </div>
       );
+    }
 
     case "night":
       if (dead) return <Spectator view={view} label="The night goes on without you. No hints, no faces." />;
@@ -54,7 +58,7 @@ function renderPhase(view: PlayerView, send: Send, playAgain: () => void, onExit
           </div>
           <InspectHistory view={view} />
           <DetectionHistory view={view} />
-          <RolesInPlay roleIds={view.possibleRoles} />
+          <RolesInPlay roleIds={view.possibleRoles} wolves={view.wolfCount} />
         </div>
       );
 
@@ -99,7 +103,9 @@ function HostRecovery({ view, send }: { view: PlayerView; send: Send }) {
   if (!view.you.isHost) return null;
   const turnName = view.players.find((p) => p.id === view.voteTurn)?.name;
   const action =
-    view.phase === "night"
+    view.phase === "roleReveal" && view.ready.length > 0
+      ? { label: "Start the night anyway", hint: "if someone's not answering", msg: { type: "startNight" } as WerewolfAction }
+      : view.phase === "night"
       ? { label: "End the night now", hint: "if someone has wandered off", msg: { type: "endNight" } as WerewolfAction }
       : view.phase === "dayVote" && turnName
         ? { label: `Skip ${turnName}'s vote`, hint: "counts as an abstain", msg: { type: "skipVoter" } as WerewolfAction }
@@ -113,6 +119,11 @@ function HostRecovery({ view, send }: { view: PlayerView; send: Send }) {
       </button>
     </div>
   );
+}
+
+/** "Sam", "Sam and Alex", "Sam, Alex and Jo". */
+function listNames(names: string[]): string {
+  return names.length <= 1 ? names.join("") : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
 }
 
 function Spectator({ view, label }: { view: PlayerView; label: string }) {

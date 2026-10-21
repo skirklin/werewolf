@@ -13,7 +13,7 @@ import {
   MAX_CHAT_MESSAGES,
 } from "./engine.js";
 import { projectView, publicPlayers } from "./views.js";
-import { recommendedConfig, validateConfig, dealRoles, werewolfCountFor, previewComposition } from "./setup.js";
+import { recommendedConfig, validateConfig, dealRoles, werewolfCountFor, previewComposition, werewolfRange } from "./setup.js";
 import { makeRng } from "./rng.js";
 
 const exact = (roleCounts: Record<string, number>): GameConfig => ({
@@ -136,6 +136,33 @@ describe("role selection", () => {
     expect(previewComposition(exact({ werewolf: 2, seer: 1 }), 6)).toEqual({
       werewolves: 2, villageSpecials: 1, villagers: 3,
     });
+  });
+
+  it("a secret wolf count deals the ratio's count or one more, at even odds", () => {
+    const base = recommendedConfig(8);
+    const sel = { ...base.selection, wolfCountVaries: true } as const;
+    expect(werewolfRange(sel, 8)).toEqual({ min: 2, max: 3 });
+    expect(werewolfRange(base.selection, 8)).toEqual({ min: 2, max: 2 });
+    expect(werewolfRange(sel, 5)).toEqual({ min: 1, max: 2 });
+    expect(werewolfRange(sel, 4)).toEqual({ min: 1, max: 1 }); // two of four would start at parity
+    const players: Player[] = Array.from({ length: 8 }, (_, i) => ({
+      id: `p${i}`, name: `P${i}`, roleId: null, alive: true, connected: true, isHost: false,
+    }));
+    const seen = new Map<number, number>();
+    for (let seed = 1; seed <= 400; seed++) {
+      const wolves = countRoles(dealRoles(players, { ...base, selection: sel }, makeRng(seed))).werewolf ?? 0;
+      seen.set(wolves, (seen.get(wolves) ?? 0) + 1);
+    }
+    expect([...seen.keys()].sort()).toEqual([2, 3]);
+    expect(seen.get(3)!).toBeGreaterThan(140);
+    expect(seen.get(2)!).toBeGreaterThan(140);
+  });
+
+  it("tells the table how many wolves there could be", () => {
+    let s = gameWith(["werewolf", "villager", "villager", "villager", "villager"], exact({ werewolf: 1 }));
+    expect(projectView(s, "p1").wolfCount).toEqual({ min: 1, max: 1 });
+    s = { ...s, config: { ...recommendedConfig(5), selection: { mode: "pool", pool: ["villager"], werewolfRatio: 0.3, wolfCountVaries: true } } };
+    expect(projectView(s, "p1").wolfCount).toEqual({ min: 1, max: 2 });
   });
 
   it("never previews negative counts (e.g. before any players are added)", () => {
@@ -316,6 +343,28 @@ describe("night edge cases", () => {
     expect(projectView(s, "p1").myInspects.at(-1)!.reveal).toBe("villager");
     expect(projectView(s, "p2").myInspects.at(-1)!.reveal).toBe("not-werewolf");
     expect(projectView(s, "p1").myInspects).toHaveLength(1); // can't see the other's vision
+  });
+});
+
+describe("reading role cards", () => {
+  it("night falls once every player says they've read their card", () => {
+    let s = gameWith(["werewolf", "villager", "villager"]);
+    s = reduce(s, { type: "ready", actorId: "p0" });
+    s = reduce(s, { type: "ready", actorId: "p0" }); // twice is still once
+    s = reduce(s, { type: "ready", actorId: "p1" });
+    expect(s.phase).toBe("roleReveal");
+    expect(projectView(s, "p2").ready).toEqual(["p0", "p1"]);
+    s = reduce(s, { type: "ready", actorId: "p2" });
+    expect(s.phase).toBe("night");
+    expect(projectView(s, "p2").ready).toEqual([]);
+  });
+
+  it("the host can still start without someone who's gone quiet", () => {
+    let s = gameWith(["werewolf", "villager", "villager"]);
+    s = reduce(s, { type: "ready", actorId: "p0" });
+    s = reduce(s, { type: "startNight" });
+    expect(s.phase).toBe("night");
+    expect(() => reduce(s, { type: "ready", actorId: "p1" })).toThrow();
   });
 });
 

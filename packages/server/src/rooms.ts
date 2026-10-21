@@ -30,6 +30,12 @@ const CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ";
  * table can drop at once. A code should keep working through all of that.
  */
 const EMPTY_ROOM_GRACE_MS = 2 * 60 * 60_000;
+/**
+ * How long the host can be away before the job moves to someone else. Long
+ * enough to answer a text or switch apps without losing it; short enough that
+ * a host who really left doesn't strand the table (host moves unstick a game).
+ */
+export const HOST_AWAY_GRACE_MS = 3 * 60_000;
 /** Longest real name, and longest nickname. */
 const MAX_NAME = 20;
 
@@ -88,6 +94,10 @@ export class Room {
   private devices = new Map<string, string>();
   /** When the room last became empty (for sweeping), or null while occupied. */
   emptySince: number | null = null;
+  /** How long the host may be away before the job moves (see HOST_AWAY_GRACE_MS). */
+  hostGraceMs = HOST_AWAY_GRACE_MS;
+  /** Pending hand-off while the host is away, or null. */
+  private hostTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(
     readonly code: string,
@@ -216,8 +226,6 @@ export class Room {
       // shouldn't cost anyone their place (or the room its code). A lobby
       // seat still empty when the game starts is dropped then.
       if (player) player.connected = false;
-      // Hand off host if the host left and someone is still connected (any phase).
-      if (player?.isHost) this.reassignHostFrom(pid);
       if (this.empty) this.emptySince = Date.now();
       this.rosterChanged();
       return;
@@ -236,6 +244,11 @@ export class Room {
         const client = this.clients.get(playerId);
         // Mid-game the seat stays (the game still counts it); it's just empty.
         if (client) this.disconnect(client);
+        // Leaving on purpose isn't stepping away: hand the job on now.
+        if (player.isHost) {
+          this.reassignHostFrom(playerId);
+          this.rosterChanged();
+        }
         if (this.inLobby) {
           this.remove(playerId);
           this.broadcast();
@@ -342,8 +355,32 @@ export class Room {
     if (heir) for (const p of this.players) p.isHost = p.id === heir.id;
   }
 
+  /**
+   * Keep the host through a short absence (a locked phone, a quick app
+   * switch): only once they've been gone for the grace period does the job
+   * move to someone connected. Coming back in time cancels the hand-off.
+   */
+  private watchHost() {
+    const host = this.players.find((p) => p.isHost);
+    const away = !!host && !this.clients.has(host.id);
+    if (!away) {
+      if (this.hostTimer) clearTimeout(this.hostTimer);
+      this.hostTimer = null;
+      return;
+    }
+    if (this.hostTimer) return;
+    this.hostTimer = setTimeout(() => {
+      this.hostTimer = null;
+      if (this.clients.has(host.id) || !host.isHost) return;
+      this.reassignHostFrom(host.id);
+      this.rosterChanged();
+    }, this.hostGraceMs);
+    this.hostTimer.unref?.();
+  }
+
   /** Presence or host changed: tell the game (if it cares), then everyone. */
   private rosterChanged() {
+    this.watchHost();
     if (!this.inLobby && this.game.roster) this.state = this.game.roster(this.state, this.info().players);
     this.broadcast();
   }

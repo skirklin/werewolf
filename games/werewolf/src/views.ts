@@ -31,7 +31,7 @@ export function publicLog(state: GameState): LogEntry[] {
   );
 }
 import { getRole } from "./roles.js";
-import { possibleRoles } from "./setup.js";
+import { possibleRoles, werewolfRange } from "./setup.js";
 import {
   living,
   eligibleVoters,
@@ -125,6 +125,8 @@ export interface PlayerView {
   myInspects: InspectResult[];
   /** Your detective readings across all rounds (only yours). */
   myDetections: DetectionResult[];
+  /** Who has read their role card (phase "roleReveal"; public — everyone has a card). */
+  ready: PlayerId[];
   /** Players silenced for the current day (public — they can't vote). */
   silencedIds: PlayerId[];
   /** Your current vote this round (undefined if not cast). */
@@ -156,6 +158,11 @@ export interface PlayerView {
   config: GameConfig;
   /** Every role that could be in this game (no counts, no owners). Public. */
   possibleRoles: string[];
+  /**
+   * How many werewolves this game could have dealt (public, from the setup):
+   * equal ends for a fixed count, or e.g. 2–3 when the count is kept secret.
+   */
+  wolfCount: { min: number; max: number };
 }
 
 /**
@@ -311,6 +318,7 @@ export function projectView(state: GameState, viewerId: PlayerId): PlayerView {
     myMark,
     myInspects,
     myDetections,
+    ready: state.phase === "roleReveal" ? [...state.ready] : [],
     // Only surface silenced players who are still alive (a silenced-then-killed
     // player shouldn't linger on the day board).
     silencedIds: state.silenced.filter((id) => playerById(state, id)?.alive),
@@ -329,5 +337,6 @@ export function projectView(state: GameState, viewerId: PlayerId): PlayerView {
     soloWinnerId: state.soloWinnerId,
     config: state.config,
     possibleRoles: possibleRoles(state.config, state.players.length),
+    wolfCount: werewolfRange(state.config.selection, state.players.length),
   };
 }

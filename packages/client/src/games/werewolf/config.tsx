@@ -5,6 +5,7 @@ import {
   recommendedConfig,
   validateConfig,
   previewComposition,
+  werewolfRange,
   DEFAULT_WEREWOLF_RATIO,
   type GameConfig,
   type RoleSelection,
@@ -14,7 +15,7 @@ import {
 const RATIO_PRESETS: { label: string; value: number }[] = [
   { label: "Light", value: 0.2 },
   { label: "Standard", value: DEFAULT_WEREWOLF_RATIO },
-  { label: "Heavy", value: 0.34 },
+  { label: "Heavy", value: 0.38 },
 ];
 
 const TEAM_SECTIONS: { team: RoleDef["team"]; label: string }[] = [
@@ -66,7 +67,12 @@ export function RoleConfigEditor({
 }) {
   const sel = config.selection;
   const problems = validateConfig(config, playerCount);
-  const comp = previewComposition(config, Math.max(playerCount, 0));
+  const seats = Math.max(playerCount, 0);
+  const wolfRange = werewolfRange(sel, seats);
+  const comp = previewComposition(config, seats, wolfRange.min);
+  // With a secret wolf count, one more wolf means one fewer villager or special.
+  const most = previewComposition(config, seats, wolfRange.max);
+  const span = (a: number, b: number) => (a === b ? `${a}` : `${Math.min(a, b)}–${Math.max(a, b)}`);
 
   const setSelection = (selection: RoleSelection) => onChange({ ...config, selection });
 
@@ -100,9 +106,9 @@ export function RoleConfigEditor({
 
       <div className="card tight stack" style={{ gap: 6 }}>
         <div className="spread"><b>Tonight's cast · {playerCount} players</b></div>
-        <div className="spread small"><span>🐺 Werewolves</span><b>{comp.werewolves}</b></div>
-        <div className="spread small"><span>✨ Village specials</span><b>{comp.villageSpecials}</b></div>
-        <div className="spread small"><span>🧑‍🌾 Villagers</span><b>{comp.villagers}</b></div>
+        <div className="spread small"><span>🐺 Werewolves</span><b>{span(comp.werewolves, most.werewolves)}</b></div>
+        <div className="spread small"><span>✨ Village specials</span><b>{span(comp.villageSpecials, most.villageSpecials)}</b></div>
+        <div className="spread small"><span>🧑‍🌾 Villagers</span><b>{span(comp.villagers, most.villagers)}</b></div>
       </div>
 
       {problems.length > 0 && (
@@ -275,6 +281,18 @@ function SharedToggles({
 }) {
   return (
     <div className="card tight rules">
+      {config.selection.mode === "pool" && (
+        <Rule
+          icon="🎲"
+          label="Secret wolf count"
+          help="Deal one extra wolf half the time (say, 2 or 3), so nobody can be sure the last wolf is gone."
+          checked={!!config.selection.wolfCountVaries}
+          onChange={(on) =>
+            config.selection.mode === "pool" &&
+            onChange({ ...config, selection: { ...config.selection, wolfCountVaries: on } })
+          }
+        />
+      )}
       <Rule
         icon="🕊️"
         label="Peaceful first night"

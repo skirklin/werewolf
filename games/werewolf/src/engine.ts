@@ -167,6 +167,7 @@ export function isPeacefulNight(state: GameState): boolean {
 export type Action =
   | { type: "startGame"; config: GameConfig }
   | { type: "startNight" }
+  | { type: "ready"; actorId: PlayerId }
   | { type: "nightChoice"; actorId: PlayerId; targetId: PlayerId }
   | { type: "witchAction"; actorId: PlayerId; heal: boolean; poisonTargetId: PlayerId | null }
   | { type: "nightSkip"; actorId: PlayerId }
@@ -207,6 +208,8 @@ export function reduce(state: GameState, action: Action): GameState {
     case "startNight":
       assert(state.phase === "roleReveal", "Roles not being revealed.");
       return beginNight(state);
+    case "ready":
+      return ready(state, action.actorId);
     case "nightChoice":
       return nightChoice(state, action.actorId, action.targetId);
     case "witchAction":
@@ -263,6 +266,19 @@ function say(state: GameState, speakerId: PlayerId, text: string): GameState {
     ...state,
     chat: [...state.chat, { round: state.round, playerId: speakerId, text: clean }],
   };
+}
+
+/**
+ * A player has read their role card and understood it. Once every player has,
+ * night falls on its own; the host can still start without someone who's gone
+ * quiet (startNight).
+ */
+function ready(state: GameState, actorId: PlayerId): GameState {
+  assert(state.phase === "roleReveal", "Roles not being revealed.");
+  assert(playerById(state, actorId), "You're not in this game.");
+  if (state.ready.includes(actorId)) return state;
+  const next = { ...state, ready: [...state.ready, actorId] };
+  return state.players.every((p) => next.ready.includes(p.id)) ? beginNight(next) : next;
 }
 
 /**
@@ -1115,6 +1131,7 @@ export function createGame(code: string, seed: number): GameState {
     mediumUsed: {},
     convertUsed: {},
     swapUsed: {},
+    ready: [],
     announcement: null,
     notices: {},
     hunterMark: {},
