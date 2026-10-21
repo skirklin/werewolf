@@ -417,6 +417,7 @@ describe("Witch", () => {
 
   it("a heal on a night the wolves attack nobody is still spent", () => {
     let s = gameWith(["werewolf", "witch", "villager", "villager", "villager"]);
+    s = { ...s, config: { ...s.config, peacefulFirstNight: true } };
     s = reduce(s, { type: "startNight" });
     s = reduce(s, { type: "witchAction", actorId: "p1", heal: true, poisonTargetId: null });
     s = settleNight(s); // the wolves never chose: nobody was attacked
