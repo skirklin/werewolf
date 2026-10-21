@@ -1,7 +1,7 @@
 import type { PlayerView, WerewolfAction } from "@party/werewolf";
 import type { TableProps } from "../../shell/game.js";
 import { RoleCard, InspectHistory, RolesInPlay, TimeBadge, TownNews, useTimeTheme } from "./ui.js";
-import { NightAction, NightResult, IdleNight, VerdictScreen, DayBoard, VoteAction, ShootAction, DetectionHistory, GameOver, PlayerList } from "./phases.js";
+import { NightAction, NightResult, IdleNight, AnnouncementScreen, DayBoard, VoteAction, DetectionHistory, GameOver, PlayerList } from "./phases.js";
 
 type Send = (action: WerewolfAction) => void;
 
@@ -19,26 +19,30 @@ export function WerewolfTable({ view, act, playAgain, onExit }: TableProps<Playe
 
 function renderPhase(view: PlayerView, send: Send, playAgain: () => void, onExit: () => void) {
   const dead = !view.you.alive;
-  const host = view.players.find((p) => p.isHost)?.name ?? "The host";
 
   switch (view.phase) {
-    case "roleReveal":
+    case "roleReveal": {
+      const imReady = view.ready.includes(view.you.id);
+      const waiting = view.players.filter((p) => !view.ready.includes(p.id)).map((p) => p.name);
       return (
         <div className="stack">
           <RoleCard view={view} />
-          <RolesInPlay roleIds={view.possibleRoles} open />
-          {view.you.isHost ? (
+          <RolesInPlay roleIds={view.possibleRoles} wolves={view.wolfCount} open />
+          {imReady ? (
+            <p className="center muted">
+              Keep a straight face. Night falls once everyone's ready — waiting on {listNames(waiting)}.
+            </p>
+          ) : (
             <>
-              <p className="center muted small">Start once everyone has seen their card.</p>
-              <button className="primary full lg" onClick={() => send({ type: "startNight" })}>
-                Start the night
+              <p className="center muted small">Read your card. Night falls once everyone has.</p>
+              <button className="primary full lg" onClick={() => send({ type: "ready" })}>
+                I know my role
               </button>
             </>
-          ) : (
-            <p className="center muted">Keep a straight face. {host} starts the night once everyone has seen their card.</p>
           )}
         </div>
       );
+    }
 
     case "night":
       if (dead) return <Spectator view={view} label="The night goes on without you. No hints, no faces." />;
@@ -54,19 +58,7 @@ function renderPhase(view: PlayerView, send: Send, playAgain: () => void, onExit
           </div>
           <InspectHistory view={view} />
           <DetectionHistory view={view} />
-          <RolesInPlay roleIds={view.possibleRoles} />
-        </div>
-      );
-
-    case "hunterShot":
-      if (view.shootPrompt) return <ShootAction view={view} send={send} />;
-      return (
-        <div className="stack">
-          <div className="phase-banner">
-            <div className="big">🏹</div>
-            <h2>A shot rings out</h2>
-            <p className="muted">A fallen Hunter is choosing who to take down with them.</p>
-          </div>
+          <RolesInPlay roleIds={view.possibleRoles} wolves={view.wolfCount} />
         </div>
       );
 
@@ -84,8 +76,8 @@ function renderPhase(view: PlayerView, send: Send, playAgain: () => void, onExit
         );
       return <VoteAction view={view} send={send} />;
 
-    case "verdict":
-      return <VerdictScreen view={view} onContinue={view.you.isHost ? () => send({ type: "endVerdict" }) : null} />;
+    case "announce":
+      return <AnnouncementScreen view={view} onContinue={view.you.isHost ? () => send({ type: "proceed" }) : null} />;
 
     case "gameOver":
       // The host deals a rematch in place — everyone stays in the room, so no
@@ -111,13 +103,13 @@ function HostRecovery({ view, send }: { view: PlayerView; send: Send }) {
   if (!view.you.isHost) return null;
   const turnName = view.players.find((p) => p.id === view.voteTurn)?.name;
   const action =
-    view.phase === "night"
+    view.phase === "roleReveal" && view.ready.length > 0
+      ? { label: "Start the night anyway", hint: "if someone's not answering", msg: { type: "startNight" } as WerewolfAction }
+      : view.phase === "night"
       ? { label: "End the night now", hint: "if someone has wandered off", msg: { type: "endNight" } as WerewolfAction }
       : view.phase === "dayVote" && turnName
         ? { label: `Skip ${turnName}'s vote`, hint: "counts as an abstain", msg: { type: "skipVoter" } as WerewolfAction }
-        : view.phase === "hunterShot"
-          ? { label: "Skip the Hunter's shot", hint: "if they've left", msg: { type: "skipShot" } as WerewolfAction }
-          : null;
+        : null;
   if (!action) return null;
   return (
     <div className="host-tools">
@@ -127,6 +119,11 @@ function HostRecovery({ view, send }: { view: PlayerView; send: Send }) {
       </button>
     </div>
   );
+}
+
+/** "Sam", "Sam and Alex", "Sam, Alex and Jo". */
+function listNames(names: string[]): string {
+  return names.length <= 1 ? names.join("") : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
 }
 
 function Spectator({ view, label }: { view: PlayerView; label: string }) {

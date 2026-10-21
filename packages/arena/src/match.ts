@@ -148,7 +148,8 @@ export class Arena {
             await client.soft((v) => v.phase === "roleReveal" && !!v.you.roleId, 2000);
             if (client.view) strategies[i].observe?.(client.view);
           }
-          host.send({ type: "startNight" });
+          // Everyone says they've read their card; night falls on the last one.
+          for (const client of clients) client.send({ type: "ready" });
           await host.waitFor((v) => v.phase !== "roleReveal", "nightfall");
           break;
 
@@ -206,23 +207,11 @@ export class Arena {
           break;
         }
 
-        case "verdict":
-          // Everyone has the result on screen; the host moves the table on.
-          host.send({ type: "endVerdict" });
-          await host.waitFor((v) => v.phase !== "verdict", "the table to move on from the vote");
+        case "announce":
+          // Everyone has the news on screen; the host moves the table on.
+          host.send({ type: "proceed" });
+          await host.waitFor((v) => v.phase !== "announce", "the table to move on from the news");
           break;
-
-        case "hunterShot": {
-          const shooter = clients.find((c) => c.view?.shootPrompt);
-          if (shooter) {
-            const seat = clients.indexOf(shooter);
-            shooter.send({ type: "shoot", targetId: await strategies[seat].shoot(shooter.view!) });
-          } else {
-            host.send({ type: "skipShot" }); // whoever owed a shot is gone
-          }
-          await host.waitFor((v) => v.phase !== "hunterShot", "the shot to land");
-          break;
-        }
       }
     }
     throw new Error("Game did not finish within the step limit.");

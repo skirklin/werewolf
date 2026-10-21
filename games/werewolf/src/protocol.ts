@@ -7,7 +7,8 @@ import type { PlayerId } from "./types.js";
  * client talks to the engine directly and never uses these.
  */
 export type WerewolfAction =
-  | { type: "startNight" }
+  | { type: "startNight" } // host: start without waiting for everyone to be ready
+  | { type: "ready" } // I've read my role card
   | { type: "nightChoice"; targetId: PlayerId }
   /** `heal`: save whoever the wolves attack tonight (the Witch never learns who). */
   | { type: "witchAction"; heal: boolean; poisonTargetId: PlayerId | null }
@@ -24,7 +25,6 @@ export type WerewolfAction =
   | { type: "castVote"; targetId: PlayerId | null }
   | { type: "skipVoter" }
   | { type: "resolveVote" }
-  | { type: "endVerdict" }
-  | { type: "shoot"; targetId: PlayerId }
-  | { type: "skipShot" }
+  /** Host: move the table on from an announcement (dawn, or a vote's result). */
+  | { type: "proceed" }
   | { type: "say"; text: string };

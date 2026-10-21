@@ -22,5 +22,11 @@ export function voteAll(s: GameState, pick: (voterId: PlayerId) => PlayerId | nu
 /** Count the votes and move past the announced result, as the host would. */
 export function settleVote(s: GameState): GameState {
   s = reduce(s, { type: "resolveVote" });
-  return s.phase === "verdict" ? reduce(s, { type: "endVerdict" }) : s;
+  return s.phase === "announce" ? reduce(s, { type: "proceed" }) : s;
+}
+
+/** End the night and move past the dawn announcement, as the host would. */
+export function settleNight(s: GameState): GameState {
+  s = reduce(s, { type: "endNight" });
+  return s.phase === "announce" ? reduce(s, { type: "proceed" }) : s;
 }

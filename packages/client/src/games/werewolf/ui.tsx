@@ -4,7 +4,7 @@ import { ROLES, type Phase, type PlayerView, type PublicPlayer, type LogEntry, t
 /** Whether the table should be quiet (night) or talking (day) in a phase. */
 export function timeOfDay(phase: Phase): "day" | "night" | null {
   if (phase === "roleReveal" || phase === "night") return "night";
-  if (phase === "dayDiscussion" || phase === "dayVote" || phase === "verdict" || phase === "hunterShot") return "day";
+  if (phase === "dayDiscussion" || phase === "dayVote" || phase === "announce") return "day";
   return null;
 }
 
@@ -75,7 +75,16 @@ export function TownNews({
  * to hand without crowding the screen. Tap a role to read what it does, so
  * players can answer "wait, what does the Witch do?" themselves.
  */
-export function RolesInPlay({ roleIds, open = false }: { roleIds: string[]; open?: boolean }) {
+export function RolesInPlay({
+  roleIds,
+  wolves,
+  open = false,
+}: {
+  roleIds: string[];
+  /** How many werewolves the setup could deal. */
+  wolves?: { min: number; max: number };
+  open?: boolean;
+}) {
   const [expanded, setExpanded] = useState(open);
   const [shown, setShown] = useState<string | null>(null);
   if (roleIds.length === 0) return null;
@@ -98,6 +107,18 @@ export function RolesInPlay({ roleIds, open = false }: { roleIds: string[]; open
           </button>
         )}
       </div>
+      {wolves && (
+        <div className="small">
+          🐺{" "}
+          {wolves.min === wolves.max ? (
+            <b>{wolves.min} {wolves.min === 1 ? "werewolf" : "werewolves"}</b>
+          ) : (
+            <>
+              <b>{wolves.min} or {wolves.max} werewolves</b> — the village can't be sure which
+            </>
+          )}
+        </div>
+      )}
       <div className="roles-list">
         {roleIds.map((id) => (
           <button

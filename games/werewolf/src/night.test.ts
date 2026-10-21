@@ -37,6 +37,11 @@ function idleRest(s: GameState): GameState {
   return s;
 }
 
+/** Move past the dawn announcement, as the host would. */
+function dawn(s: GameState): GameState {
+  return s.phase === "announce" ? act(s, "p0", { type: "proceed" }) : s;
+}
+
 /** Cast this ballot the way the table does: one at a time, in voting order. */
 function voteInOrder(s: GameState, ballot: Record<string, string | null>): GameState {
   for (const id of s.voteOrder)
@@ -57,6 +62,8 @@ describe("the night waits for results to be read", () => {
     expect(projectView(s, "p0").nightAwaitingAck).toBe(false);
 
     s = act(s, "p1", { type: "nightAck" });
+    expect(s.phase).toBe("announce"); // dawn
+    s = dawn(s);
     expect(s.phase).toBe("dayDiscussion");
   });
 
@@ -68,6 +75,8 @@ describe("the night waits for results to be read", () => {
     s = idleRest(s);
     expect(s.phase).toBe("night");
     s = act(s, "p1", { type: "nightAck" });
+    expect(s.phase).toBe("announce"); // dawn
+    s = dawn(s);
     expect(s.phase).toBe("dayDiscussion");
   });
 
@@ -76,6 +85,8 @@ describe("the night waits for results to be read", () => {
     s = act(s, "p1", { type: "nightChoice", targetId: "p2" });
     s = act(s, "p0", { type: "nightChoice", targetId: "p3" });
     s = act(s, "p0", { type: "endNight" });
+    expect(s.phase).toBe("announce"); // dawn
+    s = dawn(s);
     expect(s.phase).toBe("dayDiscussion");
   });
 });
@@ -129,10 +140,13 @@ describe("no cross-player information at night", () => {
   });
 
   it("a Witch move with the potions left out means 'do nothing'", () => {
-    let s = gameWith(["werewolf", "witch", "villager", "villager", "villager"], { peacefulFirstNight: true });
-    s = idleRest(s); // the wolf sits out a peaceful first night, so it gets a decoy too
-    expect(s.phase).toBe("night");
+    let s = gameWith(["werewolf", "witch", "villager", "villager", "villager"]);
+    s = act(s, "p0", { type: "nightChoice", targetId: "p2" });
+    s = idleRest(s);
+    expect(s.phase).toBe("night"); // still waiting on the Witch
     s = act(s, "p1", { type: "witchAction" });
+    expect(s.phase).toBe("announce"); // dawn
+    s = dawn(s);
     expect(s.phase).toBe("dayDiscussion");
   });
 
@@ -149,17 +163,22 @@ describe("open votes", () => {
   it("shows who voted for whom, live and after the vote", () => {
     let s = gameWith(["werewolf", "villager", "villager", "villager", "villager"]);
     s = act(s, "p0", { type: "nightChoice", targetId: "p1" });
-    s = idleRest(s);
+    s = dawn(idleRest(s));
     s = act(s, "p0", { type: "startVote" });
     expect(s.voteOrder).toEqual(["p0", "p2", "p3", "p4"]); // day 1 starts at seat 0
     s = act(s, "p0", { type: "castVote", targetId: "p2" });
     expect(projectView(s, "p3").votes).toEqual({ p0: "p2" });
     s = voteInOrder(s, { p2: "p0", p3: "p0", p4: null });
     // The result is announced first; the host moves everyone on from there.
-    expect(s.phase).toBe("verdict");
-    expect(projectView(s, "p3").verdict).toMatchObject({ outcome: "lynch", playerId: "p0", next: "gameOver", winner: "village" });
-    expect(() => act(s, "p3", { type: "endVerdict" })).toThrow(/host/i);
-    s = act(s, "p0", { type: "endVerdict" });
+    expect(s.phase).toBe("announce");
+    expect(projectView(s, "p3").announcement).toMatchObject({
+      kind: "vote",
+      events: [{ t: "votedOut", playerId: "p0" }],
+      next: "gameOver",
+      winner: "village",
+    });
+    expect(() => act(s, "p3", { type: "proceed" })).toThrow(/host/i);
+    s = act(s, "p0", { type: "proceed" });
     expect(s.phase).toBe("gameOver");
     expect(projectView(s, "p3").voteHistory).toEqual([
       { round: 1, votes: { p0: "p2", p2: "p0", p3: "p0", p4: null } },
@@ -177,7 +196,7 @@ describe("chat switch", () => {
   it("allows it by default (older configs have no switch)", () => {
     let s = gameWith(["werewolf", "villager", "villager", "villager"]);
     s = act(s, "p0", { type: "nightChoice", targetId: "p1" });
-    s = idleRest(s);
+    s = dawn(idleRest(s));
     s = act(s, "p2", { type: "say", text: "hi" });
     expect(s.chat).toHaveLength(1);
   });
@@ -217,6 +236,8 @@ describe("everyone taps something at night", () => {
     expect(s.phase).toBe("night"); // p3 hasn't tapped yet
     expect(projectView(s, "p2").idlePrompt).toBeNull();
     s = act(s, "p3", { type: "nightIdle", targetId: "p0" });
+    expect(s.phase).toBe("announce"); // dawn
+    s = dawn(s);
     expect(s.phase).toBe("dayDiscussion");
   });
 
@@ -232,7 +253,7 @@ describe("everyone taps something at night", () => {
 describe("sequential votes", () => {
   const toDay = (s: GameState) => {
     s = act(s, "p0", { type: "nightChoice", targetId: s.players.at(-1)!.id });
-    return act(idleRest(s), "p0", { type: "startVote" });
+    return act(dawn(idleRest(s)), "p0", { type: "startVote" });
   };
 
   it("votes go one at a time, in order, and out-of-turn votes are refused", () => {
@@ -271,43 +292,36 @@ describe("the vote's result is announced before the game moves on", () => {
   const toVote = (roles: string[]) => {
     let s = gameWith(roles);
     s = act(s, "p0", { type: "nightChoice", targetId: s.players.at(-1)!.id });
-    return act(idleRest(s), "p0", { type: "startVote" });
+    s = dawn(idleRest(s));
+    return act(s, "p0", { type: "startVote" });
   };
 
   it("a lynch that doesn't end the game says so, then night falls", () => {
     let s = toVote(["werewolf", "villager", "villager", "villager", "villager", "villager"]);
     s = voteInOrder(s, { p0: "p1", p1: "p2", p2: "p1", p3: "p1", p4: "p1" });
-    expect(s.verdict).toMatchObject({ outcome: "lynch", playerId: "p1", next: "night", winner: null });
+    expect(s.announcement).toMatchObject({ kind: "vote", events: [{ t: "votedOut", playerId: "p1" }], next: "night", winner: null });
     expect(s.players.find((p) => p.id === "p1")!.alive).toBe(false); // the result is already real
-    s = act(s, "p0", { type: "endVerdict" });
+    s = act(s, "p0", { type: "proceed" });
     expect(s.phase).toBe("night");
-    expect(s.verdict).toBeNull();
+    expect(s.announcement).toBeNull();
   });
 
   it("a tie and an empty ballot are announced too", () => {
     let s = toVote(["werewolf", "villager", "villager", "villager", "villager", "villager"]);
     s = voteInOrder(s, { p0: "p1", p1: "p0" });
-    expect(s.verdict).toMatchObject({ outcome: "tie", playerId: null, next: "night" });
+    expect(s.announcement).toMatchObject({ events: [{ t: "tie" }], next: "night" });
     let e = toVote(["werewolf", "villager", "villager", "villager", "villager", "villager"]);
     e = voteInOrder(e, {});
-    expect(e.verdict).toMatchObject({ outcome: "noVotes", next: "night" });
+    expect(e.announcement).toMatchObject({ events: [{ t: "noVotes" }], next: "night" });
   });
 
   it("a lynched Tanner's win is announced, then the game ends", () => {
     let s = toVote(["werewolf", "tanner", "villager", "villager", "villager", "villager"]);
     s = voteInOrder(s, { p0: "p1", p2: "p1", p3: "p1", p4: "p1" });
-    expect(s.verdict).toMatchObject({ next: "gameOver", winner: "solo", soloWinnerId: "p1" });
-    s = act(s, "p0", { type: "endVerdict" });
+    expect(s.announcement).toMatchObject({ next: "gameOver", winner: "solo", soloWinnerId: "p1" });
+    s = act(s, "p0", { type: "proceed" });
     expect(s.phase).toBe("gameOver");
     expect(s.soloWinnerId).toBe("p1");
-  });
-
-  it("a lynched Hunter's shot comes after the announcement", () => {
-    let s = toVote(["werewolf", "hunter", "villager", "villager", "villager", "villager"]);
-    s = voteInOrder(s, { p0: "p1", p2: "p1", p3: "p1", p4: "p1" });
-    expect(s.verdict).toMatchObject({ playerId: "p1", next: "hunterShot" });
-    s = act(s, "p0", { type: "endVerdict" });
-    expect(s.phase).toBe("hunterShot");
   });
 });
 
@@ -317,20 +331,22 @@ describe("one-time powers can wait for the right night", () => {
     expect(projectView(s, "p1").nightPrompt).toMatchObject({ kind: "swap", canSkip: true });
     s = act(s, "p1", { type: "nightSkip" }); // night 1: save it
     s = idleRest(s);
+    expect(s.phase).toBe("announce"); // dawn
+    s = dawn(s);
     expect(s.phase).toBe("dayDiscussion");
     expect(s.swapUsed["p1"]).toBeFalsy();
     s = act(s, "p0", { type: "startVote" });
     s = voteInOrder(s, {});
-    s = act(s, "p0", { type: "endVerdict" });
+    s = act(s, "p0", { type: "proceed" });
     // Night 2: use it.
     expect(projectView(s, "p1").nightPrompt?.kind).toBe("swap");
     s = act(s, "p1", { type: "swapAction", aId: "p2", bId: "p3" });
     s = act(s, "p0", { type: "nightChoice", targetId: "p5" });
-    s = idleRest(s);
+    s = dawn(idleRest(s));
     expect(s.swapUsed["p1"]).toBe(true);
     s = act(s, "p0", { type: "startVote" });
     s = voteInOrder(s, {});
-    s = act(s, "p0", { type: "endVerdict" });
+    s = act(s, "p0", { type: "proceed" });
     // Night 3: spent — a decoy, like anyone else with nothing to do.
     expect(projectView(s, "p1").nightPrompt).toBeNull();
     expect(projectView(s, "p1").idlePrompt).not.toBeNull();
@@ -344,6 +360,8 @@ describe("one-time powers can wait for the right night", () => {
     s = act(s, "p1", { type: "nightSkip" });
     s = act(s, "p0", { type: "nightChoice", targetId: "p6" });
     s = idleRest(s);
+    expect(s.phase).toBe("announce"); // dawn
+    s = dawn(s);
     expect(s.phase).toBe("dayDiscussion");
     expect(s.convertUsed["p1"]).toBeFalsy(); // not spent
     expect(s.players.filter((p) => p.roleId === "werewolf")).toHaveLength(1);
@@ -359,5 +377,97 @@ describe("the Witch's heal", () => {
     s = idleRest(s);
     expect(s.players.find((p) => p.id === "p3")!.alive).toBe(true);
     expect(s.witchPotions["p1"].heal).toBe(false);
+  });
+});
+
+describe("dawn is announced before the day begins", () => {
+  it("says who the wolves took, and whether the game goes on", () => {
+    let s = gameWith(["werewolf", "villager", "villager", "villager", "villager"]);
+    s = act(s, "p0", { type: "nightChoice", targetId: "p3" });
+    s = idleRest(s);
+    expect(s.phase).toBe("announce");
+    expect(projectView(s, "p1").announcement).toEqual({
+      kind: "dawn", round: 1, events: [{ t: "killed", playerId: "p3" }], next: "day", winner: null, soloWinnerId: null,
+    });
+    expect(() => act(s, "p1", { type: "proceed" })).toThrow(/host/i);
+  });
+
+  it("a night that ends the game is announced, then the game ends", () => {
+    let s = gameWith(["werewolf", "villager", "villager"]);
+    s = act(s, "p0", { type: "nightChoice", targetId: "p1" });
+    s = idleRest(s);
+    expect(s.announcement).toMatchObject({ kind: "dawn", next: "gameOver", winner: "werewolf" });
+    s = act(s, "p0", { type: "proceed" });
+    expect(s.phase).toBe("gameOver");
+  });
+
+  it("a save reads as a quiet night unless the setup announces saves", () => {
+    const night = (over: Partial<GameConfig>) => {
+      let s = gameWith(["werewolf", "doctor", "villager", "villager", "villager"], over);
+      s = act(s, "p1", { type: "nightChoice", targetId: "p3" });
+      s = act(s, "p0", { type: "nightChoice", targetId: "p3" });
+      return projectView(idleRest(s), "p2").announcement!.events;
+    };
+    expect(night({})).toEqual([{ t: "quiet" }]);
+    expect(night({ nightSummary: "detailed" })).toEqual([{ t: "saved", playerId: "p3" }]);
+  });
+});
+
+describe("private dawn notices", () => {
+  it("an infected player is told they've joined the pack, and the pack is told it grew", () => {
+    // Enough villagers that the new wolf doesn't hand the pack the game at dawn.
+    let s = gameWith(["werewolf", "infector", "villager", "villager", "villager", "villager", "villager", "villager", "villager"]);
+    s = act(s, "p1", { type: "nightChoice", targetId: "p4" });
+    s = act(s, "p0", { type: "nightChoice", targetId: "p6" });
+    s = idleRest(s);
+    expect(projectView(s, "p4").myNotice).toEqual({ roleId: "werewolf", infected: true });
+    expect(projectView(s, "p0").myNotice).toEqual({ packChanged: true });
+    expect(projectView(s, "p2").myNotice).toBeNull(); // nothing for anyone else...
+    expect(projectView(s, "p2").announcement!.events).toEqual([{ t: "killed", playerId: "p6" }]); // ...nor in public
+    s = act(s, "p0", { type: "proceed" });
+    expect(projectView(s, "p4").myNotice).not.toBeNull(); // still there to re-read all day
+    s = act(s, "p0", { type: "startVote" });
+    s = voteInOrder(s, {});
+    s = act(s, "p0", { type: "proceed" });
+    expect(projectView(s, "p4").myNotice).toBeNull(); // gone at nightfall
+  });
+
+  it("swapped players learn their new role", () => {
+    let s = gameWith(["werewolf", "troublemaker", "seer", "villager", "villager", "villager"]);
+    s = act(s, "p1", { type: "swapAction", aId: "p2", bId: "p3" });
+    s = act(s, "p2", { type: "nightChoice", targetId: "p4" });
+    s = act(s, "p2", { type: "nightAck" });
+    s = act(s, "p0", { type: "nightChoice", targetId: "p5" });
+    s = idleRest(s);
+    expect(projectView(s, "p2").myNotice).toEqual({ roleId: "villager" });
+    expect(projectView(s, "p3").myNotice).toEqual({ roleId: "seer" });
+  });
+});
+
+describe("the Gossip", () => {
+  it("leaves their mark unable to vote or speak, and can't pick them two nights running", () => {
+    let s = gameWith(["werewolf", "silencer", "villager", "villager", "villager", "villager"]);
+    s = act(s, "p1", { type: "nightChoice", targetId: "p2" });
+    s = act(s, "p0", { type: "nightChoice", targetId: "p5" });
+    s = dawn(idleRest(s));
+    expect(() => act(s, "p2", { type: "say", text: "it wasn't me" })).toThrow(/cold shoulder/);
+    s = act(s, "p3", { type: "say", text: "suspicious" });
+    s = act(s, "p0", { type: "startVote" });
+    expect(s.voteOrder).not.toContain("p2");
+    s = voteInOrder(s, {});
+    s = act(s, "p0", { type: "proceed" });
+    expect(projectView(s, "p1").nightPrompt!.targetIds).not.toContain("p2");
+  });
+});
+
+describe("the final reveal shows how roles moved", () => {
+  it("lists each player's dealt role, but only once the game is over", () => {
+    let s = gameWith(["werewolf", "villager", "villager"]);
+    s = { ...s, dealtRoles: ["werewolf", "seer", "villager"] }; // as if p1 had been swapped
+    expect(projectView(s, "p1").players.every((p) => p.dealtRoleId === null)).toBe(true);
+    s = act(s, "p0", { type: "nightChoice", targetId: "p1" });
+    s = act(idleRest(s), "p0", { type: "proceed" });
+    expect(s.phase).toBe("gameOver");
+    expect(projectView(s, "p2").players.map((p) => p.dealtRoleId)).toEqual(["werewolf", "seer", "villager"]);
   });
 });

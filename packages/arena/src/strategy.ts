@@ -13,8 +13,6 @@ export interface Strategy {
   speak(view: PlayerView): Promise<string | null>;
   /** Who to vote out. Null abstains. */
   vote(view: PlayerView): Promise<PlayerId | null>;
-  /** A fallen Hunter's parting shot. */
-  shoot(view: PlayerView): Promise<PlayerId>;
   /**
    * Handed this seat's own view once roles are dealt, before any decision.
    * A strategy whose behaviour depends on its role settles it here — otherwise

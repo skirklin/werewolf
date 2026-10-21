@@ -9,7 +9,8 @@ import type {
   DetectionResult,
   ChatMessage,
   VoteRecord,
-  Verdict,
+  Announcement,
+  Notice,
 } from "./types.js";
 
 /**
@@ -30,12 +31,11 @@ export function publicLog(state: GameState): LogEntry[] {
   );
 }
 import { getRole } from "./roles.js";
-import { possibleRoles } from "./setup.js";
+import { possibleRoles, werewolfRange } from "./setup.js";
 import {
   living,
   eligibleVoters,
   validNightTargets,
-  validShootTargets,
   effectiveRoleId,
   playerById,
   unackedNightResults,
@@ -54,6 +54,20 @@ export interface PublicPlayer {
   connected: boolean;
   /** Revealed only when appropriate (self, fellow wolf, death reveal, game over). */
   roleId: string | null;
+  /**
+   * The role this player was dealt — shown only once the game is over, so the
+   * reveal can say "Villager → Werewolf" for anyone swapped or infected.
+   */
+  dealtRoleId: string | null;
+}
+
+/** The role dealt to each player, by id — public only at game over. */
+function dealtAtEnd(state: GameState): (id: PlayerId) => string | null {
+  return (id) => {
+    if (state.phase !== "gameOver") return null;
+    const i = state.players.findIndex((p) => p.id === id);
+    return state.dealtRoles[i] ?? null;
+  };
 }
 
 export interface NightPrompt {
@@ -102,12 +116,17 @@ export interface PlayerView {
    * nothing (send nightIdle); the night waits for it all the same.
    */
   idlePrompt: { targetIds: PlayerId[] } | null;
-  /** If you are a fallen Hunter whose dying shot is pending, who you may hit. */
-  shootPrompt: { targetIds: PlayerId[] } | null;
+  /**
+   * For a Hunter: who they'd take down with them right now (their latest
+   * pick), or null. Only the Hunter sees it.
+   */
+  myMark: PlayerId | null;
   /** Your seer inspections across all rounds (only yours). */
   myInspects: InspectResult[];
   /** Your detective readings across all rounds (only yours). */
   myDetections: DetectionResult[];
+  /** Who has read their role card (phase "roleReveal"; public — everyone has a card). */
+  ready: PlayerId[];
   /** Players silenced for the current day (public — they can't vote). */
   silencedIds: PlayerId[];
   /** Your current vote this round (undefined if not cast). */
@@ -124,8 +143,13 @@ export interface PlayerView {
   votes: Record<PlayerId, PlayerId | null>;
   /** Every past day's ballot, voter by voter (public). */
   voteHistory: VoteRecord[];
-  /** The vote result being announced (phase "verdict"), else null. Public. */
-  verdict: Verdict | null;
+  /** What's being announced (phase "announce"): the dawn, or a vote's result. Public. */
+  announcement: Announcement | null;
+  /**
+   * What changed for you overnight (only yours), shown with the dawn
+   * announcement. Null when nothing did — everyone sees a private section either way.
+   */
+  myNotice: Notice | null;
   votesRemaining: number;
   log: LogEntry[];
   winner: Team | null;
@@ -134,6 +158,11 @@ export interface PlayerView {
   config: GameConfig;
   /** Every role that could be in this game (no counts, no owners). Public. */
   possibleRoles: string[];
+  /**
+   * How many werewolves this game could have dealt (public, from the setup):
+   * equal ends for a fixed count, or e.g. 2–3 when the count is kept secret.
+   */
+  wolfCount: { min: number; max: number };
 }
 
 /**
@@ -144,6 +173,7 @@ export interface PlayerView {
  */
 export function publicPlayers(state: GameState): PublicPlayer[] {
   const revealAll = state.phase === "gameOver";
+  const dealt = dealtAtEnd(state);
   return state.players.map((p) => ({
     id: p.id,
     name: p.name,
@@ -152,7 +182,19 @@ export function publicPlayers(state: GameState): PublicPlayer[] {
     connected: p.connected,
     roleId:
       revealAll || (!p.alive && state.config.revealRoleOnDeath) ? p.roleId : null,
+    dealtRoleId: dealt(p.id),
   }));
+}
+
+/**
+ * An announcement as the whole table may hear it. With saves kept discreet, a
+ * save reads as a quiet night — at the data level, so nothing leaves the
+ * server that would reveal a doctor (the same rule as publicLog).
+ */
+export function publicAnnouncement(state: GameState): Announcement | null {
+  const a = state.announcement;
+  if (!a || state.config.nightSummary === "detailed") return a;
+  return { ...a, events: a.events.map((e) => (e.t === "saved" ? { t: "quiet" as const } : e)) };
 }
 
 function roleVisibleTo(state: GameState, targetId: PlayerId, viewerId: PlayerId): boolean {
@@ -181,7 +223,9 @@ export function projectView(state: GameState, viewerId: PlayerId): PlayerView {
   const displayRoleId =
     state.phase !== "gameOver" ? effectiveRoleId(state, viewerId) : you.roleId;
 
+  const dealt = dealtAtEnd(state);
   const players: PublicPlayer[] = state.players.map((p) => ({
+    dealtRoleId: dealt(p.id),
     id: p.id,
     name: p.name,
     alive: p.alive,
@@ -241,11 +285,7 @@ export function projectView(state: GameState, viewerId: PlayerId): PlayerView {
     }
   }
 
-  // A fallen Hunter at the front of the queue gets to take their shot.
-  const shootPrompt =
-    state.phase === "hunterShot" && state.pendingShots[0] === viewerId
-      ? { targetIds: validShootTargets(state).map((p) => p.id) }
-      : null;
+  const myMark = state.hunterMark[viewerId] ?? null;
 
   const myInspects = state.inspects.filter((r) => r.seerId === viewerId);
   const myDetections = state.detections.filter((r) => r.detectiveId === viewerId);
@@ -275,9 +315,10 @@ export function projectView(state: GameState, viewerId: PlayerId): PlayerView {
     nightPrompt,
     nightAwaitingAck,
     idlePrompt,
-    shootPrompt,
+    myMark,
     myInspects,
     myDetections,
+    ready: state.phase === "roleReveal" ? [...state.ready] : [],
     // Only surface silenced players who are still alive (a silenced-then-killed
     // player shouldn't linger on the day board).
     silencedIds: state.silenced.filter((id) => playerById(state, id)?.alive),
@@ -288,12 +329,14 @@ export function projectView(state: GameState, viewerId: PlayerId): PlayerView {
     voteTurn: currentVoter(state),
     votes: state.phase === "dayVote" ? { ...state.votes } : {},
     voteHistory: state.voteHistory,
-    verdict: state.verdict,
+    announcement: publicAnnouncement(state),
+    myNotice: state.notices[viewerId] ?? null,
     votesRemaining,
     log: publicLog(state),
     winner: state.winner,
     soloWinnerId: state.soloWinnerId,
     config: state.config,
     possibleRoles: possibleRoles(state.config, state.players.length),
+    wolfCount: werewolfRange(state.config.selection, state.players.length),
   };
 }

@@ -66,7 +66,6 @@ const view = {
   voteTally: {},
   votesRemaining: 0,
   nightPrompt: null,
-  shootPrompt: null,
   phase: "dayDiscussion",
   winner: null,
   soloWinnerId: null,

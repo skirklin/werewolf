@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { settleNight } from "./testutil.js";
 import type { GameState, Player, GameConfig } from "./types.js";
 import { createGame, reduce } from "./engine.js";
 import { passDeviceTurn, nightAckKey, type Turn } from "./passdevice.js";
@@ -86,7 +87,7 @@ describe("passDeviceTurn", () => {
     let s = nightGame(["werewolf", "villager", "villager", "villager"]);
     // Fast-forward: wolf kills p1, resolve to day, start vote.
     s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p1" });
-    s = reduce(s, { type: "endNight" });
+    s = settleNight(s);
     s = reduce(s, { type: "startVote" });
     const first = passDeviceTurn(s, empty, empty);
     expect(first.kind).toBe("vote");
@@ -100,7 +101,7 @@ describe("passDeviceTurn", () => {
   it("is public during discussion, and when there is no game", () => {
     let s = nightGame(["werewolf", "villager", "villager"]);
     s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p1" });
-    s = reduce(s, { type: "endNight" }); // -> dayDiscussion
+    s = settleNight(s); // -> dayDiscussion
     expect(passDeviceTurn(s, empty, empty).kind).toBe("public");
     expect(passDeviceTurn(null, empty, empty).kind).toBe("public");
   });

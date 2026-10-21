@@ -8,10 +8,12 @@ import type {
   NightActionKind,
   Team,
   GameConfig,
-  Verdict,
+  Announcement,
+  AnnouncementEvent,
+  Notice,
 } from "./types.js";
 import { getRole, mimicableRoleIds } from "./roles.js";
-import { dealRoles } from "./setup.js";
+import { dealRoles, possibleRoles } from "./setup.js";
 import { makeRng, shuffle, pick, nextSeed } from "./rng.js";
 import { GameError } from "@party/core";
 
@@ -140,13 +142,22 @@ export function validNightTargets(state: GameState, actorId: PlayerId): Player[]
       return false;
     return true;
   });
-  // No shielding the same patient two nights running — unless that would leave
-  // the protector nobody at all to pick, which would wedge the night.
-  if (ability.kind === "protect") {
-    const fresh = targets.filter((t) => t.id !== state.lastProtect[actorId]);
+  // No picking the same player two nights running (the Doctor's patient, the
+  // Gossip's mark) — unless that would leave nobody at all, which would wedge
+  // the night.
+  if (NO_REPEAT_KINDS.includes(ability.kind)) {
+    const fresh = targets.filter((t) => t.id !== state.lastTarget[actorId]);
     if (fresh.length) return fresh;
   }
   return targets;
+}
+
+/** Powers that can't pick the same player two nights in a row. */
+export const NO_REPEAT_KINDS: NightActionKind[] = ["protect", "silence"];
+
+/** Whether this night is a peaceful first night: nobody can be killed. */
+export function isPeacefulNight(state: GameState): boolean {
+  return state.round === 1 && state.config.peacefulFirstNight;
 }
 
 // ---------------------------------------------------------------------------
@@ -156,6 +167,7 @@ export function validNightTargets(state: GameState, actorId: PlayerId): Player[]
 export type Action =
   | { type: "startGame"; config: GameConfig }
   | { type: "startNight" }
+  | { type: "ready"; actorId: PlayerId }
   | { type: "nightChoice"; actorId: PlayerId; targetId: PlayerId }
   | { type: "witchAction"; actorId: PlayerId; heal: boolean; poisonTargetId: PlayerId | null }
   | { type: "nightSkip"; actorId: PlayerId }
@@ -169,9 +181,7 @@ export type Action =
   | { type: "castVote"; voterId: PlayerId; targetId: PlayerId | null }
   | { type: "skipVoter" }
   | { type: "resolveVote" }
-  | { type: "endVerdict" }
-  | { type: "shoot"; hunterId: PlayerId; targetId: PlayerId }
-  | { type: "skipShot" }
+  | { type: "proceed" }
   | { type: "playAgain" }
   | { type: "say"; speakerId: PlayerId; text: string };
 
@@ -198,6 +208,8 @@ export function reduce(state: GameState, action: Action): GameState {
     case "startNight":
       assert(state.phase === "roleReveal", "Roles not being revealed.");
       return beginNight(state);
+    case "ready":
+      return ready(state, action.actorId);
     case "nightChoice":
       return nightChoice(state, action.actorId, action.targetId);
     case "witchAction":
@@ -224,12 +236,8 @@ export function reduce(state: GameState, action: Action): GameState {
       return skipVoter(state);
     case "resolveVote":
       return resolveVote(state);
-    case "endVerdict":
-      return endVerdict(state);
-    case "shoot":
-      return shoot(state, action.hunterId, action.targetId);
-    case "skipShot":
-      return skipShot(state);
+    case "proceed":
+      return proceed(state);
     case "playAgain":
       return playAgain(state);
     case "say":
@@ -250,6 +258,7 @@ function say(state: GameState, speakerId: PlayerId, text: string): GameState {
   );
   const speaker = playerById(state, speakerId);
   assert(speaker?.alive, "The dead don't get a say.");
+  assert(!state.silenced.includes(speakerId), "You're getting the cold shoulder today — nobody's listening.");
   const clean = text.trim().slice(0, MAX_CHAT_TEXT);
   assert(clean.length > 0, "Say something first.");
   assert(state.chat.length < MAX_CHAT_MESSAGES, "This town has talked itself hoarse.");
@@ -257,6 +266,19 @@ function say(state: GameState, speakerId: PlayerId, text: string): GameState {
     ...state,
     chat: [...state.chat, { round: state.round, playerId: speakerId, text: clean }],
   };
+}
+
+/**
+ * A player has read their role card and understood it. Once every player has,
+ * night falls on its own; the host can still start without someone who's gone
+ * quiet (startNight).
+ */
+function ready(state: GameState, actorId: PlayerId): GameState {
+  assert(state.phase === "roleReveal", "Roles not being revealed.");
+  assert(playerById(state, actorId), "You're not in this game.");
+  if (state.ready.includes(actorId)) return state;
+  const next = { ...state, ready: [...state.ready, actorId] };
+  return state.players.every((p) => next.ready.includes(p.id)) ? beginNight(next) : next;
 }
 
 /**
@@ -282,7 +304,14 @@ function startGame(state: GameState, config: GameConfig): GameState {
   const mediumUsed: GameState["mediumUsed"] = {};
   const convertUsed: GameState["convertUsed"] = {};
   const drunkDisguise: GameState["drunkDisguise"] = {};
-  const mimicable = mimicableRoleIds();
+  // The Drunk's disguise comes only from roles this game could have: a role the
+  // whole table can see isn't in play would tell the Drunk what they are.
+  const inPlay = new Set(possibleRoles(config, players.length));
+  const mimicable = mimicableRoleIds().filter((id) => inPlay.has(id));
+  for (const [i, p] of players.entries()) {
+    // No believable disguise to hand out: deal a plain Villager instead.
+    if (p.roleId === "drunk" && !mimicable.length) players[i] = { ...p, roleId: "villager" };
+  }
   for (const p of players) {
     if (p.roleId === "witch") witchPotions[p.id] = { heal: true, poison: true };
     if (p.roleId === "medium") mediumUsed[p.id] = false;
@@ -323,7 +352,9 @@ function beginNight(state: GameState): GameState {
     if (!ability) continue;
     // Peaceful first night: the wolves sit night 1 out, so nobody dies before
     // the town has had a single conversation.
-    if (ability.kind === "kill" && round === 1 && state.config.peacefulFirstNight) continue;
+    // Nor does the Witch: no killing at all on a peaceful first night, and a
+    // heal would only be wasted (nobody's attacked).
+    if ((ability.kind === "kill" || ability.kind === "witch") && round === 1 && state.config.peacefulFirstNight) continue;
     // The Troublemaker has one swap a game; once it's spent they sleep through.
     if (ability.kind === "swap" && state.swapUsed[p.id]) continue;
     // The Medium only wakes while their raise is unspent and someone is dead.
@@ -360,6 +391,7 @@ function beginNight(state: GameState): GameState {
     round,
     night,
     votes: {},
+    notices: {}, // yesterday's private news is old news
     silenced: [], // last night's silence expires
     log: [...state.log, { type: "night", round }],
   };
@@ -621,33 +653,72 @@ function markDead(
   return { players: next, deadShooters };
 }
 
-/** Living players a pending shooter could still target. */
-export function validShootTargets(state: GameState): Player[] {
-  return living(state);
+/**
+ * A dying Hunter takes the player they marked at night with them — no extra
+ * turn, no waiting. A shot that kills another Hunter sets off theirs too.
+ */
+function fireDyingShots(
+  players: Player[],
+  shooters: PlayerId[],
+  marks: GameState["hunterMark"],
+  events: AnnouncementEvent[],
+  log: GameState["log"],
+  round: number
+): Player[] {
+  let next = players;
+  const queue = [...shooters];
+  while (queue.length) {
+    const shooterId = queue.shift()!;
+    const targetId = marks[shooterId];
+    if (!targetId || !next.find((p) => p.id === targetId)?.alive) continue;
+    const r = markDead(next, [targetId]);
+    next = r.players;
+    events.push({ t: "shot", shooterId, playerId: targetId });
+    log.push({ type: "hunterShot", round, playerId: targetId });
+    queue.push(...r.deadShooters);
+  }
+  return next;
 }
 
 /**
- * Enter the dying-shot phase if any shooter has a target; otherwise carry on to
- * the next phase. The single seam that Hunter-style on-death effects hook into.
- *
- * Note: the winner is finalised in `continueAfter`, i.e. only once all pending
- * shots have fired. This is intentional — a dying Hunter shoots even when the
- * math already looks decided, and that shot can change the outcome.
+ * Stop and tell the table what just happened. The outcome is already applied;
+ * `proceed` moves on to the day, the next night, or the end of the game.
  */
-function enterReckoning(state: GameState, next: "day" | "night"): GameState {
-  const pending = state.pendingShots.filter((id) => living(state).some((p) => p.id !== id));
-  if (pending.length === 0)
-    return continueAfter({ ...state, pendingShots: [], afterReckoning: null }, next);
-  return { ...state, phase: "hunterShot", pendingShots: pending, afterReckoning: next };
+function announce(
+  state: GameState,
+  kind: Announcement["kind"],
+  events: AnnouncementEvent[],
+  soloWinnerId: PlayerId | null = null
+): GameState {
+  const winner = soloWinnerId ? "solo" : checkWinner(state);
+  const announcement: Announcement = {
+    kind,
+    round: state.round,
+    events,
+    next: winner ? "gameOver" : kind === "dawn" ? "day" : "night",
+    winner,
+    soloWinnerId,
+  };
+  return { ...state, phase: "announce", announcement };
 }
 
-/** Resolve the game or advance to the pending day/night once deaths settle. */
-function continueAfter(state: GameState, next: "day" | "night"): GameState {
-  const winner = checkWinner(state);
-  if (winner) return finish(state, winner);
-  return next === "day"
-    ? { ...state, phase: "dayDiscussion", afterReckoning: null }
-    : beginNight({ ...state, afterReckoning: null });
+/** The host moves the table on from an announcement. */
+function proceed(state: GameState): GameState {
+  assert(state.phase === "announce" && state.announcement, "There's nothing to move on from.");
+  const a = state.announcement;
+  const next: GameState = { ...state, announcement: null };
+  if (a.next === "gameOver") return finish(next, a.winner!, a.soloWinnerId);
+  if (a.next === "day") return { ...next, phase: "dayDiscussion" };
+  return beginNight(next);
+}
+
+/** Living wolf-team players other than `id` (what a pack member knows). */
+function packOf(state: GameState, id: PlayerId): string {
+  return state.players
+    .filter((p) => p.id !== id && p.roleId && getRole(p.roleId).team === "werewolf")
+    .map((p) => p.id)
+    .sort()
+    .join(",");
 }
 
 function endNight(state: GameState): GameState {
@@ -671,14 +742,21 @@ function endNight(state: GameState): GameState {
     subs: Object.fromEntries(Object.entries(s.subs).filter(([id]) => !isDrunk(state, id))),
   }));
 
-  // Remember tonight's patients so nobody can be shielded twice running. Taken
-  // from the RAW steps, not liveSteps: a Drunk mimicking the Doctor is bound by
-  // the same restriction, so the blocked name can't give the disguise away.
-  const lastProtect: GameState["lastProtect"] = {};
+  // Remember tonight's picks for powers that can't repeat a target. Taken from
+  // the RAW steps, not liveSteps: a Drunk mimicking the Doctor or the Gossip is
+  // bound by the same restriction, so the blocked name can't give it away.
+  const lastTarget: GameState["lastTarget"] = {};
   for (const step of steps) {
-    if (step.kind !== "protect") continue;
+    if (!NO_REPEAT_KINDS.includes(step.kind)) continue;
     for (const [actorId, sub] of Object.entries(step.subs))
-      if (sub.t === "target") lastProtect[actorId] = sub.target;
+      if (sub.t === "target") lastTarget[actorId] = sub.target;
+  }
+
+  // The Hunters' picks for tonight: who goes down with them if they die.
+  const hunterMark = { ...state.hunterMark };
+  for (const step of liveSteps) {
+    if (step.kind !== "mark") continue;
+    for (const [actorId, sub] of Object.entries(step.subs)) if (sub.t === "target") hunterMark[actorId] = sub.target;
   }
 
   // Protections (doctor) + the wolves' victim.
@@ -718,13 +796,29 @@ function endNight(state: GameState): GameState {
   for (const id of poisonIds) if (playerById(state, id)?.alive) deaths.add(id);
 
   const log = state.log.slice();
-  if (!victimId) log.push({ type: "noDeath", round: state.round, cause: "wolves" });
-  else if (!deaths.has(victimId)) log.push({ type: "saved", round: state.round, playerId: victimId });
-  else if (!wolfProtected) log.push({ type: "death", round: state.round, playerId: victimId, cause: "wolves" });
-  else log.push({ type: "poisoned", round: state.round, playerId: victimId }); // protected but poisoned
-  for (const id of deaths) if (id !== victimId) log.push({ type: "poisoned", round: state.round, playerId: id });
+  const events: AnnouncementEvent[] = [];
+  if (!victimId) {
+    log.push({ type: "noDeath", round: state.round, cause: "wolves" });
+    events.push({ t: "quiet" });
+  } else if (!deaths.has(victimId)) {
+    log.push({ type: "saved", round: state.round, playerId: victimId });
+    events.push({ t: "saved", playerId: victimId });
+  } else if (!wolfProtected) {
+    log.push({ type: "death", round: state.round, playerId: victimId, cause: "wolves" });
+    events.push({ t: "killed", playerId: victimId });
+  } else {
+    log.push({ type: "poisoned", round: state.round, playerId: victimId }); // protected but poisoned
+    events.push({ t: "poisoned", playerId: victimId });
+  }
+  for (const id of deaths)
+    if (id !== victimId) {
+      log.push({ type: "poisoned", round: state.round, playerId: id });
+      events.push({ t: "poisoned", playerId: id });
+    }
 
   const killed = markDead(state.players, [...deaths]);
+  // Dying Hunters fire at whoever they marked (tonight's pick).
+  const afterShots = fireDyingShots(killed.players, killed.deadShooters, hunterMark, events, log, state.round);
   // A Troublemaker who swapped tonight has spent their one swap, even if it
   // fizzled. From the RAW steps, so a Drunk mimicking one spends it too and the
   // disguise holds.
@@ -739,16 +833,20 @@ function endNight(state: GameState): GameState {
     swapUsed,
     convertUsed: { ...state.convertUsed },
     drunkDisguise: { ...state.drunkDisguise },
-    lastProtect,
+    lastTarget,
+    hunterMark,
   };
   // Spend one-time powers (Medium raise, Infector convert) BEFORE swaps, so the
   // spent flag is written under the current id and then travels with the role...
-  let players = applyRaises(killed.players, roleState.mediumUsed, liveSteps, log, state.round);
-  players = applyConverts(players, roleState.convertUsed, roleState.drunkDisguise, liveSteps);
+  const logBefore = log.length;
+  let players = applyRaises(afterShots, roleState.mediumUsed, liveSteps, log, state.round);
+  for (const e of log.slice(logBefore)) if (e.type === "raised") events.push({ t: "raised", playerId: e.playerId });
+  const infected: PlayerId[] = [];
+  players = applyConverts(players, roleState.convertUsed, roleState.drunkDisguise, liveSteps, infected);
   // ...then the Troublemaker swap carries all that role state to the new holder.
   players = applySwaps(players, roleState, liveSteps);
 
-  // Silencer: whoever is silenced can't vote in the coming day.
+  // The Gossip's mark gets the cold shoulder tomorrow: no talking, no vote.
   const silenced: PlayerId[] = [];
   for (const step of liveSteps) {
     if (step.kind === "silence") for (const t of stepTargets(step)) silenced.push(t);
@@ -762,13 +860,36 @@ function endNight(state: GameState): GameState {
     swapUsed: roleState.swapUsed,
     convertUsed: roleState.convertUsed,
     drunkDisguise: roleState.drunkDisguise,
-    lastProtect: roleState.lastProtect,
+    lastTarget: roleState.lastTarget,
+    hunterMark: roleState.hunterMark,
     silenced,
     night: null,
     log,
-    pendingShots: [...state.pendingShots, ...killed.deadShooters],
   };
-  return enterReckoning(next, "day");
+  return announce({ ...next, notices: dawnNotices(state, next, infected) }, "dawn", events);
+}
+
+/**
+ * What changed overnight for each player, told only to them: a new role (a
+ * swap or an infection), coming back from the dead, a pack that grew or
+ * shrank. Compared on the role each player *sees* (a Drunk's disguise), so
+ * the notice never gives a Drunk away.
+ */
+function dawnNotices(before: GameState, after: GameState, infected: PlayerId[]): GameState["notices"] {
+  const notices: GameState["notices"] = {};
+  for (const p of after.players) {
+    if (!p.alive) continue;
+    const was = before.players.find((x) => x.id === p.id);
+    const n: Notice = {};
+    const roleNow = effectiveRoleId(after, p.id);
+    if (roleNow && roleNow !== effectiveRoleId(before, p.id)) n.roleId = roleNow;
+    if (infected.includes(p.id)) n.infected = true;
+    if (was && !was.alive) n.raised = true;
+    const wolfNow = !!p.roleId && getRole(p.roleId).team === "werewolf";
+    if (wolfNow && !n.roleId && packOf(before, p.id) !== packOf(after, p.id)) n.packChanged = true;
+    if (Object.keys(n).length) notices[p.id] = n;
+  }
+  return notices;
 }
 
 /** Swap a per-player role-state entry between two ids (potions/medium follow role). */
@@ -788,7 +909,8 @@ interface RoleState {
   swapUsed: GameState["swapUsed"];
   convertUsed: GameState["convertUsed"];
   drunkDisguise: GameState["drunkDisguise"];
-  lastProtect: GameState["lastProtect"];
+  lastTarget: GameState["lastTarget"];
+  hunterMark: GameState["hunterMark"];
 }
 
 /**
@@ -814,7 +936,8 @@ function applySwaps(players: Player[], roleState: RoleState, steps: NightStep[])
       swapEntry(roleState.swapUsed, sub.a, sub.b);
       swapEntry(roleState.convertUsed, sub.a, sub.b);
       swapEntry(roleState.drunkDisguise, sub.a, sub.b);
-      swapEntry(roleState.lastProtect, sub.a, sub.b);
+      swapEntry(roleState.lastTarget, sub.a, sub.b);
+      swapEntry(roleState.hunterMark, sub.a, sub.b);
     }
   }
   return next;
@@ -848,7 +971,9 @@ function applyConverts(
   players: Player[],
   convertUsed: GameState["convertUsed"],
   drunkDisguise: GameState["drunkDisguise"],
-  steps: NightStep[]
+  steps: NightStep[],
+  /** Collects who was infected, so they can be told at dawn. */
+  infected: PlayerId[]
 ): Player[] {
   let next = players;
   for (const step of steps) {
@@ -862,32 +987,10 @@ function applyConverts(
       // longer wakes as its old village role (and stops faking effects).
       delete drunkDisguise[sub.target];
       convertUsed[actorId] = true;
+      infected.push(sub.target);
     }
   }
   return next;
-}
-
-function shoot(state: GameState, hunterId: PlayerId, targetId: PlayerId): GameState {
-  assert(state.phase === "hunterShot", "No dying shot pending.");
-  assert(state.pendingShots[0] === hunterId, "It's not your shot.");
-  const target = playerById(state, targetId);
-  assert(target?.alive, "Can't shoot a dead player.");
-  assert(targetId !== hunterId, "You can't shoot yourself.");
-
-  const { players, deadShooters } = markDead(state.players, [targetId]);
-  const log: typeof state.log = [
-    ...state.log,
-    { type: "hunterShot", round: state.round, playerId: targetId },
-  ];
-  const pendingShots = [...state.pendingShots.slice(1), ...deadShooters];
-  return enterReckoning({ ...state, players, log, pendingShots }, state.afterReckoning ?? "day");
-}
-
-/** Host recovery: drop the pending shooter without firing (e.g. they left). */
-function skipShot(state: GameState): GameState {
-  assert(state.phase === "hunterShot", "No dying shot pending.");
-  const pendingShots = state.pendingShots.slice(1);
-  return enterReckoning({ ...state, pendingShots }, state.afterReckoning ?? "day");
 }
 
 /**
@@ -955,73 +1058,46 @@ export function allVotesIn(state: GameState): boolean {
 }
 
 /**
- * Count the votes and apply the result — but don't move on yet. The phase
- * becomes "verdict", so everyone sees who went out (or that nobody did) and
- * whether the game is over, until the host continues (endVerdict).
+ * Count the votes and apply the result — but don't move on yet. Everyone sees
+ * an announcement of who went out (or that nobody did), any Hunter's shot, and
+ * whether the game is over, until the host continues (proceed).
  */
 function resolveVote(state: GameState): GameState {
   assert(state.phase === "dayVote", "Not voting.");
   // The ballot is open: keep who voted for whom, so the town can see it after.
-  state = { ...state, voteHistory: [...state.voteHistory, { round: state.round, votes: state.votes }] };
+  state = { ...state, voteHistory: [...state.voteHistory, { round: state.round, votes: state.votes }], votes: {} };
   const tally = new Map<PlayerId, number>();
-  for (const target of Object.values(state.votes)) {
+  for (const target of Object.values(state.voteHistory.at(-1)!.votes)) {
     if (target === null) continue;
     tally.set(target, (tally.get(target) ?? 0) + 1);
   }
 
   const log = state.log.slice();
-  const announce = (next: GameState, outcome: Verdict["outcome"], playerId: PlayerId | null, solo: PlayerId | null) =>
-    withVerdict({ ...next, votes: {} }, outcome, playerId, solo);
-
   if (tally.size === 0) {
     log.push({ type: "noDeath", round: state.round, cause: "lynch" });
-    return announce({ ...state, log }, "noVotes", null, null);
+    return announce({ ...state, log }, "vote", [{ t: "noVotes" }]);
   }
   const max = Math.max(...tally.values());
   const top = [...tally.entries()].filter(([, c]) => c === max);
   if (top.length > 1) {
     // Tie: no one is lynched. (Deliberate rule — keeps stalls harmless.)
     log.push({ type: "voteTie", round: state.round });
-    return announce({ ...state, log }, "tie", null, null);
+    return announce({ ...state, log }, "vote", [{ t: "tie" }]);
   }
 
   const lynchedId = top[0][0];
   const lynched = playerById(state, lynchedId)!;
-  const { players, deadShooters } = markDead(state.players, [lynchedId]);
   log.push({ type: "lynch", round: state.round, playerId: lynchedId });
-  const next: GameState = { ...state, players, log, pendingShots: [...state.pendingShots, ...deadShooters] };
+  const events: AnnouncementEvent[] = [{ t: "votedOut", playerId: lynchedId }];
   // A lynched Tanner wins outright, before any Hunter shot or team check.
-  const solo = lynched.roleId && getRole(lynched.roleId).winsIfLynched ? lynchedId : null;
-  return announce(next, "lynch", lynchedId, solo);
-}
-
-/** Enter the verdict phase, working out what happens when the host continues. */
-function withVerdict(
-  state: GameState,
-  outcome: Verdict["outcome"],
-  playerId: PlayerId | null,
-  soloWinnerId: PlayerId | null
-): GameState {
-  const shooters = state.pendingShots.filter((id) => living(state).some((p) => p.id !== id));
-  const winner = soloWinnerId ? "solo" : shooters.length ? null : checkWinner(state);
-  const verdict: Verdict = {
-    round: state.round,
-    outcome,
-    playerId,
-    next: winner ? "gameOver" : shooters.length ? "hunterShot" : "night",
-    winner,
-    soloWinnerId,
-  };
-  return { ...state, phase: "verdict", verdict };
-}
-
-/** The host moves the table on from the vote's result. */
-function endVerdict(state: GameState): GameState {
-  assert(state.phase === "verdict" && state.verdict, "There's no vote result to move on from.");
-  const { soloWinnerId } = state.verdict;
-  const next = { ...state, verdict: null };
-  if (soloWinnerId) return finish({ ...next, pendingShots: [] }, "solo", soloWinnerId);
-  return enterReckoning(next, "night");
+  if (lynched.roleId && getRole(lynched.roleId).winsIfLynched) {
+    const { players } = markDead(state.players, [lynchedId]);
+    return announce({ ...state, players, log }, "vote", events, lynchedId);
+  }
+  const { players, deadShooters } = markDead(state.players, [lynchedId]);
+  // A lynched Hunter fires at last night's pick.
+  const afterShots = fireDyingShots(players, deadShooters, state.hunterMark, events, log, state.round);
+  return announce({ ...state, players: afterShots, log }, "vote", events);
 }
 
 function finish(state: GameState, winner: Team, soloWinnerId: PlayerId | null = null): GameState {
@@ -1031,7 +1107,6 @@ function finish(state: GameState, winner: Team, soloWinnerId: PlayerId | null = 
     winner,
     soloWinnerId,
     night: null,
-    pendingShots: [],
     log: [...state.log, { type: "gameOver", round: state.round, winner }],
   };
 }
@@ -1056,17 +1131,18 @@ export function createGame(code: string, seed: number): GameState {
     mediumUsed: {},
     convertUsed: {},
     swapUsed: {},
-    verdict: null,
+    ready: [],
+    announcement: null,
+    notices: {},
+    hunterMark: {},
     drunkDisguise: {},
-    lastProtect: {},
+    lastTarget: {},
     dealtRoles: [],
     chat: [],
     votes: {},
     voteOrder: [],
     voteHistory: [],
     witchPotions: {},
-    pendingShots: [],
-    afterReckoning: null,
     log: [],
     seed,
     winner: null,
