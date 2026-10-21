@@ -50,8 +50,32 @@ export function Online({ game, onExit }: { game?: ClientGame; onExit: (gameId?: 
   );
 }
 
+/** The name and nickname this browser last played under, so nobody retypes them. */
+const PROFILE_KEY = "party.profile";
+
+function loadProfile(): { name: string; alias: string } {
+  try {
+    const saved = JSON.parse(localStorage.getItem(PROFILE_KEY) ?? "{}") as { name?: unknown; alias?: unknown };
+    return {
+      name: typeof saved.name === "string" ? saved.name : "",
+      alias: typeof saved.alias === "string" ? saved.alias : "",
+    };
+  } catch {
+    return { name: "", alias: "" };
+  }
+}
+
 function Landing({ game, net, onExit }: { game?: ClientGame; net: RoomConnection; onExit: () => void }) {
-  const [name, setName] = useState("");
+  const [name, setName] = useState(() => loadProfile().name);
+  const [alias, setAlias] = useState(() => loadProfile().alias);
+  const remember = () => {
+    try {
+      localStorage.setItem(PROFILE_KEY, JSON.stringify({ name: name.trim(), alias: alias.trim() }));
+    } catch {
+      /* storage off: they'll just type it again */
+    }
+  };
+  const shownAs = alias.trim() && name.trim() ? `${alias.trim()} (${name.trim()})` : name.trim();
   // Pre-fill the code when arriving via a shared invite link (?room=CODE).
   const [joinCode, setJoinCode] = useState(() =>
     normalizeRoomCode(new URLSearchParams(location.search).get("room") ?? "")
@@ -69,12 +93,24 @@ function Landing({ game, net, onExit }: { game?: ClientGame; net: RoomConnection
       </div>
       <div className="card stack">
         <label className="field">
-          <span className="muted small">Your name</span>
-          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Sam" maxLength={20} />
+          <span className="muted small">Your real name</span>
+          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Sam" maxLength={20} autoComplete="given-name" />
         </label>
+        <label className="field">
+          <span className="muted small">Nickname (optional)</span>
+          <input value={alias} onChange={(e) => setAlias(e.target.value)} placeholder="e.g. Captain Howl" maxLength={20} autoComplete="off" />
+        </label>
+        {shownAs && <div className="muted small">You'll show up as <b>{shownAs}</b>.</div>}
         {game && (
           <>
-            <button className="primary full lg" disabled={!name.trim()} onClick={() => net.create(game.id, name)}>
+            <button
+              className="primary full lg"
+              disabled={!name.trim()}
+              onClick={() => {
+                remember();
+                net.create(game.id, name, alias.trim() || undefined);
+              }}
+            >
               Create a {game.name} room
             </button>
             <div className="divider" />
@@ -97,7 +133,10 @@ function Landing({ game, net, onExit }: { game?: ClientGame; net: RoomConnection
         <button
           className={game ? "full lg" : "primary full lg"}
           disabled={!name.trim() || joinCode.length < ROOM_CODE_LENGTH}
-          onClick={() => net.join(joinCode, name)}
+          onClick={() => {
+            remember();
+            net.join(joinCode, name, alias.trim() || undefined);
+          }}
         >
           Join room
         </button>

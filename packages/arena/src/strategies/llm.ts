@@ -304,7 +304,7 @@ export class LlmStrategy implements Strategy {
           !!prompt.witch?.healAvailable &&
           (await this.yesNo(
             view,
-            "You don't know whom the wolves will attack tonight. Use your one healing potion tonight? Whoever they attack survives, and it is only spent if they attack someone."
+            "You don't know whom the wolves will attack tonight. Use your one healing potion tonight? Whoever they attack survives, but the potion is gone either way, even if they attack nobody."
           ));
         return nightMessage(prompt, [], heal);
       }

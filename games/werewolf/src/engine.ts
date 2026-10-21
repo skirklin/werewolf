@@ -422,8 +422,8 @@ export function wolfVictim(state: GameState): PlayerId | null {
 
 /**
  * The Witch acts blind, like everyone else: she never learns whom the wolves
- * picked. Her healing potion saves whoever they attack tonight, and is only
- * spent if they attacked someone.
+ * picked. Her healing potion saves whoever they attack tonight, and is spent
+ * either way — if they attacked nobody, she wasted it.
  */
 function witchAction(
   state: GameState,
@@ -697,8 +697,9 @@ function endNight(state: GameState): GameState {
     for (const [actorId, sub] of Object.entries(step.subs)) {
       if (sub.t !== "witch") continue;
       let cur = witchPotions[actorId] ?? { heal: false, poison: false };
-      if (sub.heal && cur.heal && victimId) {
-        protectedIds.add(victimId);
+      // Drinking it spends it, whether or not the wolves attacked anyone.
+      if (sub.heal && cur.heal) {
+        if (victimId) protectedIds.add(victimId);
         cur = { ...cur, heal: false };
       }
       if (sub.poison !== null && cur.poison) {

@@ -9,7 +9,7 @@ import {
   type WerewolfAction,
 } from "@party/werewolf";
 import { foulplayModule, botMove, Solver, makeRng, type PlayerView as DropView } from "@party/foulplay";
-import { RoomManager, type Client, type Room } from "./rooms.js";
+import { RoomManager, displayName, type Client, type Room } from "./rooms.js";
 
 /** A fake client that records every message it received. */
 class FakeClient<V = PlayerView> implements Client {
@@ -190,6 +190,15 @@ describe("rooms", () => {
     expect(() => room.addPlayer("P1", new FakeClient())).toThrow(/already started/);
     // And no device id is ever shown to the table.
     expect(JSON.stringify(again.messages)).not.toContain("device-");
+  });
+
+  it("shows a nickname beside the real name, so the table knows who's who", () => {
+    const room = mgr.create("werewolf");
+    room.addPlayer("Sam", new FakeClient(), "device-aaaaaaaaaaaaaaaa", "Captain Howl");
+    room.addPlayer("Ana", new FakeClient(), "device-bbbbbbbbbbbbbbbb");
+    room.addPlayer("  Ben ", new FakeClient(), "device-cccccccccccccccc", "  "); // blank nickname
+    room.addPlayer("Kai", new FakeClient(), "device-dddddddddddddddd", "kai"); // same as the name
+    expect(room.players.map((p) => p.name)).toEqual(["Captain Howl (Sam)", "Ana", "Ben", "Kai"]);
   });
 
   it("the same device joining a lobby twice keeps one seat", () => {
@@ -520,5 +529,13 @@ describe("restoring saved rooms", () => {
     } finally {
       console.warn = warn;
     }
+  });
+});
+
+describe("display names", () => {
+  it("caps each part separately and never shows an empty name", () => {
+    expect(displayName("A".repeat(30), "B".repeat(30))).toBe(`${"B".repeat(20)} (${"A".repeat(20)})`);
+    expect(displayName("", "")).toBe("Player");
+    expect(displayName(undefined, "Wolfie")).toBe("Wolfie (Player)");
   });
 });

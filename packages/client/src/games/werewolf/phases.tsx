@@ -114,7 +114,7 @@ function TargetNightAction({ view, send }: { view: PlayerView; send: Send }) {
 /**
  * The Witch's night action. She chooses blind — she never learns whom the
  * wolves picked — so the heal is simply "save whoever they attack tonight".
- * It's only spent if they attacked someone.
+ * It's spent either way.
  */
 export function WitchPanel({
   view,
@@ -139,7 +139,7 @@ export function WitchPanel({
           <span aria-hidden>❤️‍🩹</span>
           <span className="grow">
             <b>Healing potion</b>
-            <div className="muted small">Whoever the wolves attack tonight survives. Only used up if they attack someone.</div>
+            <div className="muted small">Whoever the wolves attack tonight survives. One use, gone either way.</div>
           </span>
           <input type="checkbox" checked={heal} onChange={(e) => setHeal(e.target.checked)} />
         </label>

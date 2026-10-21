@@ -102,7 +102,7 @@ export const ROLES: Record<string, RoleDef> = {
     team: "village",
     emoji: "🧪",
     blurb:
-      "Two potions, one game. Uncork the healing draught on any night and whoever the wolves attack lives (it's only spent if they attack someone). The poison takes out anyone you fancy. You never learn who the wolves picked.",
+      "Two potions, one game. Uncork the healing draught on any night and whoever the wolves attack lives — but it's gone either way, so pick your night. The poison takes out anyone you fancy. You never learn who the wolves picked.",
     night: { kind: "witch", order: 15 },
   },
   troublemaker: {

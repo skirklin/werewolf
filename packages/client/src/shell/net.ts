@@ -67,8 +67,9 @@ export interface RoomConnection {
   playerId: string | null;
   error: string | null;
   connected: boolean;
-  create: (game: string, name: string) => void;
-  join: (code: string, name: string) => void;
+  /** `name` is the player's real name; `alias` an optional nickname shown beside it. */
+  create: (game: string, name: string, alias?: string) => void;
+  join: (code: string, name: string, alias?: string) => void;
   send: (msg: ClientMessage) => void;
   act: (action: unknown) => void;
   leave: () => void;
@@ -221,8 +222,8 @@ export function useRoom(): RoomConnection {
   }, []);
 
   const create = useCallback(
-    (game: string, name: string) => {
-      onOpenRef.current = () => send({ type: "createRoom", game, name, deviceId: deviceId() });
+    (game: string, name: string, alias?: string) => {
+      onOpenRef.current = () => send({ type: "createRoom", game, name, alias, deviceId: deviceId() });
       ensureSocket();
       flush();
     },
@@ -230,8 +231,9 @@ export function useRoom(): RoomConnection {
   );
 
   const join = useCallback(
-    (roomCode: string, name: string) => {
-      onOpenRef.current = () => send({ type: "joinRoom", code: normalizeRoomCode(roomCode), name, deviceId: deviceId() });
+    (roomCode: string, name: string, alias?: string) => {
+      onOpenRef.current = () =>
+        send({ type: "joinRoom", code: normalizeRoomCode(roomCode), name, alias, deviceId: deviceId() });
       ensureSocket();
       flush();
     },

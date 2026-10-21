@@ -399,13 +399,13 @@ describe("Witch", () => {
     expect(s.witchPotions["p1"]).toEqual({ heal: false, poison: true });
   });
 
-  it("a heal on a night the wolves attack nobody is kept for later", () => {
+  it("a heal on a night the wolves attack nobody is still spent", () => {
     let s = gameWith(["werewolf", "witch", "villager", "villager", "villager"]);
     s = { ...s, config: { ...s.config, peacefulFirstNight: true } };
     s = reduce(s, { type: "startNight" });
     s = reduce(s, { type: "witchAction", actorId: "p1", heal: true, poisonTargetId: null });
     s = reduce(s, { type: "endNight" });
-    expect(s.witchPotions["p1"]).toEqual({ heal: true, poison: true });
+    expect(s.witchPotions["p1"]).toEqual({ heal: false, poison: true });
   });
 
   it("poisons a chosen player, spending the poison potion", () => {
