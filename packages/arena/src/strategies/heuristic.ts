@@ -78,13 +78,11 @@ export class HeuristicStrategy implements Strategy {
     const need = picksNeeded(prompt.kind);
     const picks = ordered.slice(0, Math.max(need, ordered.length && need === 0 ? 1 : 0));
     if (prompt.kind === "witch") {
-      // The Witch can't see the wolves' pick, so shield the town's most
-      // valuable known-good player (or herself); poison nobody (too easy to misfire).
-      const w = prompt.witch;
-      const heal = w?.healAvailable
-        ? w.healTargetIds.find((id) => clear.has(id)) ?? view.you.id
-        : null;
-      return nightMessage(prompt, [], heal);
+      // Save tonight's victim, whoever it is — but not on a peaceful first
+      // night, when nobody's hunted and the potion would be wasted. Poison
+      // nobody (too easy to misfire).
+      const quietNight = view.round === 1 && view.config.peacefulFirstNight;
+      return nightMessage(prompt, [], !!prompt.witch?.healAvailable && !quietNight);
     }
     return nightMessage(prompt, need === 0 ? [] : picks.slice(0, Math.max(need, 1)));
   }

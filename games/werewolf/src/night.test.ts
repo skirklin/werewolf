@@ -102,7 +102,7 @@ describe("no cross-player information at night", () => {
       const p = projectView(s, id).nightPrompt!;
       const [a, b] = p.targetIds;
       switch (p.kind) {
-        case "witch": return { type: "witchAction", healTargetId: p.witch!.healTargetIds[0], poisonTargetId: a };
+        case "witch": return { type: "witchAction", heal: true, poisonTargetId: a };
         case "swap": return { type: "swapAction", aId: a, bId: b };
         case "detect": return { type: "detectAction", aId: a, bId: b };
         case "raise": return { type: "raiseAction", targetId: null };
@@ -155,6 +155,11 @@ describe("open votes", () => {
     s = act(s, "p0", { type: "castVote", targetId: "p2" });
     expect(projectView(s, "p3").votes).toEqual({ p0: "p2" });
     s = voteInOrder(s, { p2: "p0", p3: "p0", p4: null });
+    // The result is announced first; the host moves everyone on from there.
+    expect(s.phase).toBe("verdict");
+    expect(projectView(s, "p3").verdict).toMatchObject({ outcome: "lynch", playerId: "p0", next: "gameOver", winner: "village" });
+    expect(() => act(s, "p3", { type: "endVerdict" })).toThrow(/host/i);
+    s = act(s, "p0", { type: "endVerdict" });
     expect(s.phase).toBe("gameOver");
     expect(projectView(s, "p3").voteHistory).toEqual([
       { round: 1, votes: { p0: "p2", p2: "p0", p3: "p0", p4: null } },
@@ -261,3 +266,98 @@ describe("sequential votes", () => {
 function voteOrderOn(s: GameState): string[] {
   return reduce({ ...s, phase: "dayDiscussion" }, { type: "startVote" }).voteOrder;
 }
+
+describe("the vote's result is announced before the game moves on", () => {
+  const toVote = (roles: string[]) => {
+    let s = gameWith(roles);
+    s = act(s, "p0", { type: "nightChoice", targetId: s.players.at(-1)!.id });
+    return act(idleRest(s), "p0", { type: "startVote" });
+  };
+
+  it("a lynch that doesn't end the game says so, then night falls", () => {
+    let s = toVote(["werewolf", "villager", "villager", "villager", "villager", "villager"]);
+    s = voteInOrder(s, { p0: "p1", p1: "p2", p2: "p1", p3: "p1", p4: "p1" });
+    expect(s.verdict).toMatchObject({ outcome: "lynch", playerId: "p1", next: "night", winner: null });
+    expect(s.players.find((p) => p.id === "p1")!.alive).toBe(false); // the result is already real
+    s = act(s, "p0", { type: "endVerdict" });
+    expect(s.phase).toBe("night");
+    expect(s.verdict).toBeNull();
+  });
+
+  it("a tie and an empty ballot are announced too", () => {
+    let s = toVote(["werewolf", "villager", "villager", "villager", "villager", "villager"]);
+    s = voteInOrder(s, { p0: "p1", p1: "p0" });
+    expect(s.verdict).toMatchObject({ outcome: "tie", playerId: null, next: "night" });
+    let e = toVote(["werewolf", "villager", "villager", "villager", "villager", "villager"]);
+    e = voteInOrder(e, {});
+    expect(e.verdict).toMatchObject({ outcome: "noVotes", next: "night" });
+  });
+
+  it("a lynched Tanner's win is announced, then the game ends", () => {
+    let s = toVote(["werewolf", "tanner", "villager", "villager", "villager", "villager"]);
+    s = voteInOrder(s, { p0: "p1", p2: "p1", p3: "p1", p4: "p1" });
+    expect(s.verdict).toMatchObject({ next: "gameOver", winner: "solo", soloWinnerId: "p1" });
+    s = act(s, "p0", { type: "endVerdict" });
+    expect(s.phase).toBe("gameOver");
+    expect(s.soloWinnerId).toBe("p1");
+  });
+
+  it("a lynched Hunter's shot comes after the announcement", () => {
+    let s = toVote(["werewolf", "hunter", "villager", "villager", "villager", "villager"]);
+    s = voteInOrder(s, { p0: "p1", p2: "p1", p3: "p1", p4: "p1" });
+    expect(s.verdict).toMatchObject({ playerId: "p1", next: "hunterShot" });
+    s = act(s, "p0", { type: "endVerdict" });
+    expect(s.phase).toBe("hunterShot");
+  });
+});
+
+describe("one-time powers can wait for the right night", () => {
+  it("the Troublemaker swaps once a game, whenever they like", () => {
+    let s = gameWith(["werewolf", "troublemaker", "villager", "villager", "villager", "villager"], { peacefulFirstNight: true });
+    expect(projectView(s, "p1").nightPrompt).toMatchObject({ kind: "swap", canSkip: true });
+    s = act(s, "p1", { type: "nightSkip" }); // night 1: save it
+    s = idleRest(s);
+    expect(s.phase).toBe("dayDiscussion");
+    expect(s.swapUsed["p1"]).toBeFalsy();
+    s = act(s, "p0", { type: "startVote" });
+    s = voteInOrder(s, {});
+    s = act(s, "p0", { type: "endVerdict" });
+    // Night 2: use it.
+    expect(projectView(s, "p1").nightPrompt?.kind).toBe("swap");
+    s = act(s, "p1", { type: "swapAction", aId: "p2", bId: "p3" });
+    s = act(s, "p0", { type: "nightChoice", targetId: "p5" });
+    s = idleRest(s);
+    expect(s.swapUsed["p1"]).toBe(true);
+    s = act(s, "p0", { type: "startVote" });
+    s = voteInOrder(s, {});
+    s = act(s, "p0", { type: "endVerdict" });
+    // Night 3: spent — a decoy, like anyone else with nothing to do.
+    expect(projectView(s, "p1").nightPrompt).toBeNull();
+    expect(projectView(s, "p1").idlePrompt).not.toBeNull();
+  });
+
+  it("the Infector can hold the infection, and only that power can be held", () => {
+    let s = gameWith(["werewolf", "infector", "villager", "villager", "villager", "villager", "villager"]);
+    expect(projectView(s, "p1").nightPrompt).toMatchObject({ kind: "convert", canSkip: true });
+    expect(projectView(s, "p0").nightPrompt).toMatchObject({ kind: "kill", canSkip: false });
+    expect(() => act(s, "p0", { type: "nightSkip" })).toThrow(/can't be saved/);
+    s = act(s, "p1", { type: "nightSkip" });
+    s = act(s, "p0", { type: "nightChoice", targetId: "p6" });
+    s = idleRest(s);
+    expect(s.phase).toBe("dayDiscussion");
+    expect(s.convertUsed["p1"]).toBeFalsy(); // not spent
+    expect(s.players.filter((p) => p.roleId === "werewolf")).toHaveLength(1);
+  });
+});
+
+describe("the Witch's heal", () => {
+  it("saves whoever the wolves attack, without her learning who", () => {
+    let s = gameWith(["werewolf", "witch", "villager", "villager", "villager"]);
+    expect(projectView(s, "p1").nightPrompt!.witch).toEqual({ healAvailable: true, poisonAvailable: true });
+    s = act(s, "p1", { type: "witchAction", heal: true, poisonTargetId: null });
+    s = act(s, "p0", { type: "nightChoice", targetId: "p3" });
+    s = idleRest(s);
+    expect(s.players.find((p) => p.id === "p3")!.alive).toBe(true);
+    expect(s.witchPotions["p1"].heal).toBe(false);
+  });
+});

@@ -31,8 +31,7 @@ export class RandomStrategy implements Strategy {
     if (picksNeeded(prompt.kind) === 0 && pool.length && this.rng() < 0.5) {
       picks.push(this.pick(pool));
     }
-    const heal =
-      prompt.witch?.healAvailable && this.rng() < 0.5 ? this.pick(prompt.witch.healTargetIds) : null;
+    const heal = !!prompt.witch?.healAvailable && this.rng() < 0.5;
     return nightMessage(prompt, picks, heal);
   }
 

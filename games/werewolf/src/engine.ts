@@ -8,6 +8,7 @@ import type {
   NightActionKind,
   Team,
   GameConfig,
+  Verdict,
 } from "./types.js";
 import { getRole, mimicableRoleIds } from "./roles.js";
 import { dealRoles } from "./setup.js";
@@ -156,7 +157,8 @@ export type Action =
   | { type: "startGame"; config: GameConfig }
   | { type: "startNight" }
   | { type: "nightChoice"; actorId: PlayerId; targetId: PlayerId }
-  | { type: "witchAction"; actorId: PlayerId; healTargetId: PlayerId | null; poisonTargetId: PlayerId | null }
+  | { type: "witchAction"; actorId: PlayerId; heal: boolean; poisonTargetId: PlayerId | null }
+  | { type: "nightSkip"; actorId: PlayerId }
   | { type: "swapAction"; actorId: PlayerId; aId: PlayerId; bId: PlayerId }
   | { type: "detectAction"; actorId: PlayerId; aId: PlayerId; bId: PlayerId }
   | { type: "raiseAction"; actorId: PlayerId; targetId: PlayerId | null }
@@ -167,6 +169,7 @@ export type Action =
   | { type: "castVote"; voterId: PlayerId; targetId: PlayerId | null }
   | { type: "skipVoter" }
   | { type: "resolveVote" }
+  | { type: "endVerdict" }
   | { type: "shoot"; hunterId: PlayerId; targetId: PlayerId }
   | { type: "skipShot" }
   | { type: "playAgain" }
@@ -198,7 +201,9 @@ export function reduce(state: GameState, action: Action): GameState {
     case "nightChoice":
       return nightChoice(state, action.actorId, action.targetId);
     case "witchAction":
-      return witchAction(state, action.actorId, action.healTargetId, action.poisonTargetId);
+      return witchAction(state, action.actorId, action.heal, action.poisonTargetId);
+    case "nightSkip":
+      return nightSkip(state, action.actorId);
     case "swapAction":
       return swapAction(state, action.actorId, action.aId, action.bId);
     case "detectAction":
@@ -219,6 +224,8 @@ export function reduce(state: GameState, action: Action): GameState {
       return skipVoter(state);
     case "resolveVote":
       return resolveVote(state);
+    case "endVerdict":
+      return endVerdict(state);
     case "shoot":
       return shoot(state, action.hunterId, action.targetId);
     case "skipShot":
@@ -317,6 +324,8 @@ function beginNight(state: GameState): GameState {
     // Peaceful first night: the wolves sit night 1 out, so nobody dies before
     // the town has had a single conversation.
     if (ability.kind === "kill" && round === 1 && state.config.peacefulFirstNight) continue;
+    // The Troublemaker has one swap a game; once it's spent they sleep through.
+    if (ability.kind === "swap" && state.swapUsed[p.id]) continue;
     // The Medium only wakes while their raise is unspent and someone is dead.
     if (ability.kind === "raise" && (state.mediumUsed[p.id] || !deadExist)) continue;
     // The Infector only wakes while their conversion is unspent and a non-wolf lives.
@@ -413,13 +422,13 @@ export function wolfVictim(state: GameState): PlayerId | null {
 
 /**
  * The Witch acts blind, like everyone else: she never learns whom the wolves
- * picked. Her healing potion shields one player of her choosing tonight, and
- * is only spent if the wolves actually came for that player.
+ * picked. Her healing potion saves whoever they attack tonight, and is spent
+ * either way — if they attacked nobody, she wasted it.
  */
 function witchAction(
   state: GameState,
   actorId: PlayerId,
-  healTargetId: PlayerId | null,
+  heal: boolean,
   poisonTargetId: PlayerId | null
 ): GameState {
   assert(state.phase === "night" && state.night, "Not night.");
@@ -430,10 +439,7 @@ function witchAction(
   assert(!step.done, "You have already acted.");
 
   const potions = state.witchPotions[actorId] ?? { heal: false, poison: false };
-  if (healTargetId !== null) {
-    assert(potions.heal, "Your healing potion is already spent.");
-    assert(playerById(state, healTargetId)?.alive, "Can't heal a dead player.");
-  }
+  if (heal) assert(potions.heal, "Your healing potion is already spent.");
   if (poisonTargetId !== null) {
     assert(potions.poison, "Your poison is already spent.");
     assert(poisonTargetId !== actorId, "You can't poison yourself.");
@@ -445,7 +451,7 @@ function witchAction(
       ...state.night,
       steps: withSub(state.night.steps, step, actorId, {
         t: "witch",
-        heal: healTargetId,
+        heal,
         poison: poisonTargetId,
       }),
     },
@@ -463,6 +469,23 @@ function nightIdle(state: GameState, actorId: PlayerId, targetId: PlayerId): Gam
   assert(targetId !== actorId && playerById(state, targetId)?.alive, "Pick another living player.");
   if (state.night.idleDone.includes(actorId)) return state;
   return { ...state, night: { ...state.night, idleDone: [...state.night.idleDone, actorId] } };
+}
+
+/** Night powers that may be held back for a later night. */
+export const SKIPPABLE_KINDS: NightActionKind[] = ["swap", "convert"];
+
+/** Hold an optional one-time power for another night (it isn't spent). */
+function nightSkip(state: GameState, actorId: PlayerId): GameState {
+  assert(state.phase === "night" && state.night, "Not night.");
+  assert(playerById(state, actorId)?.alive, "Actor is not alive.");
+  const step = state.night.steps.find((s) => s.actorIds.includes(actorId));
+  assert(step, "You have no night action.");
+  assert(SKIPPABLE_KINDS.includes(step.kind), "That power can't be saved for later.");
+  assert(!(actorId in step.subs), "You have already acted.");
+  return {
+    ...state,
+    night: { ...state.night, steps: withSub(state.night.steps, step, actorId, { t: "skip" }) },
+  };
 }
 
 /** An actor has read their private night result; the night may now move on. */
@@ -674,8 +697,9 @@ function endNight(state: GameState): GameState {
     for (const [actorId, sub] of Object.entries(step.subs)) {
       if (sub.t !== "witch") continue;
       let cur = witchPotions[actorId] ?? { heal: false, poison: false };
-      if (sub.heal !== null && cur.heal && sub.heal === victimId) {
-        protectedIds.add(victimId);
+      // Drinking it spends it, whether or not the wolves attacked anyone.
+      if (sub.heal && cur.heal) {
+        if (victimId) protectedIds.add(victimId);
         cur = { ...cur, heal: false };
       }
       if (sub.poison !== null && cur.poison) {
@@ -701,9 +725,18 @@ function endNight(state: GameState): GameState {
   for (const id of deaths) if (id !== victimId) log.push({ type: "poisoned", round: state.round, playerId: id });
 
   const killed = markDead(state.players, [...deaths]);
+  // A Troublemaker who swapped tonight has spent their one swap, even if it
+  // fizzled. From the RAW steps, so a Drunk mimicking one spends it too and the
+  // disguise holds.
+  const swapUsed = { ...state.swapUsed };
+  for (const step of steps) {
+    if (step.kind !== "swap") continue;
+    for (const [actorId, sub] of Object.entries(step.subs)) if (sub.t === "swap") swapUsed[actorId] = true;
+  }
   const roleState: RoleState = {
     witchPotions,
     mediumUsed,
+    swapUsed,
     convertUsed: { ...state.convertUsed },
     drunkDisguise: { ...state.drunkDisguise },
     lastProtect,
@@ -726,6 +759,7 @@ function endNight(state: GameState): GameState {
     players,
     witchPotions: roleState.witchPotions,
     mediumUsed: roleState.mediumUsed,
+    swapUsed: roleState.swapUsed,
     convertUsed: roleState.convertUsed,
     drunkDisguise: roleState.drunkDisguise,
     lastProtect: roleState.lastProtect,
@@ -751,6 +785,7 @@ function swapEntry<T>(map: Record<string, T>, a: PlayerId, b: PlayerId) {
 interface RoleState {
   witchPotions: GameState["witchPotions"];
   mediumUsed: GameState["mediumUsed"];
+  swapUsed: GameState["swapUsed"];
   convertUsed: GameState["convertUsed"];
   drunkDisguise: GameState["drunkDisguise"];
   lastProtect: GameState["lastProtect"];
@@ -776,6 +811,7 @@ function applySwaps(players: Player[], roleState: RoleState, steps: NightStep[])
       );
       swapEntry(roleState.witchPotions, sub.a, sub.b);
       swapEntry(roleState.mediumUsed, sub.a, sub.b);
+      swapEntry(roleState.swapUsed, sub.a, sub.b);
       swapEntry(roleState.convertUsed, sub.a, sub.b);
       swapEntry(roleState.drunkDisguise, sub.a, sub.b);
       swapEntry(roleState.lastProtect, sub.a, sub.b);
@@ -918,6 +954,11 @@ export function allVotesIn(state: GameState): boolean {
   return eligibleVoters(state).every((p) => p.id in state.votes);
 }
 
+/**
+ * Count the votes and apply the result — but don't move on yet. The phase
+ * becomes "verdict", so everyone sees who went out (or that nobody did) and
+ * whether the game is over, until the host continues (endVerdict).
+ */
 function resolveVote(state: GameState): GameState {
   assert(state.phase === "dayVote", "Not voting.");
   // The ballot is open: keep who voted for whom, so the town can see it after.
@@ -929,36 +970,57 @@ function resolveVote(state: GameState): GameState {
   }
 
   const log = state.log.slice();
+  const announce = (next: GameState, outcome: Verdict["outcome"], playerId: PlayerId | null, solo: PlayerId | null) =>
+    withVerdict({ ...next, votes: {} }, outcome, playerId, solo);
 
   if (tally.size === 0) {
     log.push({ type: "noDeath", round: state.round, cause: "lynch" });
-    return continueAfter({ ...state, votes: {}, log }, "night");
+    return announce({ ...state, log }, "noVotes", null, null);
   }
   const max = Math.max(...tally.values());
   const top = [...tally.entries()].filter(([, c]) => c === max);
   if (top.length > 1) {
     // Tie: no one is lynched. (Deliberate rule — keeps stalls harmless.)
     log.push({ type: "voteTie", round: state.round });
-    return continueAfter({ ...state, votes: {}, log }, "night");
+    return announce({ ...state, log }, "tie", null, null);
   }
 
   const lynchedId = top[0][0];
   const lynched = playerById(state, lynchedId)!;
   const { players, deadShooters } = markDead(state.players, [lynchedId]);
   log.push({ type: "lynch", round: state.round, playerId: lynchedId });
-
+  const next: GameState = { ...state, players, log, pendingShots: [...state.pendingShots, ...deadShooters] };
   // A lynched Tanner wins outright, before any Hunter shot or team check.
-  if (lynched.roleId && getRole(lynched.roleId).winsIfLynched) {
-    return finish({ ...state, players, votes: {}, log }, "solo", lynchedId);
-  }
+  const solo = lynched.roleId && getRole(lynched.roleId).winsIfLynched ? lynchedId : null;
+  return announce(next, "lynch", lynchedId, solo);
+}
 
-  const next: GameState = {
-    ...state,
-    players,
-    votes: {},
-    log,
-    pendingShots: [...state.pendingShots, ...deadShooters],
+/** Enter the verdict phase, working out what happens when the host continues. */
+function withVerdict(
+  state: GameState,
+  outcome: Verdict["outcome"],
+  playerId: PlayerId | null,
+  soloWinnerId: PlayerId | null
+): GameState {
+  const shooters = state.pendingShots.filter((id) => living(state).some((p) => p.id !== id));
+  const winner = soloWinnerId ? "solo" : shooters.length ? null : checkWinner(state);
+  const verdict: Verdict = {
+    round: state.round,
+    outcome,
+    playerId,
+    next: winner ? "gameOver" : shooters.length ? "hunterShot" : "night",
+    winner,
+    soloWinnerId,
   };
+  return { ...state, phase: "verdict", verdict };
+}
+
+/** The host moves the table on from the vote's result. */
+function endVerdict(state: GameState): GameState {
+  assert(state.phase === "verdict" && state.verdict, "There's no vote result to move on from.");
+  const { soloWinnerId } = state.verdict;
+  const next = { ...state, verdict: null };
+  if (soloWinnerId) return finish({ ...next, pendingShots: [] }, "solo", soloWinnerId);
   return enterReckoning(next, "night");
 }
 
@@ -993,6 +1055,8 @@ export function createGame(code: string, seed: number): GameState {
     silenced: [],
     mediumUsed: {},
     convertUsed: {},
+    swapUsed: {},
+    verdict: null,
     drunkDisguise: {},
     lastProtect: {},
     dealtRoles: [],

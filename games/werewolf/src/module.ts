@@ -20,7 +20,7 @@ export const werewolfModule: GameModule<GameConfig, GameState, PlayerView> & {
   minPlayers: 3,
   maxPlayers: 30,
   // Bump when GameState changes shape (see GameModule.stateVersion).
-  stateVersion: 2, // 2: decoy night prompts (night.idleDone) + sequential votes (voteOrder)
+  stateVersion: 3, // 3: blind witch heal, one-time Troublemaker (swapUsed), vote verdicts
 
   parseConfig(raw, players) {
     let problems;
@@ -89,7 +89,9 @@ function toEngineAction(actorId: string, msg: WerewolfAction, isHost: boolean): 
       return { type: "nightChoice", actorId, targetId: msg.targetId };
     case "witchAction":
       // Missing means "no": a client that leaves a potion out isn't asking for it.
-      return { type: "witchAction", actorId, healTargetId: msg.healTargetId ?? null, poisonTargetId: msg.poisonTargetId ?? null };
+      return { type: "witchAction", actorId, heal: msg.heal === true, poisonTargetId: msg.poisonTargetId ?? null };
+    case "nightSkip":
+      return { type: "nightSkip", actorId };
     case "swapAction":
       return { type: "swapAction", actorId, aId: msg.aId, bId: msg.bId };
     case "detectAction":
@@ -114,6 +116,9 @@ function toEngineAction(actorId: string, msg: WerewolfAction, isHost: boolean): 
     case "resolveVote":
       hostOnly();
       return { type: "resolveVote" };
+    case "endVerdict":
+      hostOnly(); // the host moves the table on once everyone has seen the result
+      return { type: "endVerdict" };
     case "say":
       return { type: "say", speakerId: actorId, text: msg.text };
     case "shoot":

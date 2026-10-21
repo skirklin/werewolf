@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { castVotes } from "./testutil.js";
+import { castVotes, settleVote } from "./testutil.js";
 import type { GameConfig, GameState, Player } from "./types.js";
 import { createGame, reduce } from "./engine.js";
 import { GAME_RECORD_VERSION, parseGameRecord, toGameRecord, type GameRecord } from "./record.js";
@@ -38,7 +38,7 @@ function villageWin(): GameState {
   s = reduce(s, { type: "endNight" });
   s = reduce(s, { type: "startVote" });
   s = castVotes(s, { "uuid-secret-0": "uuid-secret-2", "uuid-secret-2": "uuid-secret-0", "uuid-secret-3": "uuid-secret-0" });
-  return reduce(s, { type: "resolveVote" });
+  return settleVote(s);
 }
 
 describe("game records", () => {
@@ -87,7 +87,7 @@ describe("game records", () => {
     s = reduce(s, { type: "endNight" });
     s = reduce(s, { type: "startVote" });
     s = castVotes(s, { "uuid-secret-0": "uuid-secret-1", "uuid-secret-1": "uuid-secret-0", "uuid-secret-3": "uuid-secret-1" });
-    s = reduce(s, { type: "resolveVote" });
+    s = settleVote(s);
     const rec = toGameRecord(s, "local")!;
     expect(rec.winner).toBe("solo");
     expect(rec.soloWinnerRole).toBe("tanner");

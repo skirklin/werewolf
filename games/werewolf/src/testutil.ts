@@ -18,3 +18,9 @@ export function voteAll(s: GameState, pick: (voterId: PlayerId) => PlayerId | nu
   for (let v = currentVoter(s); v; v = currentVoter(s)) s = reduce(s, { type: "castVote", voterId: v, targetId: pick(v) });
   return s;
 }
+
+/** Count the votes and move past the announced result, as the host would. */
+export function settleVote(s: GameState): GameState {
+  s = reduce(s, { type: "resolveVote" });
+  return s.phase === "verdict" ? reduce(s, { type: "endVerdict" }) : s;
+}

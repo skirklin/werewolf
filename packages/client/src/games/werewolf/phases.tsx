@@ -62,9 +62,15 @@ const NIGHT_PROMPT: Record<string, string> = {
 export function NightAction({ view, send }: { view: PlayerView; send: Send }) {
   const prompt = view.nightPrompt!;
   if (prompt.kind === "witch")
-    return <WitchPanel view={view} onSubmit={(heal, poison) => send({ type: "witchAction", healTargetId: heal, poisonTargetId: poison })} />;
+    return <WitchPanel view={view} onSubmit={(heal, poison) => send({ type: "witchAction", heal, poisonTargetId: poison })} />;
   if (prompt.kind === "swap")
-    return <SwapPanel view={view} onSubmit={(aId, bId) => send({ type: "swapAction", aId, bId })} />;
+    return (
+      <SwapPanel
+        view={view}
+        onSubmit={(aId, bId) => send({ type: "swapAction", aId, bId })}
+        onSkip={() => send({ type: "nightSkip" })}
+      />
+    );
   if (prompt.kind === "detect")
     return <DetectPanel view={view} onSubmit={(aId, bId) => send({ type: "detectAction", aId, bId })} />;
   if (prompt.kind === "raise")
@@ -96,24 +102,29 @@ function TargetNightAction({ view, send }: { view: PlayerView; send: Send }) {
       >
         {picked ? `${NIGHT_VERB[prompt.kind] ?? "Choose"} ${nameOf(view, picked)}` : "Pick someone"}
       </button>
+      {prompt.canSkip && (
+        <button className="ghost full" onClick={() => send({ type: "nightSkip" })}>
+          Not tonight — save it for later
+        </button>
+      )}
     </div>
   );
 }
 
 /**
- * The Witch's night action. She chooses blind — she is never told whom the
- * wolves picked — so the heal is a guess: shield someone, and if the wolves
- * come for them they live (and only then is the potion spent).
+ * The Witch's night action. She chooses blind — she never learns whom the
+ * wolves picked — so the heal is simply "save whoever they attack tonight".
+ * It's spent either way.
  */
 export function WitchPanel({
   view,
   onSubmit,
 }: {
   view: PlayerView;
-  onSubmit: (healTargetId: string | null, poisonTargetId: string | null) => void;
+  onSubmit: (heal: boolean, poisonTargetId: string | null) => void;
 }) {
   const w = view.nightPrompt!.witch!;
-  const [heal, setHeal] = useState<string | null>(null);
+  const [heal, setHeal] = useState(false);
   const [poison, setPoison] = useState<string | null>(null);
   return (
     <div className="stack">
@@ -124,17 +135,19 @@ export function WitchPanel({
       </div>
 
       {w.healAvailable && (
-        <>
-          <div className="muted small">
-            ❤️‍🩹 Healing potion (optional) — shield one player tonight. If the wolves strike them, they live and the potion is spent.
-          </div>
-          <TargetGrid view={view} ids={w.healTargetIds} selected={heal} onPick={(id) => setHeal((h) => (h === id ? null : id))} />
-        </>
+        <label className="card tight rule-row" style={{ padding: "4px 14px" }}>
+          <span aria-hidden>❤️‍🩹</span>
+          <span className="grow">
+            <b>Healing potion</b>
+            <div className="muted small">Whoever the wolves attack tonight survives. One use, gone either way.</div>
+          </span>
+          <input type="checkbox" checked={heal} onChange={(e) => setHeal(e.target.checked)} />
+        </label>
       )}
 
       {w.poisonAvailable && (
         <>
-          <div className="muted small">☠️ Poison potion (optional, one-time) — they won't wake up.</div>
+          <div className="muted small">☠️ Poison potion (optional, one use) — they won't wake up.</div>
           <TargetGrid view={view} ids={view.nightPrompt!.targetIds} selected={poison} onPick={(id) => setPoison((p) => (p === id ? null : id))} />
         </>
       )}
@@ -142,7 +155,7 @@ export function WitchPanel({
       {!w.healAvailable && !w.poisonAvailable && <p className="center muted">Your shelf is bare — both potions are spent.</p>}
 
       <button className="primary full lg" onClick={() => onSubmit(heal, poison)}>
-        {heal || poison ? "Use potion(s)" : "Do nothing tonight"}
+        {heal && poison ? `Heal tonight and poison ${nameOf(view, poison)}` : heal ? "Heal tonight's victim" : poison ? `Poison ${nameOf(view, poison)}` : "Do nothing tonight"}
       </button>
     </div>
   );
@@ -152,9 +165,12 @@ export function WitchPanel({
 export function SwapPanel({
   view,
   onSubmit,
+  onSkip,
 }: {
   view: PlayerView;
   onSubmit: (aId: string, bId: string) => void;
+  /** Keep the one swap for another night. */
+  onSkip: () => void;
 }) {
   const [picked, setPicked] = useState<string[]>([]);
   const toggle = (id: string) =>
@@ -164,11 +180,14 @@ export function SwapPanel({
       <div className="phase-banner">
         <div className="big">🎭</div>
         <h2>Troublemaker</h2>
-        <p className="muted">Choose two players to secretly swap. {2 - picked.length} more.</p>
+        <p className="muted">You get one swap a game. Pick two players to trade roles at dawn, or save it.</p>
       </div>
       <TargetGrid view={view} ids={view.nightPrompt!.targetIds} selected={null} onPick={toggle} multi={picked} />
       <button className="primary full lg" disabled={picked.length !== 2} onClick={() => onSubmit(picked[0], picked[1])}>
-        Swap them
+        {picked.length === 2 ? `Swap ${nameOf(view, picked[0])} and ${nameOf(view, picked[1])}` : `Pick ${2 - picked.length} more`}
+      </button>
+      <button className="ghost full" onClick={onSkip}>
+        Not tonight — save it for later
       </button>
     </div>
   );
@@ -323,6 +342,65 @@ function RevealGroup({ title, players }: { title: string; players: PublicPlayer[
           <span className="muted">{p.roleId ? ROLES[p.roleId].name : "?"}</span>
         </div>
       ))}
+    </div>
+  );
+}
+
+/**
+ * The vote's result, announced to everyone before the game moves on: who went
+ * out (and their role, if roles are revealed), or that nobody did — then
+ * whether the game is over. The host taps through for the table.
+ */
+export function VerdictScreen({ view, onContinue }: { view: PlayerView; onContinue: (() => void) | null }) {
+  const v = view.verdict!;
+  const out = v.playerId ? view.players.find((p) => p.id === v.playerId) : null;
+  // Only a role the whole table is told. A wolf's view also knows its packmates
+  // (and everyone knows their own role), so going by the view alone would make
+  // some phones announce a role while others say "secret" — a tell.
+  const role = view.config.revealRoleOnDeath && out?.roleId ? ROLES[out.roleId] : null;
+  const isYou = out?.id === view.you.id;
+  const host = view.players.find((p) => p.isHost)?.name ?? "The host";
+  const { emoji, headline, detail } =
+    v.outcome === "lynch"
+      ? {
+          emoji: "⚖️",
+          headline: isYou ? "You're out" : `${out?.name ?? "Someone"} is out`,
+          detail: role ? `${isYou ? "You were" : "They were"} the ${role.name}.` : isYou ? "The town voted you out." : "Their role stays a secret.",
+        }
+      : v.outcome === "tie"
+        ? { emoji: "🤝", headline: "A tie — nobody goes", detail: "The town couldn't agree, so everyone lives another night." }
+        : { emoji: "🤐", headline: "Nobody voted anyone out", detail: "Everyone lives another night." };
+  const next =
+    v.next === "gameOver"
+      ? {
+          line:
+            v.winner === "solo"
+              ? `Game over — ${out?.name ?? "the Tanner"} wins alone!`
+              : v.winner === "village"
+                ? "Game over — the Village wins!"
+                : "Game over — the Werewolves win!",
+          button: "See the final reveal",
+        }
+      : v.next === "hunterShot"
+        ? { line: "The game continues — but a Hunter takes a parting shot first.", button: "On to the Hunter's shot" }
+        : { line: "The game continues. Night falls.", button: "Start the night" };
+  return (
+    <div className="stack">
+      <div className="phase-banner">
+        <div className="big">{emoji}</div>
+        <h2>{headline}</h2>
+        <p className="muted">{detail}</p>
+      </div>
+      <div className={`card tight center verdict-next ${v.next === "gameOver" ? "over" : ""}`}>
+        <b>{next.line}</b>
+      </div>
+      {onContinue ? (
+        <button className="primary full lg" onClick={onContinue}>
+          {next.button}
+        </button>
+      ) : (
+        <p className="center muted small">{host} will move everyone on.</p>
+      )}
     </div>
   );
 }

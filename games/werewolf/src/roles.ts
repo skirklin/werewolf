@@ -38,7 +38,7 @@ export const ROLES: Record<string, RoleDef> = {
     team: "werewolf",
     emoji: "🧛",
     blurb:
-      "A wolf with a nasty bite. Once per game, infect a neighbor — at dawn they wake up furry and secretly join the pack (a vision that same night still shows their old self).",
+      "A wolf with a nasty bite. Once per game, on a night of your choosing, infect a neighbor — at dawn they wake up furry and secretly join the pack.",
     night: { kind: "convert", order: 12, canTargetSelf: false },
   },
   seer: {
@@ -102,7 +102,7 @@ export const ROLES: Record<string, RoleDef> = {
     team: "village",
     emoji: "🧪",
     blurb:
-      "Two potions, one game. Each night, secretly shield someone with your healing draught — if the wolves come for them, they live (and the potion's spent). Or poison anyone you fancy. One use each, no refills, and you never know who the wolves picked.",
+      "Two potions, one game. Uncork the healing draught on any night and whoever the wolves attack lives — but it's gone either way, so pick your night. The poison takes out anyone you fancy. You never learn who the wolves picked.",
     night: { kind: "witch", order: 15 },
   },
   troublemaker: {
@@ -111,7 +111,7 @@ export const ROLES: Record<string, RoleDef> = {
     team: "village",
     emoji: "🎭",
     blurb:
-      "A quiet agent of chaos. Each night, secretly swap two players' roles. The swap lands at dawn: they wake up as someone new and never know (anything they did tonight, they did as their old role).",
+      "A quiet agent of chaos with one trick per game: on a night of your choosing, secretly swap two players' roles. The swap lands at dawn — they wake up as someone new and never know.",
     drunkMimicable: true,
     night: { kind: "swap", order: 40 },
   },

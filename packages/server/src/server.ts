@@ -172,7 +172,7 @@ export async function createApp(opts: AppOptions = {}): Promise<FastifyInstance>
           switch (msg.type) {
             case "createRoom": {
               const room = manager.create(msg.game);
-              const { playerId: pid, token } = room.addPlayer(msg.name, client, msg.deviceId);
+              const { playerId: pid, token } = room.addPlayer(msg.name, client, msg.deviceId, msg.alias);
               roomCode = room.code;
               playerId = pid;
               client.send({ type: "joined", playerId: pid, token, code: room.code, game: room.game.id });
@@ -181,7 +181,7 @@ export async function createApp(opts: AppOptions = {}): Promise<FastifyInstance>
             case "joinRoom": {
               const room = manager.get(msg.code);
               if (!room) return fail("No room with that code.");
-              const { playerId: pid, token } = room.addPlayer(msg.name, client, msg.deviceId);
+              const { playerId: pid, token } = room.addPlayer(msg.name, client, msg.deviceId, msg.alias);
               roomCode = room.code;
               playerId = pid;
               client.send({ type: "joined", playerId: pid, token, code: room.code, game: room.game.id });

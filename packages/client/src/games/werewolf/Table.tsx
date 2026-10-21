@@ -1,7 +1,7 @@
 import type { PlayerView, WerewolfAction } from "@party/werewolf";
 import type { TableProps } from "../../shell/game.js";
 import { RoleCard, InspectHistory, RolesInPlay, TimeBadge, TownNews, useTimeTheme } from "./ui.js";
-import { NightAction, NightResult, IdleNight, DayBoard, VoteAction, ShootAction, DetectionHistory, GameOver, PlayerList } from "./phases.js";
+import { NightAction, NightResult, IdleNight, VerdictScreen, DayBoard, VoteAction, ShootAction, DetectionHistory, GameOver, PlayerList } from "./phases.js";
 
 type Send = (action: WerewolfAction) => void;
 
@@ -83,6 +83,9 @@ function renderPhase(view: PlayerView, send: Send, playAgain: () => void, onExit
           </div>
         );
       return <VoteAction view={view} send={send} />;
+
+    case "verdict":
+      return <VerdictScreen view={view} onContinue={view.you.isHost ? () => send({ type: "endVerdict" }) : null} />;
 
     case "gameOver":
       // The host deals a rematch in place — everyone stays in the room, so no

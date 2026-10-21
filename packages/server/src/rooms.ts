@@ -30,7 +30,19 @@ const CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ";
  * table can drop at once. A code should keep working through all of that.
  */
 const EMPTY_ROOM_GRACE_MS = 2 * 60 * 60_000;
+/** Longest real name, and longest nickname. */
 const MAX_NAME = 20;
+
+/**
+ * How a player is shown: "Alias (Name)" with a nickname, else just the name.
+ * Real names stay in view because funny nicknames are hard to keep track of
+ * at a table full of people you know.
+ */
+export function displayName(name: unknown, alias?: unknown): string {
+  const real = String(name ?? "").trim().slice(0, MAX_NAME) || "Player";
+  const nick = String(alias ?? "").trim().slice(0, MAX_NAME);
+  return nick && nick.toLowerCase() !== real.toLowerCase() ? `${nick} (${real})` : real;
+}
 
 /** A browser's self-made id: accepted only if it looks like one (a UUID-ish token). */
 function validDeviceId(raw: unknown): string | null {
@@ -136,7 +148,7 @@ export class Room {
    * one. That's how a phone that lost its saved seat (someone tapped Leave, a
    * stale socket, a reload) gets back in. Names are only for display.
    */
-  addPlayer(name: string, client: Client, deviceId?: unknown): { playerId: string; token: string } {
+  addPlayer(name: string, client: Client, deviceId?: unknown, alias?: unknown): { playerId: string; token: string } {
     const device = validDeviceId(deviceId);
     const mine = device ? this.players.find((p) => this.devices.get(p.id) === device) : undefined;
     if (mine) return this.claim(mine, client);
@@ -148,7 +160,7 @@ export class Room {
     this.players.push({
       id: playerId,
       // Two Sams would make every vote and night prompt ambiguous.
-      name: this.uniqueName(String(name ?? "").trim().slice(0, MAX_NAME) || "Player"),
+      name: this.uniqueName(displayName(name, alias)),
       isHost: this.players.length === 0,
       connected: true,
     });
@@ -179,7 +191,7 @@ export class Room {
     const taken = new Set(this.players.map((p) => p.name.toLowerCase()));
     if (!taken.has(name.toLowerCase())) return name;
     for (let n = 2; ; n++) {
-      const candidate = `${name.slice(0, MAX_NAME - String(n).length - 1)} ${n}`;
+      const candidate = `${name} ${n}`;
       if (!taken.has(candidate.toLowerCase())) return candidate;
     }
   }

@@ -16,7 +16,7 @@ import {
 import { useLocalGame } from "./local.js";
 import { RoleConfigEditor } from "./config.js";
 import { RoleCard, LogFeed, RolesInPlay, TownNews, BallotLines, useTimeTheme } from "./ui.js";
-import { TargetGrid, WitchPanel, SwapPanel, RaisePanel, SilencedNote, GameOver, PlayerList } from "./phases.js";
+import { TargetGrid, WitchPanel, SwapPanel, RaisePanel, SilencedNote, GameOver, PlayerList, VerdictScreen } from "./phases.js";
 
 export function LocalApp({ onExit }: { onExit: () => void }) {
   const game = useLocalGame();
@@ -181,6 +181,16 @@ function LocalPlay({
     );
   }
 
+  // Public: the vote's result, read out to the table. Built from public
+  // players only, so the role shown is one the whole table may see.
+  if (state.phase === "verdict") {
+    return (
+      <div className="app">
+        <VerdictScreen view={{ ...view, players: publicPlayers(state) }} onContinue={game.endVerdict} />
+      </div>
+    );
+  }
+
   // Private turns behind a handoff gate.
   const tid = turnId(turn, state.round);
   const seatId = "seatId" in turn ? turn.seatId : "";
@@ -206,14 +216,14 @@ function LocalPlay({
   switch (turn.kind) {
     case "night":
       if (view.nightPrompt?.kind === "witch")
-        return <WitchPanel view={view} onSubmit={game.submitWitch} />;
+        return <div className="app"><WitchPanel view={view} onSubmit={game.submitWitch} /></div>;
       if (view.nightPrompt?.kind === "swap")
-        return <SwapPanel view={view} onSubmit={game.submitSwap} />;
+        return <div className="app"><SwapPanel view={view} onSubmit={game.submitSwap} onSkip={game.submitSkip} /></div>;
       if (view.nightPrompt?.kind === "detect")
         return <DetectTurn state={state} view={view} onSubmit={game.submitDetect} />;
       if (view.nightPrompt?.kind === "raise")
-        return <RaisePanel view={view} onSubmit={game.submitRaise} />;
-      return <NightTurn view={view} resolveInspect={resolveInspect} onSubmit={game.submitNight} />;
+        return <div className="app"><RaisePanel view={view} onSubmit={game.submitRaise} /></div>;
+      return <NightTurn view={view} resolveInspect={resolveInspect} onSubmit={game.submitNight} onSkip={game.submitSkip} />;
     case "nightPass":
       return (
         <div className="app">
@@ -291,10 +301,12 @@ function NightTurn({
   view,
   resolveInspect,
   onSubmit,
+  onSkip,
 }: {
   view: PlayerView;
   resolveInspect: (targetId: string) => { name: string; isWolf: boolean; label: string };
   onSubmit: (targetId: string) => void;
+  onSkip: () => void;
 }) {
   const prompt = view.nightPrompt!;
   const role = getRole(prompt.roleId);
@@ -339,6 +351,11 @@ function NightTurn({
       >
         Confirm
       </button>
+      {prompt.canSkip && (
+        <button className="ghost full" onClick={onSkip}>
+          Not tonight — save it for later
+        </button>
+      )}
     </div>
   );
 }

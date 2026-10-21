@@ -32,8 +32,12 @@ export type ClientMessage =
    * `deviceId` is a random id the browser makes once and keeps. Joining a room
    * from a device that already has a seat there gives that seat back.
    */
-  | { type: "createRoom"; game: string; name: string; deviceId?: string }
-  | { type: "joinRoom"; code: string; name: string; deviceId?: string }
+  /**
+   * `name` is the player's real name; `alias` an optional nickname. With an
+   * alias they show as "Alias (Name)", so the table always knows who's who.
+   */
+  | { type: "createRoom"; game: string; name: string; alias?: string; deviceId?: string }
+  | { type: "joinRoom"; code: string; name: string; alias?: string; deviceId?: string }
   | { type: "rejoin"; code: string; playerId: string; token: string }
   | { type: "kick"; playerId: string }
   | { type: "startGame"; config: unknown }

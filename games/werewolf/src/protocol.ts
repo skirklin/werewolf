@@ -9,7 +9,10 @@ import type { PlayerId } from "./types.js";
 export type WerewolfAction =
   | { type: "startNight" }
   | { type: "nightChoice"; targetId: PlayerId }
-  | { type: "witchAction"; healTargetId: PlayerId | null; poisonTargetId: PlayerId | null }
+  /** `heal`: save whoever the wolves attack tonight (the Witch never learns who). */
+  | { type: "witchAction"; heal: boolean; poisonTargetId: PlayerId | null }
+  /** Hold an optional one-time power (Troublemaker, Infector) for another night. */
+  | { type: "nightSkip" }
   | { type: "swapAction"; aId: PlayerId; bId: PlayerId }
   | { type: "detectAction"; aId: PlayerId; bId: PlayerId }
   | { type: "raiseAction"; targetId: PlayerId | null }
@@ -21,6 +24,7 @@ export type WerewolfAction =
   | { type: "castVote"; targetId: PlayerId | null }
   | { type: "skipVoter" }
   | { type: "resolveVote" }
+  | { type: "endVerdict" }
   | { type: "shoot"; targetId: PlayerId }
   | { type: "skipShot" }
   | { type: "say"; text: string };
