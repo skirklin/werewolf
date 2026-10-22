@@ -67,6 +67,10 @@ export interface RoleDef {
   night?: NightAbility;
   /** On death (night or vote), this player takes someone down with them. */
   onDeathShoot?: boolean;
+  /** The first time the town votes this player out, they're revealed and spared (Prince). */
+  sparedOnFirstVote?: boolean;
+  /** Becomes this role once nobody alive holds it (the Apprentice Seer takes over as Seer). */
+  succeeds?: string;
   /** A solo role that wins immediately if the town votes to eliminate them (Tanner). */
   winsIfLynched?: boolean;
   /** This role can be secretly impersonated by the Drunk (its power does nothing). */
@@ -209,7 +213,8 @@ export type AnnouncementEvent =
   | { t: "votedOut"; playerId: PlayerId }
   | { t: "tie" }
   | { t: "noVotes" }
-  | { t: "shot"; shooterId: PlayerId; playerId: PlayerId }; // a dying Hunter's shot
+  | { t: "shot"; shooterId: PlayerId; playerId: PlayerId } // a dying Hunter's shot
+  | { t: "spared"; playerId: PlayerId; roleId: string }; // voted out, but revealed and spared (Prince)
 
 /**
  * What just happened, shown to everyone before play moves on: the dawn after
@@ -238,6 +243,8 @@ export interface Notice {
   raised?: boolean;
   /** Your pack changed (someone joined or left it). */
   packChanged?: boolean;
+  /** You've taken over a role whose last holder is gone (Apprentice Seer → Seer). */
+  promoted?: boolean;
 }
 
 /** How each voter voted in one day's ballot (null = abstained). Public. */
@@ -264,6 +271,7 @@ export type LogEntry =
   | { type: "poisoned"; round: number; playerId: PlayerId }
   | { type: "raised"; round: number; playerId: PlayerId }
   | { type: "voteTie"; round: number }
+  | { type: "spared"; round: number; playerId: PlayerId }
   | { type: "gameOver"; round: number; winner: Team };
 
 export interface GameState {
@@ -294,6 +302,8 @@ export interface GameState {
    * night falls once everyone has.
    */
   ready: PlayerId[];
+  /** Per-Prince: whether their one reprieve from the vote has been spent. */
+  princeSpared: Record<PlayerId, boolean>;
   /** Per-Infector: whether their one-time conversion has been spent. */
   convertUsed: Record<PlayerId, boolean>;
   /** Per-Drunk: the role they've been dealt to secretly impersonate. */

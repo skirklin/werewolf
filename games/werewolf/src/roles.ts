@@ -114,6 +114,26 @@ export const ROLES: Record<string, RoleDef> = {
     blurb: "You can't stand this town. Your one goal: get voted out. Pull it off and you win — pettily, and all alone.",
     winsIfLynched: true,
   },
+  prince: {
+    id: "prince",
+    weight: 3,
+    name: "Prince",
+    team: "village",
+    emoji: "👑",
+    sparedOnFirstVote: true,
+    blurb:
+      "Royalty has its perks. The first time the town votes you out, you reveal your crown and they think better of it. The second time, they don't.",
+  },
+  apprenticeSeer: {
+    id: "apprenticeSeer",
+    weight: 4,
+    name: "Apprentice Seer",
+    team: "village",
+    emoji: "🔭",
+    succeeds: "seer",
+    blurb:
+      "You've been studying under the Seer. While they live, you're just a villager with good posture. If the Seer is gone, you take up the crystal ball.",
+  },
   witch: {
     id: "witch",
     weight: 4,

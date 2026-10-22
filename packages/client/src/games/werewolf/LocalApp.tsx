@@ -330,6 +330,7 @@ function NightTurn({
   return (
     <div className="app">
       <div className="phase-banner"><div className="big">{role.emoji}</div><h2>{role.name}</h2><p className="muted">{promptText}</p></div>
+      <NoticeCard view={view} />
       {packmates.length > 0 && (
         <p className="center small">🐺 Your pack: <b>{packmates.map((p) => p.name).join(", ")}</b></p>
       )}

@@ -506,6 +506,8 @@ function summarize(entry: PlayerView["log"][number], view: PlayerView): string {
       return `night ${entry.round} passed with nobody killed`;
     case "voteTie":
       return `the vote on day ${entry.round} was a tie, so nobody went`;
+    case "spared":
+      return `the town voted out ${who} on day ${entry.round}, but they were the Prince and were spared`;
     default:
       return "";
   }

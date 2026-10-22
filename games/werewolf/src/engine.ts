@@ -313,6 +313,9 @@ function startGame(state: GameState, config: GameConfig): GameState {
     // No believable disguise to hand out: deal a plain Villager instead.
     if (p.roleId === "drunk" && !mimicable.length) players[i] = { ...p, roleId: "villager" };
   }
+  const dealtRoles = players.map((p) => p.roleId!);
+  // Dealt an apprentice to a role nobody holds? They start out holding it.
+  const startingPlayers = promoteSuccessors(players).players;
   for (const p of players) {
     if (p.roleId === "witch") witchPotions[p.id] = { heal: true, poison: true };
     if (p.roleId === "medium") mediumUsed[p.id] = false;
@@ -327,12 +330,12 @@ function startGame(state: GameState, config: GameConfig): GameState {
   return {
     ...state,
     config,
-    players,
     witchPotions,
     mediumUsed,
     convertUsed,
     drunkDisguise,
-    dealtRoles: players.map((p) => p.roleId!),
+    players: startingPlayers,
+    dealtRoles,
     phase: "roleReveal",
     round: 0,
     log: [{ type: "gameStart", round: 0 }],
@@ -392,7 +395,9 @@ function beginNight(state: GameState): GameState {
     round,
     night,
     votes: {},
-    notices: {}, // yesterday's private news is old news
+    // Yesterday's private news is old news — except a takeover, which matters
+    // most on the first night the new power wakes.
+    notices: Object.fromEntries(Object.entries(state.notices).filter(([, n]) => n.promoted)),
     silenced: [], // last night's silence expires
     log: [...state.log, { type: "night", round }],
   };
@@ -836,6 +841,7 @@ function endNight(state: GameState): GameState {
     drunkDisguise: { ...state.drunkDisguise },
     lastTarget,
     hunterMark,
+    princeSpared: { ...state.princeSpared },
   };
   // Spend one-time powers (Medium raise, Infector convert) BEFORE swaps, so the
   // spent flag is written under the current id and then travels with the role...
@@ -846,6 +852,9 @@ function endNight(state: GameState): GameState {
   players = applyConverts(players, roleState.convertUsed, roleState.drunkDisguise, liveSteps, infected);
   // ...then the Troublemaker swap carries all that role state to the new holder.
   players = applySwaps(players, roleState, liveSteps);
+  // An apprentice whose master died (or was infected, or swapped away) takes over.
+  const promotion = promoteSuccessors(players);
+  players = promotion.players;
 
   // The Gossip's mark gets the cold shoulder tomorrow: no talking, no vote.
   const silenced: PlayerId[] = [];
@@ -863,11 +872,12 @@ function endNight(state: GameState): GameState {
     drunkDisguise: roleState.drunkDisguise,
     lastTarget: roleState.lastTarget,
     hunterMark: roleState.hunterMark,
+    princeSpared: roleState.princeSpared,
     silenced,
     night: null,
     log,
   };
-  return announce({ ...next, notices: dawnNotices(state, next, infected) }, "dawn", events);
+  return announce({ ...next, notices: dawnNotices(state, next, infected, promotion.promoted) }, "dawn", events);
 }
 
 /**
@@ -876,7 +886,12 @@ function endNight(state: GameState): GameState {
  * shrank. Compared on the role each player *sees* (a Drunk's disguise), so
  * the notice never gives a Drunk away.
  */
-function dawnNotices(before: GameState, after: GameState, infected: PlayerId[]): GameState["notices"] {
+function dawnNotices(
+  before: GameState,
+  after: GameState,
+  infected: PlayerId[],
+  promoted: PlayerId[]
+): GameState["notices"] {
   const notices: GameState["notices"] = {};
   for (const p of after.players) {
     if (!p.alive) continue;
@@ -885,6 +900,7 @@ function dawnNotices(before: GameState, after: GameState, infected: PlayerId[]):
     const roleNow = effectiveRoleId(after, p.id);
     if (roleNow && roleNow !== effectiveRoleId(before, p.id)) n.roleId = roleNow;
     if (infected.includes(p.id)) n.infected = true;
+    if (promoted.includes(p.id)) n.promoted = true;
     if (was && !was.alive) n.raised = true;
     const wolfNow = !!p.roleId && getRole(p.roleId).team === "werewolf";
     if (wolfNow && !n.roleId && packOf(before, p.id) !== packOf(after, p.id)) n.packChanged = true;
@@ -912,6 +928,7 @@ interface RoleState {
   drunkDisguise: GameState["drunkDisguise"];
   lastTarget: GameState["lastTarget"];
   hunterMark: GameState["hunterMark"];
+  princeSpared: GameState["princeSpared"];
 }
 
 /**
@@ -939,9 +956,26 @@ function applySwaps(players: Player[], roleState: RoleState, steps: NightStep[])
       swapEntry(roleState.drunkDisguise, sub.a, sub.b);
       swapEntry(roleState.lastTarget, sub.a, sub.b);
       swapEntry(roleState.hunterMark, sub.a, sub.b);
+      swapEntry(roleState.princeSpared, sub.a, sub.b);
     }
   }
   return next;
+}
+
+/**
+ * Hand a role on when nobody alive holds it: each living successor (the
+ * Apprentice Seer) of a role with no living holder takes it up, one per role.
+ */
+function promoteSuccessors(players: Player[]): { players: Player[]; promoted: PlayerId[] } {
+  let next = players;
+  const promoted: PlayerId[] = [];
+  for (const p of players) {
+    const role = p.alive && p.roleId ? getRole(p.roleId).succeeds : undefined;
+    if (!role || next.some((x) => x.alive && x.roleId === role)) continue;
+    next = next.map((x) => (x.id === p.id ? { ...x, roleId: role } : x));
+    promoted.push(p.id);
+  }
+  return { players: next, promoted };
 }
 
 /** Apply Medium raises, mutating the shared log + spent flags. */
@@ -1088,6 +1122,15 @@ function resolveVote(state: GameState): GameState {
 
   const lynchedId = top[0][0];
   const lynched = playerById(state, lynchedId)!;
+  // The Prince's first trip to the gallows ends with a reveal and a reprieve.
+  if (lynched.roleId && getRole(lynched.roleId).sparedOnFirstVote && !state.princeSpared[lynchedId]) {
+    log.push({ type: "spared", round: state.round, playerId: lynchedId });
+    return announce(
+      { ...state, log, princeSpared: { ...state.princeSpared, [lynchedId]: true } },
+      "vote",
+      [{ t: "spared", playerId: lynchedId, roleId: lynched.roleId }]
+    );
+  }
   log.push({ type: "lynch", round: state.round, playerId: lynchedId });
   const events: AnnouncementEvent[] = [{ t: "votedOut", playerId: lynchedId }];
   // A lynched Tanner wins outright, before any Hunter shot or team check.
@@ -1098,7 +1141,13 @@ function resolveVote(state: GameState): GameState {
   const { players, deadShooters } = markDead(state.players, [lynchedId]);
   // A lynched Hunter fires at last night's pick.
   const afterShots = fireDyingShots(players, deadShooters, state.hunterMark, events, log, state.round);
-  return announce({ ...state, players: afterShots, log }, "vote", events);
+  // Lost the Seer to the vote? Their apprentice takes over, and is told so
+  // privately (this morning's news is old by now).
+  const promotion = promoteSuccessors(afterShots);
+  const notices: GameState["notices"] = {};
+  for (const id of promotion.promoted)
+    notices[id] = { roleId: promotion.players.find((p) => p.id === id)!.roleId!, promoted: true };
+  return announce({ ...state, players: promotion.players, log, notices }, "vote", events);
 }
 
 function finish(state: GameState, winner: Team, soloWinnerId: PlayerId | null = null): GameState {
@@ -1132,6 +1181,7 @@ export function createGame(code: string, seed: number): GameState {
     mediumUsed: {},
     convertUsed: {},
     swapUsed: {},
+    princeSpared: {},
     ready: [],
     announcement: null,
     notices: {},

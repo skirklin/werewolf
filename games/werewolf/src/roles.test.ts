@@ -42,6 +42,71 @@ const alive = (s: GameState, id: string) => living(s).some((p) => p.id === id);
 // ---------------------------------------------------------------------------
 // Hunter
 // ---------------------------------------------------------------------------
+describe("Prince", () => {
+  it("is spared the first time the town votes them out, and not the second", () => {
+    let s = gameWith(["werewolf", "prince", "villager", "villager", "villager"]);
+    s = { ...s, phase: "dayDiscussion", round: 1 };
+    s = reduce(s, { type: "startVote" });
+    s = voteAll(s, (v) => (v === "p1" ? "p0" : "p1"));
+    s = reduce(s, { type: "resolveVote" });
+    expect(s.announcement!.events).toEqual([{ t: "spared", playerId: "p1", roleId: "prince" }]);
+    expect(alive(s, "p1")).toBe(true);
+    expect(s.log.at(-1)).toEqual({ type: "spared", round: 1, playerId: "p1" });
+    s = reduce(s, { type: "proceed" }); // on to night 2
+    s = settleNight(s);
+    s = reduce(s, { type: "startVote" });
+    s = voteAll(s, (v) => (v === "p1" ? "p0" : "p1"));
+    s = reduce(s, { type: "resolveVote" });
+    expect(s.announcement!.events).toEqual([{ t: "votedOut", playerId: "p1" }]);
+    expect(alive(s, "p1")).toBe(false);
+  });
+});
+
+describe("Apprentice Seer", () => {
+  it("has no power while the Seer lives", () => {
+    let s = gameWith(["werewolf", "seer", "apprenticeSeer", "villager", "villager"]);
+    s = reduce(s, { type: "startNight" });
+    expect(projectView(s, "p2").nightPrompt).toBeNull();
+    expect(projectView(s, "p2").idlePrompt).not.toBeNull();
+  });
+
+  it("takes over when the Seer dies in the night — told at dawn, and wakes with the power", () => {
+    let s = gameWith(["werewolf", "seer", "apprenticeSeer", "villager", "villager", "villager"]);
+    s = reduce(s, { type: "startNight" });
+    s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p1" }); // the wolves eat the Seer
+    s = reduce(s, { type: "endNight" });
+    expect(s.players[2].roleId).toBe("seer");
+    expect(projectView(s, "p2").myNotice).toEqual({ roleId: "seer", promoted: true });
+    expect(projectView(s, "p3").myNotice).toBeNull();
+    s = reduce(s, { type: "proceed" });
+    s = reduce(s, { type: "startVote" });
+    s = settleVote(voteAll(s, () => null));
+    expect(projectView(s, "p2").nightPrompt).toMatchObject({ kind: "inspect", roleId: "seer" });
+    expect(projectView(s, "p2").myNotice).toMatchObject({ promoted: true }); // a reminder on the first night
+  });
+
+  it("takes over when the Seer is voted out, told privately with the result", () => {
+    let s = gameWith(["werewolf", "seer", "apprenticeSeer", "villager", "villager", "villager"]);
+    s = { ...s, phase: "dayDiscussion", round: 1 };
+    s = reduce(s, { type: "startVote" });
+    s = voteAll(s, (v) => (v === "p1" ? "p0" : "p1"));
+    s = reduce(s, { type: "resolveVote" });
+    expect(s.players[2].roleId).toBe("seer");
+    expect(projectView(s, "p2").myNotice).toEqual({ roleId: "seer", promoted: true });
+    expect(projectView(s, "p3").myNotice).toBeNull();
+  });
+
+  it("starts out as the Seer when there's no Seer in the deal", () => {
+    const players: Player[] = ["a", "b", "c", "d", "e"].map((id, i) => ({
+      id, name: id, roleId: null, alive: true, connected: true, isHost: i === 0,
+    }));
+    const config = { ...exact(), selection: { mode: "exact" as const, roleCounts: { werewolf: 1, apprenticeSeer: 1 } } };
+    const s = reduce({ ...createGame("T", 1), players }, { type: "startGame", config });
+    const apprentice = s.players.findIndex((p) => s.dealtRoles[s.players.indexOf(p)] === "apprenticeSeer");
+    expect(s.players[apprentice].roleId).toBe("seer");
+  });
+});
+
 describe("Hunter", () => {
   it("picks a target every night, and is the only one who sees it", () => {
     let s = gameWith(["werewolf", "hunter", "villager", "villager", "villager"]);
