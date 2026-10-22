@@ -49,6 +49,7 @@ const NIGHT_VERB: Record<string, string> = {
   silence: "Start a rumor about",
   convert: "Infect",
   mark: "Take",
+  block: "Spike",
 };
 
 const NIGHT_PROMPT: Record<string, string> = {
@@ -58,6 +59,7 @@ const NIGHT_PROMPT: Record<string, string> = {
   silence: "Who gets the cold shoulder tomorrow? Not the same person two nights running",
   convert: "Choose someone to infect",
   mark: "If you die before tomorrow night, who do you take down with you?",
+  block: "Whose supper do you spike? Their power fails tomorrow night. Not the same person two nights running",
 };
 
 /** The acting player's night UI. Assumes view.nightPrompt is present. */
@@ -91,6 +93,7 @@ function TargetNightAction({ view, send }: { view: PlayerView; send: Send }) {
         <h2>{role.name}</h2>
         <p className="muted">{NIGHT_PROMPT[prompt.kind]}</p>
       </div>
+      <NoticeCard view={view} />
       <TargetGrid
         view={view}
         ids={prompt.targetIds}
@@ -397,6 +400,8 @@ export function AnnouncementScreen({
         return "🤐 Nobody was voted out. Everyone lives another night.";
       case "shot":
         return `🏹 With a last breath, ${name(e.shooterId)} took ${name(e.playerId)} down too.${was(e.playerId)}`;
+      case "spared":
+        return `👑 The town voted out ${name(e.playerId)} — but ${e.playerId === you ? "you're" : "they're"} the ${ROLES[e.roleId]?.name ?? "Prince"}! The town thinks better of it. Nobody goes.`;
     }
   };
   const winnerLine =
@@ -425,7 +430,7 @@ export function AnnouncementScreen({
       </div>
       {/* Everyone alive gets a private line at dawn, news or not, so nobody's
           screen is visibly different from their neighbour's. */}
-      {privateNews && a.kind === "dawn" && view.you.alive && <NoticeCard view={view} always />}
+      {privateNews && view.you.alive && <NoticeCard view={view} always={a.kind === "dawn"} />}
       <div className={`card tight center verdict-next ${a.next === "gameOver" ? "over" : ""}`}>
         <b>{next.line}</b>
       </div>
@@ -453,7 +458,12 @@ export function NoticeCard({ view, always = false }: { view: PlayerView; always?
     <div className="card tight stack notice" style={{ gap: 6 }}>
       <b className="small">🔒 For you only</b>
       {n.raised && <div>👻 You're back from the dead!</div>}
-      {n.infected ? (
+      {n.promoted && role ? (
+        <div>
+          {role.emoji} Your teacher is gone. You're the <b>{role.name}</b> now — your first night with the power is tonight.
+          <div className="muted small">{role.blurb}</div>
+        </div>
+      ) : n.infected ? (
         <div>🧛 You were infected in the night. You're a <b>Werewolf</b> now — you win with the pack.</div>
       ) : (
         role && (

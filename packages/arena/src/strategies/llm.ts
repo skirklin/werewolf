@@ -339,6 +339,8 @@ export class LlmStrategy implements Strategy {
         return `If you die before tomorrow night, who do you take down with you?${nth}`;
       case "convert":
         return `Which player will you turn into a werewolf?${nth}`;
+      case "block":
+        return `Whose power should fail tomorrow night? (They won't know.)${nth}`;
       case "detect":
         return `Pick a player to compare${nth}.`;
       case "raise":
@@ -506,6 +508,8 @@ function summarize(entry: PlayerView["log"][number], view: PlayerView): string {
       return `night ${entry.round} passed with nobody killed`;
     case "voteTie":
       return `the vote on day ${entry.round} was a tie, so nobody went`;
+    case "spared":
+      return `the town voted out ${who} on day ${entry.round}, but they were the Prince and were spared`;
     default:
       return "";
   }

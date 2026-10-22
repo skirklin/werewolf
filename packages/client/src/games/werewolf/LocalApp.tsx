@@ -6,6 +6,7 @@ import {
   fabricatedInspect,
   fabricatedSameTeam,
   isWolfForWin,
+  isPowerless,
   publicPlayers,
   publicLog,
   type GameConfig,
@@ -130,7 +131,7 @@ function LocalPlay({
     const t = state.players.find((p) => p.id === targetId)!;
     const seatId = "seatId" in turn ? turn.seatId : "";
     const seat = state.players.find((p) => p.id === seatId)!;
-    const drunk = seat.roleId === "drunk";
+    const drunk = isPowerless(state, seatId); // the Drunk, or poisoned last night
     const effRole = state.drunkDisguise[seatId] ?? seat.roleId!;
     const format = getRole(effRole).night?.reveal ?? "exactRole";
     const reveal = drunk
@@ -261,7 +262,7 @@ function DetectTurn({
     const name = (id: string) => state.players.find((p) => p.id === id)!.name;
     const team = (id: string) => getRole(state.players.find((p) => p.id === id)!.roleId!).team;
     // A Drunk mimicking the Detective gets a deterministic fake verdict.
-    const same = state.players.find((p) => p.id === view.you.id)?.roleId === "drunk"
+    const same = isPowerless(state, view.you.id)
       ? fabricatedSameTeam(state.seed, state.round, a, b)
       : team(a) === team(b);
     return (
@@ -325,11 +326,13 @@ function NightTurn({
     : prompt.kind === "silence" ? "Who gets the cold shoulder tomorrow? Not the same person two nights running"
     : prompt.kind === "mark" ? "If you die before tomorrow night, who do you take down with you?"
     : prompt.kind === "convert" ? "Choose someone to turn into a werewolf"
+    : prompt.kind === "block" ? "Whose supper do you spike? Their power fails tomorrow night. Not the same person two nights running"
     : "Choose someone to inspect";
 
   return (
     <div className="app">
       <div className="phase-banner"><div className="big">{role.emoji}</div><h2>{role.name}</h2><p className="muted">{promptText}</p></div>
+      <NoticeCard view={view} />
       {packmates.length > 0 && (
         <p className="center small">🐺 Your pack: <b>{packmates.map((p) => p.name).join(", ")}</b></p>
       )}

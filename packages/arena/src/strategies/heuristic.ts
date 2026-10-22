@@ -52,7 +52,7 @@ export class HeuristicStrategy implements Strategy {
     const rank = (ids: PlayerId[]): PlayerId[] => {
       const scored = ids.map((id) => {
         let score = this.rng(); // break ties differently every game
-        if (prompt.kind === "kill" || prompt.kind === "convert") {
+        if (prompt.kind === "kill" || prompt.kind === "convert" || prompt.kind === "block") {
           // Wolves eat the players most likely to be dangerous — and never kin.
           if (pack.has(id)) score -= 100;
           score += clear.has(id) ? 1 : 0;
