@@ -41,6 +41,15 @@ export function isDrunk(state: GameState, id: PlayerId): boolean {
 }
 
 /**
+ * True if this player's power does nothing tonight: the Drunk always, and
+ * anyone the Poisoner got to last night. They act as normal; effects are
+ * dropped at dawn and info comes back fake, so they can't tell.
+ */
+export function isPowerless(state: GameState, id: PlayerId): boolean {
+  return isDrunk(state, id) || state.drugged.includes(id);
+}
+
+/**
  * Night-action kinds the Drunk is known to handle safely. Effect kinds are
  * nullified automatically (a Drunk's submissions are stripped in endNight);
  * info kinds are fabricated (see nightChoice / detectAction). A role flagged
@@ -154,7 +163,7 @@ export function validNightTargets(state: GameState, actorId: PlayerId): Player[]
 }
 
 /** Powers that can't pick the same player two nights in a row. */
-export const NO_REPEAT_KINDS: NightActionKind[] = ["protect", "silence"];
+export const NO_REPEAT_KINDS: NightActionKind[] = ["protect", "silence", "block"];
 
 /** Whether this night is a peaceful first night: nobody can be killed. */
 export function isPeacefulNight(state: GameState): boolean {
@@ -418,7 +427,7 @@ function nightChoice(state: GameState, actorId: PlayerId, targetId: PlayerId): G
   if (step.kind === "inspect") {
     const target = playerById(state, targetId)!;
     const ability = getRole(effectiveRoleId(state, actorId)!).night!;
-    const reveal = isDrunk(state, actorId)
+    const reveal = isPowerless(state, actorId)
       ? fabricatedInspect(state.seed, state.round, targetId, ability.reveal ?? "exactRole")
       : ability.reveal === "exactRole"
         ? target.roleId!
@@ -567,7 +576,7 @@ function detectAction(state: GameState, actorId: PlayerId, aId: PlayerId, bId: P
     assert(id !== actorId, "Investigate two other players, not yourself.");
     assert(playerById(state, id)?.alive, "Can only investigate living players.");
   }
-  const sameTeam = isDrunk(state, actorId)
+  const sameTeam = isPowerless(state, actorId)
     ? fabricatedSameTeam(state.seed, state.round, aId, bId)
     : teamOf(state, aId) === teamOf(state, bId);
   return {
@@ -737,15 +746,21 @@ function endNight(state: GameState): GameState {
   // submissions so no effect kind — present OR future — is ever applied. This is
   // what makes new mimicable roles safe by default. One exception: a Drunk
   // mimicking the Medium spends its (fake) one-time power, so the illusion holds.
+  // The same goes for anyone poisoned: a one-time power used tonight is spent
+  // even though it fails, so it can't reappear tomorrow and give the game away.
   const mediumUsed = { ...state.mediumUsed };
+  const convertUsed = { ...state.convertUsed };
   for (const step of steps) {
-    if (step.kind !== "raise") continue;
-    for (const [actorId, sub] of Object.entries(step.subs))
-      if (sub.t === "raise" && sub.target !== null && isDrunk(state, actorId)) mediumUsed[actorId] = true;
+    for (const [actorId, sub] of Object.entries(step.subs)) {
+      if (!isPowerless(state, actorId)) continue;
+      if (step.kind === "raise" && sub.t === "raise" && sub.target !== null) mediumUsed[actorId] = true;
+      if (step.kind === "convert" && sub.t === "target") convertUsed[actorId] = true;
+    }
   }
   const liveSteps: NightStep[] = steps.map((s) => ({
     ...s,
-    subs: Object.fromEntries(Object.entries(s.subs).filter(([id]) => !isDrunk(state, id))),
+    // A poisoned player's action goes the same way.
+    subs: Object.fromEntries(Object.entries(s.subs).filter(([id]) => !isPowerless(state, id))),
   }));
 
   // Remember tonight's picks for powers that can't repeat a target. Taken from
@@ -758,9 +773,10 @@ function endNight(state: GameState): GameState {
       if (sub.t === "target") lastTarget[actorId] = sub.target;
   }
 
-  // The Hunters' picks for tonight: who goes down with them if they die.
+  // The Hunters' picks for tonight: who goes down with them if they die. A pick,
+  // not a power, so it holds even for a poisoned Hunter (who'd see it unchanged).
   const hunterMark = { ...state.hunterMark };
-  for (const step of liveSteps) {
+  for (const step of steps) {
     if (step.kind !== "mark") continue;
     for (const [actorId, sub] of Object.entries(step.subs)) if (sub.t === "target") hunterMark[actorId] = sub.target;
   }
@@ -776,18 +792,21 @@ function endNight(state: GameState): GameState {
   // Witch: heal the victim and/or poison a player, spending potions.
   const witchPotions = { ...state.witchPotions };
   const poisonIds: PlayerId[] = [];
-  for (const step of liveSteps) {
+  // From the RAW steps: a poisoned Witch's potion is spent all the same (it just
+  // doesn't work), so a full bottle the next night can't tip her off.
+  for (const step of steps) {
     if (step.kind !== "witch") continue;
     for (const [actorId, sub] of Object.entries(step.subs)) {
       if (sub.t !== "witch") continue;
+      const works = !isPowerless(state, actorId);
       let cur = witchPotions[actorId] ?? { heal: false, poison: false };
       // Drinking it spends it, whether or not the wolves attacked anyone.
       if (sub.heal && cur.heal) {
-        if (victimId) protectedIds.add(victimId);
+        if (victimId && works) protectedIds.add(victimId);
         cur = { ...cur, heal: false };
       }
       if (sub.poison !== null && cur.poison) {
-        poisonIds.push(sub.poison);
+        if (works) poisonIds.push(sub.poison);
         cur = { ...cur, poison: false };
       }
       witchPotions[actorId] = cur;
@@ -801,9 +820,18 @@ function endNight(state: GameState): GameState {
   if (victimId && !wolfProtected) deaths.add(victimId);
   for (const id of poisonIds) if (playerById(state, id)?.alive) deaths.add(id);
 
+  // The Cursed don't die of a bite: they turn (unless poison gets them anyway).
+  // To the town it's a quiet night.
+  const victim = victimId ? playerById(state, victimId) : undefined;
+  let turned: PlayerId | null = null;
+  if (victimId && deaths.has(victimId) && !poisonIds.includes(victimId) && victim?.roleId && getRole(victim.roleId).turnsWhenBitten) {
+    deaths.delete(victimId);
+    turned = victimId;
+  }
+
   const log = state.log.slice();
   const events: AnnouncementEvent[] = [];
-  if (!victimId) {
+  if (!victimId || turned) {
     log.push({ type: "noDeath", round: state.round, cause: "wolves" });
     events.push({ t: "quiet" });
   } else if (!deaths.has(victimId)) {
@@ -837,7 +865,7 @@ function endNight(state: GameState): GameState {
     witchPotions,
     mediumUsed,
     swapUsed,
-    convertUsed: { ...state.convertUsed },
+    convertUsed,
     drunkDisguise: { ...state.drunkDisguise },
     lastTarget,
     hunterMark,
@@ -850,11 +878,19 @@ function endNight(state: GameState): GameState {
   for (const e of log.slice(logBefore)) if (e.type === "raised") events.push({ t: "raised", playerId: e.playerId });
   const infected: PlayerId[] = [];
   players = applyConverts(players, roleState.convertUsed, roleState.drunkDisguise, liveSteps, infected);
+  if (turned) {
+    players = players.map((p) => (p.id === turned ? { ...p, roleId: "werewolf" } : p));
+    infected.push(turned);
+  }
   // ...then the Troublemaker swap carries all that role state to the new holder.
   players = applySwaps(players, roleState, liveSteps);
   // An apprentice whose master died (or was infected, or swapped away) takes over.
   const promotion = promoteSuccessors(players);
   players = promotion.players;
+
+  // The Poisoner's pick loses their power tomorrow night.
+  const drugged: PlayerId[] = [];
+  for (const step of liveSteps) if (step.kind === "block") drugged.push(...stepTargets(step));
 
   // The Gossip's mark gets the cold shoulder tomorrow: no talking, no vote.
   const silenced: PlayerId[] = [];
@@ -873,6 +909,7 @@ function endNight(state: GameState): GameState {
     lastTarget: roleState.lastTarget,
     hunterMark: roleState.hunterMark,
     princeSpared: roleState.princeSpared,
+    drugged,
     silenced,
     night: null,
     log,
@@ -1182,6 +1219,7 @@ export function createGame(code: string, seed: number): GameState {
     convertUsed: {},
     swapUsed: {},
     princeSpared: {},
+    drugged: [],
     ready: [],
     announcement: null,
     notices: {},

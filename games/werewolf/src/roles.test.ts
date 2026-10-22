@@ -107,6 +107,97 @@ describe("Apprentice Seer", () => {
   });
 });
 
+/** Settle the night, then a day with no lynch, so the next night begins. */
+function toNextNight(s: GameState): GameState {
+  s = s.phase === "night" ? settleNight(s) : reduce(s, { type: "proceed" });
+  s = reduce(s, { type: "startVote" });
+  return settleVote(voteAll(s, () => null));
+}
+
+describe("Cursed", () => {
+  it("bitten by the wolves, turns instead of dying — a quiet night to everyone else", () => {
+    let s = gameWith(["werewolf", "cursed", "villager", "villager", "villager", "villager"]);
+    s = reduce(s, { type: "startNight" });
+    s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p1" });
+    s = reduce(s, { type: "endNight" });
+    expect(alive(s, "p1")).toBe(true);
+    expect(s.players[1].roleId).toBe("werewolf");
+    expect(s.announcement!.events).toEqual([{ t: "quiet" }]);
+    expect(projectView(s, "p1").myNotice).toMatchObject({ roleId: "werewolf", infected: true });
+    expect(projectView(s, "p0").myNotice).toMatchObject({ packChanged: true });
+    expect(projectView(s, "p2").myNotice).toBeNull();
+  });
+
+  it("stays on the village's side if the bite is blocked, and dies like anyone to the vote", () => {
+    let s = gameWith(["werewolf", "cursed", "doctor", "villager", "villager", "villager"]);
+    s = reduce(s, { type: "startNight" });
+    s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p1" });
+    s = reduce(s, { type: "nightChoice", actorId: "p2", targetId: "p1" });
+    s = settleNight(s);
+    expect(s.players[1].roleId).toBe("cursed");
+    s = reduce(s, { type: "startVote" });
+    s = reduce(s, { type: "resolveVote" });
+    s = settleVote(castVotes({ ...s, phase: "dayVote" }, { p0: "p1", p2: "p1", p3: "p1", p4: "p1", p5: "p1" }));
+    expect(alive(s, "p1")).toBe(false);
+  });
+});
+
+describe("Poisoner", () => {
+  it("knows the pack, and wins with it", () => {
+    const s = gameWith(["werewolf", "poisoner", "villager", "villager", "villager"]);
+    expect(projectView(s, "p1").packmates).toEqual(["p0"]);
+    expect(getRole("poisoner").team).toBe("werewolf");
+  });
+
+  it("spikes someone tonight; their power fails the NEXT night, and they can't tell", () => {
+    let s = gameWith(["werewolf", "poisoner", "doctor", "villager", "villager", "villager", "villager"]);
+    s = reduce(s, { type: "startNight" });
+    s = reduce(s, { type: "nightChoice", actorId: "p1", targetId: "p2" }); // spike the Doctor
+    s = reduce(s, { type: "nightChoice", actorId: "p2", targetId: "p3" });
+    s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p3" });
+    s = reduce(s, { type: "endNight" });
+    expect(alive(s, "p3")).toBe(true); // tonight the Doctor's shield still works
+    s = toNextNight(s);
+    expect(projectView(s, "p2").nightPrompt).toMatchObject({ kind: "protect" }); // same prompt as ever
+    s = reduce(s, { type: "nightChoice", actorId: "p1", targetId: "p4" }); // can't spike p2 twice running
+    s = reduce(s, { type: "nightChoice", actorId: "p2", targetId: "p5" });
+    s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p5" });
+    s = reduce(s, { type: "endNight" });
+    expect(alive(s, "p5")).toBe(false); // the shield failed
+  });
+
+  it("can't spike the same player two nights running", () => {
+    let s = gameWith(["werewolf", "poisoner", "doctor", "villager", "villager", "villager", "villager"]);
+    s = reduce(s, { type: "startNight" });
+    s = reduce(s, { type: "nightChoice", actorId: "p1", targetId: "p2" });
+    s = toNextNight(s);
+    expect(projectView(s, "p1").nightPrompt!.targetIds).not.toContain("p2");
+  });
+
+  it("feeds a spiked Seer a fake vision", () => {
+    let s = gameWith(["werewolf", "poisoner", "seer", "villager", "villager", "villager", "villager"]);
+    s = reduce(s, { type: "startNight" });
+    s = reduce(s, { type: "nightChoice", actorId: "p1", targetId: "p2" });
+    s = toNextNight(s);
+    s = reduce(s, { type: "nightChoice", actorId: "p2", targetId: "p0" });
+    expect(s.inspects.at(-1)!.reveal).toBe(fabricatedInspect(s.seed, s.round, "p0", "exactRole"));
+  });
+
+  it("a spiked Witch's potion is spent but does nothing", () => {
+    let s = gameWith(["werewolf", "poisoner", "witch", "villager", "villager", "villager", "villager"]);
+    s = reduce(s, { type: "startNight" });
+    s = reduce(s, { type: "nightChoice", actorId: "p1", targetId: "p2" });
+    s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p6" });
+    s = reduce(s, { type: "witchAction", actorId: "p2", heal: false, poisonTargetId: null });
+    s = toNextNight(s);
+    s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p3" });
+    s = reduce(s, { type: "witchAction", actorId: "p2", heal: true, poisonTargetId: null });
+    s = reduce(s, { type: "endNight" });
+    expect(alive(s, "p3")).toBe(false);
+    expect(s.witchPotions["p2"].heal).toBe(false);
+  });
+});
+
 describe("Hunter", () => {
   it("picks a target every night, and is the only one who sees it", () => {
     let s = gameWith(["werewolf", "hunter", "villager", "villager", "villager"]);

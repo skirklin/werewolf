@@ -49,6 +49,7 @@ const NIGHT_VERB: Record<string, string> = {
   silence: "Start a rumor about",
   convert: "Infect",
   mark: "Take",
+  block: "Spike",
 };
 
 const NIGHT_PROMPT: Record<string, string> = {
@@ -58,6 +59,7 @@ const NIGHT_PROMPT: Record<string, string> = {
   silence: "Who gets the cold shoulder tomorrow? Not the same person two nights running",
   convert: "Choose someone to infect",
   mark: "If you die before tomorrow night, who do you take down with you?",
+  block: "Whose supper do you spike? Their power fails tomorrow night. Not the same person two nights running",
 };
 
 /** The acting player's night UI. Assumes view.nightPrompt is present. */

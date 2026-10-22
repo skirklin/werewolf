@@ -134,6 +134,27 @@ export const ROLES: Record<string, RoleDef> = {
     blurb:
       "You've been studying under the Seer. While they live, you're just a villager with good posture. If the Seer is gone, you take up the crystal ball.",
   },
+  cursed: {
+    id: "cursed",
+    weight: -3,
+    name: "Cursed",
+    team: "village",
+    emoji: "😈",
+    turnsWhenBitten: true,
+    blurb:
+      "You're on the village's side — for now. If the wolves ever sink their teeth into you, you won't die: you'll wake up one of them.",
+  },
+  poisoner: {
+    id: "poisoner",
+    weight: -5,
+    name: "Poisoner",
+    team: "werewolf",
+    emoji: "🍄",
+    countsAsWolf: false, // on the pack's side, but no fangs
+    blurb:
+      "You brew for the pack. Each night, spike someone's supper: the following night their power quietly fails, and they never know. Never the same person two nights running.",
+    night: { kind: "block", order: 8, canTargetSelf: false },
+  },
   witch: {
     id: "witch",
     weight: 4,

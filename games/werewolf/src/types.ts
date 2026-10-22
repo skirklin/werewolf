@@ -20,7 +20,8 @@ export type NightActionKind =
   | "detect"
   | "raise"
   | "convert"
-  | "mark"; // the Hunter: who goes down with them if they die before the next night
+  | "mark" // the Hunter: who goes down with them if they die before the next night
+  | "block"; // the Poisoner: whose power fails the following night
 
 /**
  * What a single actor submitted for their night step. Most roles pick one
@@ -69,6 +70,8 @@ export interface RoleDef {
   onDeathShoot?: boolean;
   /** The first time the town votes this player out, they're revealed and spared (Prince). */
   sparedOnFirstVote?: boolean;
+  /** Bitten by the wolves, this player turns into a Werewolf instead of dying (the Cursed). */
+  turnsWhenBitten?: boolean;
   /** Becomes this role once nobody alive holds it (the Apprentice Seer takes over as Seer). */
   succeeds?: string;
   /** A solo role that wins immediately if the town votes to eliminate them (Tanner). */
@@ -302,6 +305,12 @@ export interface GameState {
    * night falls once everyone has.
    */
   ready: PlayerId[];
+  /**
+   * Players whose power fails tonight (picked by the Poisoner last night).
+   * They still act — nothing happens, and info comes back fake — so they
+   * never find out.
+   */
+  drugged: PlayerId[];
   /** Per-Prince: whether their one reprieve from the vote has been spent. */
   princeSpared: Record<PlayerId, boolean>;
   /** Per-Infector: whether their one-time conversion has been spent. */

@@ -339,6 +339,8 @@ export class LlmStrategy implements Strategy {
         return `If you die before tomorrow night, who do you take down with you?${nth}`;
       case "convert":
         return `Which player will you turn into a werewolf?${nth}`;
+      case "block":
+        return `Whose power should fail tomorrow night? (They won't know.)${nth}`;
       case "detect":
         return `Pick a player to compare${nth}.`;
       case "raise":
