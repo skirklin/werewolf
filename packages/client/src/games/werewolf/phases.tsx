@@ -424,7 +424,7 @@ export function AnnouncementScreen({
       case "raised":
         return `👻 ${Name(e.playerId)} ${e.playerId === you ? "are" : "is"} back from the dead!`;
       case "votedOut":
-        return `⚖️ The town voted out ${name(e.playerId)}.${was(e.playerId)}`;
+        return `⚖️ The town voted ${name(e.playerId)} out.${was(e.playerId)}`;
       case "tie":
         return "🤝 A tie — nobody goes. Everyone lives another night.";
       case "noVotes":
@@ -432,7 +432,7 @@ export function AnnouncementScreen({
       case "shot":
         return `🏹 With a last breath, ${name(e.shooterId)} took ${name(e.playerId)} down too.${was(e.playerId)}`;
       case "spared":
-        return `👑 The town voted out ${name(e.playerId)} — but ${e.playerId === you ? "you're" : "they're"} the ${ROLES[e.roleId]?.name ?? "Prince"}! The town thinks better of it. Nobody goes.`;
+        return `👑 The town voted ${name(e.playerId)} out — but ${e.playerId === you ? "you're" : "they're"} the ${ROLES[e.roleId]?.name ?? "Prince"}! The town thinks better of it. Nobody goes.`;
     }
   };
   const next =
