@@ -3,17 +3,19 @@ import {
   createGame,
   reduce,
   projectView,
-  getRole,
   passDeviceTurn,
+  toEngineAction,
   nightAckKey,
   allNightStepsDone,
   allVotesIn,
   living,
+  unackedNightResults,
   type GameState,
   type GameConfig,
   type Player,
   type PlayerView,
   type Turn,
+  type WerewolfAction,
 } from "@party/werewolf";
 import { reportGame } from "./report.js";
 
@@ -24,18 +26,15 @@ function randomSeed(): number {
 export interface LocalGame {
   state: GameState | null;
   turn: Turn;
+  /** The seat holding the device, if anyone's. */
+  seatId: string | null;
   /** Redacted view for the seat currently holding the device (or a public one). */
   view: PlayerView | null;
   start: (names: string[], config: GameConfig) => void;
-  submitNight: (targetId: string) => void;
-  submitWitch: (heal: boolean, poisonTargetId: string | null) => void;
-  /** Hold a one-time power (Troublemaker, Infector) for another night. */
-  submitSkip: () => void;
+  /** The device holder's night move, as the online client would send it. */
+  act: (action: WerewolfAction) => void;
   /** Move on from an announcement (dawn, or a vote's result). */
   proceed: () => void;
-  submitSwap: (aId: string, bId: string) => void;
-  submitDetect: (aId: string, bId: string) => void;
-  submitRaise: (targetId: string | null) => void;
   passNight: () => void;
   callVote: () => void;
   submitVote: (targetId: string | null) => void;
@@ -56,15 +55,13 @@ export function useLocalGame(): LocalGame {
     }
   }, [state]);
 
-  // Role reveal is folded into the first night, so there is no separate reveal
-  // pass — an empty `revealed` set keeps the sequencer in its night branch.
-  const turn = useMemo<Turn>(() => passDeviceTurn(state, new Set(), acks), [state, acks]);
+  const turn = useMemo<Turn>(() => passDeviceTurn(state, acks), [state, acks]);
+  const seatId = "seatId" in turn ? turn.seatId : null;
 
   const view = useMemo<PlayerView | null>(() => {
-    if (!state) return null;
-    const seatId = "seatId" in turn ? turn.seatId : state.players[0]?.id;
-    return seatId ? projectView(state, seatId) : null;
-  }, [state, turn]);
+    const viewer = seatId ?? state?.players[0]?.id;
+    return state && viewer ? projectView(state, viewer) : null;
+  }, [state, seatId]);
 
   const start = (names: string[], config: GameConfig) => {
     const players: Player[] = names.map((name, i) => ({
@@ -83,53 +80,23 @@ export function useLocalGame(): LocalGame {
   };
 
   /** Mark a living player's night turn done; end the night once all have gone. */
-  const advanceNight = (s: GameState, seatId: string): GameState => {
-    const key = nightAckKey(s.round, seatId);
-    const nextAcks = new Set(acks).add(key);
+  const advanceNight = (s: GameState, id: string): GameState => {
+    const nextAcks = new Set(acks).add(nightAckKey(s.round, id));
     setAcks(nextAcks);
     const allDone =
       living(s).every((p) => nextAcks.has(nightAckKey(s.round, p.id))) && allNightStepsDone(s);
     return allDone ? reduce(s, { type: "endNight" }) : s;
   };
 
-  const submitNight = (targetId: string) => {
-    if (!state || turn.kind !== "night") return;
-    const acted = reduce(state, { type: "nightChoice", actorId: turn.seatId, targetId });
-    setState(advanceNight(acted, turn.seatId));
-  };
-
-  const submitWitch = (heal: boolean, poisonTargetId: string | null) => {
-    if (!state || turn.kind !== "night") return;
-    const acted = reduce(state, { type: "witchAction", actorId: turn.seatId, heal, poisonTargetId });
-    setState(advanceNight(acted, turn.seatId));
-  };
-
-  const submitSkip = () => {
-    if (!state || turn.kind !== "night") return;
-    const acted = reduce(state, { type: "nightSkip", actorId: turn.seatId });
-    setState(advanceNight(acted, turn.seatId));
+  const act = (action: WerewolfAction) => {
+    if (!state || state.phase !== "night" || !seatId) return;
+    const next = reduce(state, toEngineAction(seatId, action, false));
+    // A Seer or Detective keeps the device until they've read their result (nightAck).
+    setState(unackedNightResults(next).includes(seatId) ? next : advanceNight(next, seatId));
   };
 
   const proceed = () => {
     if (state?.phase === "announce") setState(reduce(state, { type: "proceed" }));
-  };
-
-  const submitSwap = (aId: string, bId: string) => {
-    if (!state || turn.kind !== "night") return;
-    const acted = reduce(state, { type: "swapAction", actorId: turn.seatId, aId, bId });
-    setState(advanceNight(acted, turn.seatId));
-  };
-
-  const submitDetect = (aId: string, bId: string) => {
-    if (!state || turn.kind !== "night") return;
-    const acted = reduce(state, { type: "detectAction", actorId: turn.seatId, aId, bId });
-    setState(advanceNight(acted, turn.seatId));
-  };
-
-  const submitRaise = (targetId: string | null) => {
-    if (!state || turn.kind !== "night") return;
-    const acted = reduce(state, { type: "raiseAction", actorId: turn.seatId, targetId });
-    setState(advanceNight(acted, turn.seatId));
   };
 
   const passNight = () => {
@@ -158,11 +125,5 @@ export function useLocalGame(): LocalGame {
     setAcks(new Set());
   };
 
-  return {
-    state, turn, view, start,
-    submitNight, submitWitch, submitSkip, submitSwap, submitDetect, submitRaise, proceed,
-    passNight, callVote, submitVote, reset,
-  };
+  return { state, turn, seatId, view, start, act, proceed, passNight, callVote, submitVote, reset };
 }
-
-export { getRole };

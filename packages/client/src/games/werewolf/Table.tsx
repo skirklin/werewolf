@@ -1,9 +1,10 @@
 import type { PlayerView, WerewolfAction } from "@party/werewolf";
 import type { TableProps } from "../../shell/game.js";
-import { RoleCard, InspectHistory, RolesInPlay, TimeBadge, TownNews, useTimeTheme } from "./ui.js";
-import { NightAction, NightResult, IdleNight, AnnouncementScreen, DayBoard, VoteAction, DetectionHistory, GameOver, PlayerList } from "./phases.js";
-
-type Send = (action: WerewolfAction) => void;
+import { RoleCard, RolesInPlay, TimeBadge, TownNews, useTimeTheme, nameOf } from "./ui.js";
+import {
+  NightAction, NightResult, IdleNight, AnnouncementScreen, DayBoard, VoteAction, InspectHistory, DetectionHistory,
+  GameOver, PlayerList, type Send,
+} from "./phases.js";
 
 /** A Werewolf game in progress, on one player's own device. */
 export function WerewolfTable({ view, act, playAgain, onExit }: TableProps<PlayerView, WerewolfAction>) {
@@ -70,7 +71,7 @@ function renderPhase(view: PlayerView, send: Send, playAgain: () => void, onExit
       if (view.silencedIds.includes(view.you.id))
         return (
           <div className="stack">
-            <div className="card tight small">🤫 You&apos;ve been silenced: no vote for you today. Sit tight and look innocent.</div>
+            <div className="card tight small">🤫 You&apos;re getting the cold shoulder today: no vote for you. Sit tight and look innocent.</div>
             <VoteAction view={view} send={send} />
           </div>
         );
@@ -101,15 +102,14 @@ function renderPhase(view: PlayerView, send: Send, playAgain: () => void, onExit
  */
 function HostRecovery({ view, send }: { view: PlayerView; send: Send }) {
   if (!view.you.isHost) return null;
-  const turnName = view.players.find((p) => p.id === view.voteTurn)?.name;
-  const action =
+  const action: { label: string; hint: string; msg: WerewolfAction } | null =
     view.phase === "roleReveal" && view.ready.length > 0
-      ? { label: "Start the night anyway", hint: "if someone's not answering", msg: { type: "startNight" } as WerewolfAction }
+      ? { label: "Start the night anyway", hint: "if someone's not answering", msg: { type: "startNight" } }
       : view.phase === "night"
-      ? { label: "End the night now", hint: "if someone has wandered off", msg: { type: "endNight" } as WerewolfAction }
-      : view.phase === "dayVote" && turnName
-        ? { label: `Skip ${turnName}'s vote`, hint: "counts as an abstain", msg: { type: "skipVoter" } as WerewolfAction }
-        : null;
+        ? { label: "End the night now", hint: "if someone has wandered off", msg: { type: "endNight" } }
+        : view.phase === "dayVote" && view.voteTurn
+          ? { label: `Skip ${nameOf(view.players, view.voteTurn)}'s vote`, hint: "counts as an abstain", msg: { type: "skipVoter" } }
+          : null;
   if (!action) return null;
   return (
     <div className="host-tools">

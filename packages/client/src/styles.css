@@ -63,7 +63,6 @@ h1 { font-size: 2rem; letter-spacing: -0.5px; }
 .stack { display: flex; flex-direction: column; gap: 12px; }
 .stack.loose { gap: 20px; }
 .grow { flex: 1; }
-.pad { padding: 16px; }
 
 /* ---- Cards / panels ---- */
 .card {
@@ -135,23 +134,17 @@ label.field { display: flex; flex-direction: column; gap: 6px; }
 .chip .name { font-weight: 600; }
 .chip.dead { opacity: 0.45; }
 .chip.dead .name { text-decoration: line-through; }
-.chip .tag {
-  margin-left: auto; font-size: 0.72rem; padding: 3px 8px;
-  border-radius: 999px; background: var(--panel-2); color: var(--muted);
-}
 .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
 .dot.on { background: var(--good); }
 
-/* selectable target grid */
+/* Selectable target grid. Name-only buttons, light so a big table fits on one screen. */
 .targets { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
 .target {
-  display: flex; flex-direction: column; align-items: center; gap: 6px;
-  padding: 14px 8px; border-radius: 14px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+  min-height: 52px; padding: 12px 8px; border-radius: 14px; font-weight: 600;
   background: var(--panel); border: 2px solid var(--line);
 }
-.target .avatar { font-size: 2rem; }
 .target.selected { border-color: var(--accent-2); background: var(--panel-2); }
-.target:disabled { opacity: 0.3; }
 
 /* ---- Role card ---- */
 .rolecard {
@@ -234,36 +227,9 @@ label.field { display: flex; flex-direction: column; gap: 6px; }
 .cell.out .name { text-decoration: line-through; }
 .cell.sure { border-color: var(--good); }
 .cell.sure .mark { color: var(--good); font-weight: 700; }
-.why { font-size: 0.85rem; color: var(--muted); padding: 8px 10px; border-left: 2px solid var(--accent); }
-.seats { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; }
-.seat {
-  flex: 0 0 auto; display: flex; align-items: center; gap: 6px;
-  padding: 6px 10px; border-radius: 999px; background: var(--panel); border: 1px solid var(--line); font-size: 0.85rem;
-}
-.seat.active { border-color: var(--accent-2); color: var(--accent-2); font-weight: 700; }
-.seat.out { opacity: 0.5; text-decoration: line-through; }
-.pts { display: inline-block; min-width: 22px; padding: 1px 6px; margin-left: 6px; border-radius: 999px; background: var(--panel-2); color: var(--moon); font-size: 0.75rem; font-weight: 700; text-align: center; vertical-align: middle; }
-.clue .row, .offer-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.clue .row { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
 
 /* ---- Foul Play: cards ---- */
-.pips { display: inline-flex; gap: 3px; flex: 0 0 auto; }
-.pips > span { width: 7px; height: 7px; border-radius: 50%; border: 1px solid var(--moon); opacity: 0.35; }
-.pips > span.on { background: var(--moon); opacity: 1; }
-.fan { display: inline-flex; align-items: center; gap: 10px; }
-.fan .backs { display: inline-flex; padding: 4px 6px 2px; }
-.fan .cardback {
-  width: 24px; height: 34px; margin-left: -12px; border-radius: 4px;
-  border: 1.5px solid var(--accent-2); transform-origin: 50% 100%;
-  background:
-    radial-gradient(circle at 50% 50%, var(--accent-2) 0 3px, transparent 3.5px),
-    repeating-linear-gradient(45deg, var(--panel-2) 0 3px, var(--accent) 3px 4.5px);
-  box-shadow: 0 1px 3px #0008;
-}
-.fan .cardback:first-child { margin-left: 0; }
-.fan .total { font-weight: 800; font-size: 1.2rem; color: var(--moon); font-variant-numeric: tabular-nums; }
-.fan .total small { font-size: 0.7rem; font-weight: 600; margin-left: 2px; color: var(--muted); }
-.offer-list { display: flex; flex-direction: column; gap: 6px; }
-.offer-list .offer-row { padding: 4px 2px; }
 .cell.picked { border-color: var(--accent-2); background: var(--panel-2); box-shadow: inset 0 0 0 1px var(--accent-2); }
 .cell.picked .name { color: var(--accent-2); font-weight: 700; }
 .pick-summary { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
@@ -278,27 +244,9 @@ button.has-beta { position: relative; overflow: hidden; }
 .beta-pill { display: inline-block; background: #f5c84b; color: #2a1f00; font-weight: 800; font-size: 0.7rem; letter-spacing: 0.15em; padding: 2px 8px; border-radius: 999px; vertical-align: middle; }
 
 /* Foul Play */
-.leads { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px; }
-.leads > button { text-align: left; font-size: 0.85rem; padding: 8px 10px; }
-.leads > button.selected { border-color: var(--accent-2); background: var(--panel-2); color: var(--accent-2); font-weight: 700; }
-.leads > button .src { display: block; font-weight: 400; color: var(--muted); font-size: 0.75rem; }
 .role { border: 1px solid var(--panel-2); }
 .role.guilty { border-color: var(--danger); }
-.clue.clash { border-color: var(--danger); }
-.clue.doubted { opacity: 0.55; }
-.clue.doubted > .row > span:first-child { text-decoration: line-through; }
-.clash-box { border: 1px solid var(--danger); border-radius: 12px; padding: 10px 12px; }
 .mini { font-size: 0.75rem; padding: 4px 10px; min-height: 0; width: auto; }
-.house { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px; }
-.place { border: 1px solid var(--line); border-radius: 12px; padding: 6px; display: flex; flex-direction: column; gap: 4px; background: var(--bg-2); }
-.place.mine { border-color: var(--accent-2); }
-.place .place-name { display: flex; justify-content: space-between; align-items: center; min-height: 0; padding: 6px 8px; font-size: 0.9rem; }
-.place .count { font-size: 0.8rem; color: var(--muted); }
-.place .people { display: flex; flex-wrap: wrap; gap: 4px; min-height: 26px; align-items: center; }
-.place .guest { min-height: 0; padding: 3px 8px; font-size: 0.78rem; border-radius: 999px; width: auto; }
-.place .guest.you { border-color: var(--accent-2); color: var(--accent-2); }
-.place .guest.active { font-weight: 700; }
-.verdict-list { display: flex; flex-wrap: wrap; gap: 6px; }
 
 /* Foul Play: the manor floor plan */
 .manor {
@@ -391,8 +339,8 @@ body[data-time="day"] button.primary { color: #2a1700; }
 .time-badge {
   align-self: center;
   display: inline-flex; align-items: center; gap: 8px;
-  padding: 6px 14px; border-radius: 999px;
-  font-size: 0.85rem; font-weight: 700;
+  padding: 7px 16px; border-radius: 999px;
+  font-size: 0.95rem; font-weight: 700;
   border: 1px solid var(--line); background: var(--panel-2);
 }
 
@@ -457,12 +405,6 @@ body[data-time="day"] button.primary { color: #2a1700; }
 .rule-help { padding: 0 0 12px 30px; line-height: 1.45; }
 button.info { min-height: 32px; padding: 0 8px; color: var(--muted); border: none; }
 
-/* Name-only target buttons: lighter, so a big table fits on one screen. */
-.target { padding: 12px 8px; min-height: 52px; justify-content: center; font-weight: 600; }
-
-/* The header line now carries the day/night name, so give it a little weight. */
-.time-badge { font-size: 0.95rem; padding: 7px 16px; }
-
 /* A player chip: name, and an optional second line (revealed role, offline). */
 .chip .who { display: flex; flex-direction: column; min-width: 0; }
 .chip .who .sub { font-size: 0.75rem; line-height: 1.2; }
@@ -470,8 +412,8 @@ button.info { min-height: 32px; padding: 0 8px; color: var(--muted); border: non
 .chip:not(:has(.avatar)) { padding-left: 14px; }
 .host-tools button { white-space: nowrap; flex: none; }
 
-/* ---- Vote result ---- */
-.verdict-next { font-size: 1.05rem; padding: 16px; }
-.verdict-next.over { border-color: var(--accent-2); }
+/* ---- Announcement (dawn or vote result): what happens next ---- */
+.announce-next { font-size: 1.05rem; padding: 16px; }
+.announce-next.over { border-color: var(--accent-2); }
 
 .notice { border-color: var(--accent-2); }

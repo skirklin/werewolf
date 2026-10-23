@@ -231,19 +231,19 @@ function Lobby({
 
       <div className="stack loose">
         <div className="stack" style={{ gap: 8 }}>
-        <div className="section-title">Players · {players}</div>
-        <div className="players">
-          {room.players.map((p) => (
-            <div key={p.id} className="chip">
-              {p.isHost && <span className="avatar" title="Host">👑</span>}
-              <span className="name">{p.name}{p.id === net.playerId ? " (you)" : ""}</span>
-              <span className={`dot ${p.connected ? "on" : ""}`} style={{ marginLeft: "auto" }} />
-              {isHost && p.id !== net.playerId && (
-                <button className="ghost small" aria-label={`Remove ${p.name}`} onClick={() => net.send({ type: "kick", playerId: p.id })}>✕</button>
-              )}
-            </div>
-          ))}
-        </div>
+          <div className="section-title">Players · {players}</div>
+          <div className="players">
+            {room.players.map((p) => (
+              <div key={p.id} className="chip">
+                {p.isHost && <span className="avatar" title="Host">👑</span>}
+                <span className="name">{p.name}{p.id === net.playerId ? " (you)" : ""}</span>
+                <span className={`dot ${p.connected ? "on" : ""}`} style={{ marginLeft: "auto" }} />
+                {isHost && p.id !== net.playerId && (
+                  <button className="ghost small" aria-label={`Remove ${p.name}`} onClick={() => net.send({ type: "kick", playerId: p.id })}>✕</button>
+                )}
+              </div>
+            ))}
+          </div>
         </div>
 
         {isHost ? (

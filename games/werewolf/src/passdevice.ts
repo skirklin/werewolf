@@ -7,8 +7,6 @@ import { currentVoter } from "./engine.js";
  * holds a role. Kept here (not in the React client) so it can be tested.
  */
 export type Turn =
-  | { kind: "reveal"; seatId: string }
-  | { kind: "startNight" }
   | { kind: "night"; seatId: string; roleId: string }
   | { kind: "nightPass"; seatId: string }
   | { kind: "vote"; seatId: string }
@@ -18,20 +16,10 @@ export const nightAckKey = (round: number, id: string) => `${round}:${id}`;
 
 /**
  * Decide whose turn it is to privately hold the device.
- * @param revealed player ids that have already seen their role card
- * @param acks     `${round}:${playerId}` markers for finished night turns
+ * @param acks `${round}:${playerId}` markers for finished night turns
  */
-export function passDeviceTurn(
-  state: GameState | null,
-  revealed: ReadonlySet<string>,
-  acks: ReadonlySet<string>
-): Turn {
+export function passDeviceTurn(state: GameState | null, acks: ReadonlySet<string>): Turn {
   if (!state) return { kind: "public" };
-
-  if (state.phase === "roleReveal") {
-    const next = state.players.find((p) => !revealed.has(p.id));
-    return next ? { kind: "reveal", seatId: next.id } : { kind: "startNight" };
-  }
 
   if (state.phase === "night" && state.night) {
     // Plain seat order: nobody waits on anyone else's choice (the Witch acts
