@@ -30,7 +30,7 @@ export function publicLog(state: GameState): LogEntry[] {
     e.type === "saved" ? { type: "noDeath", round: e.round, cause: "wolves" } : e
   );
 }
-import { getRole } from "./roles.js";
+import { getRole, roleCountsAsWolf } from "./roles.js";
 import { possibleRoles, werewolfRange } from "./setup.js";
 import {
   living,
@@ -159,8 +159,8 @@ export interface PlayerView {
   /** Every role that could be in this game (no counts, no owners). Public. */
   possibleRoles: string[];
   /**
-   * How many werewolves this game could have dealt (public, from the setup):
-   * equal ends for a fixed count, or e.g. 2–3 when the count is kept secret.
+   * How many werewolves were dealt (public): the exact count, or only the
+   * range the dealer could have picked (e.g. 2–3) when it's kept secret.
    */
   wolfCount: { min: number; max: number };
 }
@@ -195,6 +195,15 @@ export function publicAnnouncement(state: GameState): Announcement | null {
   const a = state.announcement;
   if (!a || state.config.nightSummary === "detailed") return a;
   return { ...a, events: a.events.map((e) => (e.t === "saved" ? { t: "quiet" as const } : e)) };
+}
+
+/** The wolf count as the table is told it: exact, unless the setup keeps it secret. */
+function wolfCountShown(state: GameState): { min: number; max: number } {
+  const sel = state.config.selection;
+  if ((sel.mode === "pool" && sel.secretWolfCount) || !state.dealtRoles.length)
+    return werewolfRange(sel, state.players.length);
+  const n = state.dealtRoles.filter((id) => roleCountsAsWolf(getRole(id))).length;
+  return { min: n, max: n };
 }
 
 function roleVisibleTo(state: GameState, targetId: PlayerId, viewerId: PlayerId): boolean {
@@ -337,6 +346,6 @@ export function projectView(state: GameState, viewerId: PlayerId): PlayerView {
     soloWinnerId: state.soloWinnerId,
     config: state.config,
     possibleRoles: possibleRoles(state.config, state.players.length),
-    wolfCount: werewolfRange(state.config.selection, state.players.length),
+    wolfCount: wolfCountShown(state),
   };
 }

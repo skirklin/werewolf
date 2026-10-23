@@ -210,7 +210,7 @@ describe("possible roles", () => {
   });
 
   it("lists the whole pool in pool mode, even roles that may not be dealt", () => {
-    const c = config({ selection: { mode: "pool", pool: ["villager", "seer", "doctor", "tanner"], werewolfRatio: 0.26 } });
+    const c = config({ selection: { mode: "pool", pool: ["villager", "seer", "doctor", "tanner"] } });
     expect(possibleRoles(c, 4)).toEqual(["werewolf", "villager", "seer", "doctor", "tanner"]);
   });
 

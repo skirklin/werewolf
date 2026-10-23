@@ -23,14 +23,9 @@ describe("the table", () => {
     expect(describeTable(config, 7)).toContain("vary game to game");
   });
 
-  it("takes a custom pool and ratio", () => {
-    const config = tableConfig({ roles: "villager, seer, hunter", ratio: "0.34" }, 9);
-    expect(config.selection).toMatchObject({
-      mode: "pool",
-      pool: ["villager", "seer", "hunter"],
-      werewolfRatio: 0.34,
-    });
-    expect(previewComposition(config, 9).werewolves).toBe(3);
+  it("takes a custom pool and balance", () => {
+    const config = tableConfig({ roles: "villager, seer, hunter", balance: "wolves" }, 9);
+    expect(config.selection).toMatchObject({ mode: "pool", pool: ["villager", "seer", "hunter"], balance: "wolves" });
   });
 
   it("carries the first-night rule through", () => {
@@ -40,7 +35,7 @@ describe("the table", () => {
 
   it("refuses a bad table before a run spends anything", () => {
     expect(() => tableConfig({ roles: "villager,wizard" }, 7)).toThrow(/Unknown role/i);
-    expect(() => tableConfig({ roles: "villager", ratio: "0" }, 7)).toThrow(/ratio/i);
+    expect(() => tableConfig({ roles: "villager", balance: "maybe" }, 7)).toThrow(/balance/i);
     // A pool with no village side is unplayable, and validateConfig says so.
     expect(() => tableConfig({ roles: "tanner" }, 7)).toThrow(/Unplayable table/);
   });

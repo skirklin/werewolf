@@ -13,7 +13,7 @@ import {
   MAX_CHAT_MESSAGES,
 } from "./engine.js";
 import { projectView, publicPlayers } from "./views.js";
-import { recommendedConfig, validateConfig, dealRoles, werewolfCountFor, previewComposition, werewolfRange, deckBalance, dealPreview, possibleRoles, BALANCE_TOLERANCE } from "./setup.js";
+import { recommendedConfig, validateConfig, dealRoles, previewComposition, werewolfRange, deckBalance, dealPreview, possibleRoles, BALANCE_TOLERANCE } from "./setup.js";
 import { makeRng } from "./rng.js";
 
 const exact = (roleCounts: Record<string, number>): GameConfig => ({
@@ -55,12 +55,14 @@ function countRoles(players: Player[]): Record<string, number> {
 }
 
 describe("role selection", () => {
-  it("scales werewolves with the table and never leaves 7 players with 1 wolf", () => {
-    const r = recommendedConfig(7);
-    expect(r.selection.mode).toBe("pool");
-    expect(werewolfCountFor(4, 0.26)).toBe(1);
-    expect(werewolfCountFor(7, 0.26)).toBe(2); // the exact complaint, fixed
-    expect(werewolfCountFor(12, 0.26)).toBe(3);
+  it("scales the band of wolf counts with the table, never leaving 7 players with 1 wolf", () => {
+    const sel = recommendedConfig(7).selection;
+    expect(sel.mode).toBe("pool");
+    expect(werewolfRange(sel, 4)).toEqual({ min: 1, max: 1 });
+    expect(werewolfRange(sel, 7)).toEqual({ min: 2, max: 3 }); // the exact complaint, fixed
+    expect(werewolfRange(sel, 8)).toEqual({ min: 2, max: 3 });
+    expect(werewolfRange(sel, 10)).toEqual({ min: 2, max: 4 });
+    expect(werewolfRange(sel, 12)).toEqual({ min: 3, max: 4 });
   });
 
   it("defaults to a peaceful first night", () => {
@@ -69,8 +71,9 @@ describe("role selection", () => {
 
   it("never lets wolves start at or past parity", () => {
     for (let n = 3; n <= 20; n++) {
-      const w = werewolfCountFor(n, 0.5); // even an absurd ratio is clamped
-      expect(w * 2).toBeLessThan(n);
+      const { min, max } = werewolfRange(recommendedConfig(n).selection, n);
+      expect(min).toBeGreaterThanOrEqual(1);
+      expect(max * 2).toBeLessThan(n);
     }
   });
 
@@ -79,17 +82,17 @@ describe("role selection", () => {
       id: `p${i}`, name: `P${i}`, roleId: null, alive: true, connected: true, isHost: false,
     }));
   const pool = (ids: string[], balance?: "wolves" | "even" | "village"): GameConfig => ({
-    selection: { mode: "pool", pool: ids, werewolfRatio: 0.3, balance },
+    selection: { mode: "pool", pool: ids, balance },
     revealRoleOnDeath: false, nightSummary: "discreet", peacefulFirstNight: false,
   });
   const RICH = ["villager", "seer", "auraSeer", "doctor", "hunter", "witch", "detective", "tanner", "henchman"];
 
-  it("pool mode: wolves from the ratio, specials chosen so the deck lands on its balance", () => {
+  it("pool mode: wolves from the band, specials chosen so the deck lands on its balance", () => {
     for (let seed = 1; seed <= 60; seed++) {
       const config = pool(RICH);
       const deck = dealRoles(seats(9), config, makeRng(seed)).map((p) => p.roleId!);
       const counts = countRoles(dealRoles(seats(9), config, makeRng(seed)));
-      expect(counts.werewolf).toBe(3);
+      expect([2, 3]).toContain(counts.werewolf);
       expect(Math.abs(deckBalance(deck, config))).toBeLessThanOrEqual(BALANCE_TOLERANCE);
       for (const [id, n] of Object.entries(counts)) if (id !== "werewolf" && id !== "villager") expect(n).toBe(1);
     }
@@ -100,7 +103,7 @@ describe("role selection", () => {
     const config = { ...pool(["villager", "seer", "doctor", "witch", "medium", "hunter", "drunk"]), peacefulFirstNight: true };
     for (let seed = 1; seed <= 40; seed++) {
       const c = countRoles(dealRoles(seats(7), config, makeRng(seed)));
-      expect(c.villager ?? 0).toBe(0);
+      expect(c.villager ?? 0).toBeLessThanOrEqual(1); // a quarter of the table, at most
     }
   });
 
@@ -115,15 +118,11 @@ describe("role selection", () => {
     expect(avg("even")).toBeLessThan(avg("village"));
   });
 
-  it("a small pool isn't dealt the same way every game any more", () => {
-    const seen = new Set<string>();
-    for (let seed = 1; seed <= 40; seed++) {
-      // The default table: peaceful first night on (worth +2 to the village).
-      const config = { ...pool(["villager", "seer", "doctor"]), peacefulFirstNight: true };
-      const c = countRoles(dealRoles(seats(8), config, makeRng(seed)));
-      seen.add(`${c.seer ?? 0}${c.doctor ?? 0}`);
-    }
-    expect(seen.size).toBeGreaterThan(1);
+  it("a small pool takes another wolf rather than a pile of Villagers", () => {
+    // Villager/Seer/Doctor at 8: 2 wolves would leave 5 Villagers; 3 wolves, Seer and Doctor balance with 3.
+    const config = { ...pool(["villager", "seer", "doctor"]), peacefulFirstNight: true };
+    for (let seed = 1; seed <= 20; seed++)
+      expect(countRoles(dealRoles(seats(8), config, makeRng(seed))).villager ?? 0).toBeLessThanOrEqual(3);
   });
 
   it("never repeats a special: without Villagers ticked, Villagers fill what specials can't", () => {
@@ -148,7 +147,7 @@ describe("role selection", () => {
 
   it("previews what a setup deals as ranges, with its balance", () => {
     const p = dealPreview(pool(RICH), 9);
-    expect(p.werewolves).toEqual({ min: 3, max: 3 });
+    expect(p.werewolves).toEqual({ min: 2, max: 3 });
     expect(p.target).toBe(0);
     expect(p.balance.min).toBeGreaterThanOrEqual(-BALANCE_TOLERANCE);
     expect(p.balance.max).toBeLessThanOrEqual(BALANCE_TOLERANCE);
@@ -175,31 +174,31 @@ describe("role selection", () => {
     });
   });
 
-  it("a secret wolf count deals the ratio's count or one more, at even odds", () => {
-    const base = recommendedConfig(8);
-    const sel = { ...base.selection, wolfCountVaries: true } as const;
-    expect(werewolfRange(sel, 8)).toEqual({ min: 2, max: 3 });
-    expect(werewolfRange(base.selection, 8)).toEqual({ min: 2, max: 2 });
-    expect(werewolfRange(sel, 5)).toEqual({ min: 1, max: 2 });
-    expect(werewolfRange(sel, 4)).toEqual({ min: 1, max: 1 }); // two of four would start at parity
-    const players: Player[] = Array.from({ length: 8 }, (_, i) => ({
-      id: `p${i}`, name: `P${i}`, roleId: null, alive: true, connected: true, isHost: false,
-    }));
-    const seen = new Map<number, number>();
-    for (let seed = 1; seed <= 400; seed++) {
-      const wolves = countRoles(dealRoles(players, { ...base, selection: sel }, makeRng(seed))).werewolf ?? 0;
-      seen.set(wolves, (seen.get(wolves) ?? 0) + 1);
-    }
-    expect([...seen.keys()].sort()).toEqual([2, 3]);
-    expect(seen.get(3)!).toBeGreaterThan(140);
-    expect(seen.get(2)!).toBeGreaterThan(140);
+  it("the dealer picks the wolf count from the band, by points, and it varies", () => {
+    const base = pool(RICH);
+    const seen = new Set<number>();
+    for (let seed = 1; seed <= 60; seed++) seen.add(countRoles(dealRoles(seats(8), base, makeRng(seed))).werewolf ?? 0);
+    expect([...seen].sort()).toEqual([2, 3]);
   });
 
-  it("tells the table how many wolves there could be", () => {
-    let s = gameWith(["werewolf", "villager", "villager", "villager", "villager"], exact({ werewolf: 1 }));
-    expect(projectView(s, "p1").wolfCount).toEqual({ min: 1, max: 1 });
-    s = { ...s, config: { ...recommendedConfig(5), selection: { mode: "pool", pool: ["villager"], werewolfRatio: 0.3, wolfCountVaries: true } } };
-    expect(projectView(s, "p1").wolfCount).toEqual({ min: 1, max: 2 });
+  it("picks among acceptable deals at random, rather than always the same one", () => {
+    const decks = new Set<string>();
+    for (let seed = 1; seed <= 30; seed++)
+      decks.add(dealRoles(seats(8), pool(RICH), makeRng(seed)).map((p) => p.roleId).sort().join(","));
+    expect(decks.size).toBeGreaterThan(5);
+  });
+
+  it("keeps plain Villagers to a quarter of the table when the pool allows", () => {
+    for (let seed = 1; seed <= 40; seed++)
+      expect(countRoles(dealRoles(seats(8), pool(RICH), makeRng(seed))).villager ?? 0).toBeLessThanOrEqual(2);
+  });
+
+  it("tells the table the exact wolf count, or only the range when it's secret", () => {
+    let s = gameWith(["werewolf", "werewolf", "villager", "villager", "villager", "villager", "villager", "villager"]);
+    s = { ...s, dealtRoles: s.players.map((p) => p.roleId!), config: { ...s.config, ...pool(["villager"]) } };
+    expect(projectView(s, "p2").wolfCount).toEqual({ min: 2, max: 2 });
+    s = { ...s, config: { ...s.config, selection: { mode: "pool", pool: ["villager"], secretWolfCount: true } } };
+    expect(projectView(s, "p2").wolfCount).toEqual({ min: 2, max: 3 });
   });
 
   it("never previews negative counts (e.g. before any players are added)", () => {
@@ -219,7 +218,7 @@ describe("role selection", () => {
   it("rejects a pool with no village side (and an empty pool)", () => {
     const pool = (ids: string[]) =>
       validateConfig(
-        { selection: { mode: "pool", pool: ids, werewolfRatio: 0.26 }, revealRoleOnDeath: false, nightSummary: "discreet", peacefulFirstNight: false },
+        { selection: { mode: "pool", pool: ids }, revealRoleOnDeath: false, nightSummary: "discreet", peacefulFirstNight: false },
         6
       );
     expect(pool([]).length).toBeGreaterThan(0); // empty
@@ -733,24 +732,3 @@ describe("the town square", () => {
   });
 });
 
-describe("choosing a wolf count", () => {
-  it("treats wolves/players as a request for exactly that many wolves", () => {
-    // The arena sweep leans on this: it varies the wolf count by setting the
-    // ratio to wolves/players, which must not drift under rounding.
-    for (let players = 3; players <= 20; players++) {
-      const most = Math.floor((players - 1) / 2);
-      for (let wolves = 1; wolves <= most; wolves++) {
-        expect(werewolfCountFor(players, wolves / players)).toBe(wolves);
-      }
-    }
-  });
-
-  it("never lets the wolves start at or past parity, whatever is asked for", () => {
-    for (let players = 3; players <= 20; players++) {
-      for (const ratio of [0.5, 0.9, 1, 5]) {
-        expect(werewolfCountFor(players, ratio) * 2).toBeLessThan(players);
-      }
-      expect(werewolfCountFor(players, 0.001)).toBe(1); // and always at least one
-    }
-  });
-});

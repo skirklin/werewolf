@@ -982,7 +982,7 @@ describe("wolf-team roles in the pool", () => {
   const players = (n: number): Player[] =>
     Array.from({ length: n }, (_, i) => ({ id: `p${i}`, name: `P${i}`, roleId: null, alive: true, connected: true, isHost: false }));
   const poolConfig = (pool: string[]): GameConfig => ({
-    selection: { mode: "pool", pool, werewolfRatio: 0.26 },
+    selection: { mode: "pool", pool },
     revealRoleOnDeath: false,
     nightSummary: "discreet", peacefulFirstNight: false,
   });
@@ -990,9 +990,9 @@ describe("wolf-team roles in the pool", () => {
   it("can draw the Infector into a wolf slot, always keeping a base Werewolf", () => {
     let infected = 0;
     for (let seed = 0; seed < 40; seed++) {
-      const counts = countRoles(dealRoles(players(8), poolConfig(["villager", "infector", "seer", "doctor", "witch"]), makeRng(seed)));
+      const counts = countRoles(dealRoles(players(8), poolConfig(["villager", "infector", "seer", "doctor", "witch", "auraSeer", "hunter"]), makeRng(seed)));
       expect(counts.werewolf).toBeGreaterThanOrEqual(1);
-      expect((counts.werewolf ?? 0) + (counts.infector ?? 0)).toBe(2); // 2 wolf seats at 8 players
+      expect([2, 3]).toContain((counts.werewolf ?? 0) + (counts.infector ?? 0)); // 2-3 wolf seats at 8 players
       infected += counts.infector ?? 0;
     }
     expect(infected).toBeGreaterThan(0);
@@ -1007,11 +1007,11 @@ describe("wolf-team roles in the pool", () => {
     }
   });
 
-  it("deals the Henchman into a non-wolf seat (wolves still come from the ratio)", () => {
+  it("deals the Henchman into a non-wolf seat (wolves still come from the band)", () => {
     let seen = 0;
     for (let seed = 0; seed < 40; seed++) {
       const counts = countRoles(dealRoles(players(8), poolConfig(["villager", "henchman", "seer", "doctor", "witch"]), makeRng(seed)));
-      expect(counts.werewolf).toBe(2);
+      expect([2, 3]).toContain(counts.werewolf);
       seen += counts.henchman ?? 0;
     }
     expect(seen).toBeGreaterThan(0);

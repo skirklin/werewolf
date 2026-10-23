@@ -3,8 +3,7 @@ import { dirname } from "node:path";
 import {
   aggregate,
   recommendedConfig,
-  werewolfCountFor,
-  DEFAULT_WEREWOLF_RATIO,
+  werewolfRange,
   type GameConfig,
   type GameRecord,
 } from "@party/werewolf";
@@ -15,10 +14,9 @@ import { LlmStrategy, totalSpend } from "./strategies/llm.js";
 /**
  * Sweep table size against wolf count and report how the odds move.
  *
- * The ratio in the game config is a means, not the thing itself: it is rounded
- * to a whole number of wolves and clamped so the wolves cannot start at parity,
- * so several ratios collapse to the same game. This sweeps the wolf count
- * directly and reports which ratios would land on it.
+ * Each cell is a fixed deck (exact counts: that many wolves, one of each pool
+ * special, Villagers for the rest), so it measures the wolf count itself
+ * rather than whatever the balanced dealer would pair with it.
  *
  * Read the result with the difference between floor and ceiling in mind. A
  * `random` sweep measures what a table with no information wins, which is the
@@ -125,10 +123,11 @@ function configFor(players: number, wolves: number, args: Args): GameConfig {
     typeof args.roles === "string"
       ? args.roles.split(",").map((r) => r.trim()).filter(Boolean)
       : ["villager", "seer", "doctor"];
-  // A ratio of wolves/players rounds to exactly that many wolves.
+  const roleCounts: Record<string, number> = { werewolf: wolves };
+  for (const id of pool) if (id !== "villager") roleCounts[id] = 1;
   return {
     ...base,
-    selection: { mode: "pool", pool, werewolfRatio: wolves / players },
+    selection: { mode: "exact", roleCounts },
     peacefulFirstNight: !args.lethal,
   };
 }
@@ -148,15 +147,10 @@ function grid(cells: Cell[]): string {
   }
 
   lines.push("");
-  lines.push("Wolf share of the table, and what the shipped default picks");
+  lines.push("Wolf counts the shipped dealer may pick from");
   for (const p of players) {
-    const shipped = werewolfCountFor(p, DEFAULT_WEREWOLF_RATIO);
-    const cell = cells.find((c) => c.players === p && c.wolves === shipped);
-    lines.push(
-      `  ${String(p).padEnd(3)} players → default deals ${shipped} wolves ` +
-        `(${pct(shipped / p)} of the table)` +
-        (cell ? `, village wins ${pct(cell.villageWins / cell.games)}` : "")
-    );
+    const { min, max } = werewolfRange(recommendedConfig(p).selection, p);
+    lines.push(`  ${String(p).padEnd(3)} players → ${min === max ? min : `${min}-${max}`} wolves`);
   }
 
   lines.push("");

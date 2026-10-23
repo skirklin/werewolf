@@ -113,23 +113,22 @@ export interface Player {
  *  - exact: enumerate how many of each special role; villagers fill the rest
  *    so the deck always matches the player count.
  *  - pool: list the roles you're willing to include (the pool may hold more
- *    roles than players). The werewolf count is derived from a team ratio so
- *    it always scales with the table — never "1 wolf for 7 players".
+ *    roles than players). The dealer picks the wolf count (from a band that
+ *    scales with the table) and the specials together, by balance points.
  */
 export type RoleSelection =
   | { mode: "exact"; roleCounts: Record<string, number> }
   | {
       mode: "pool";
       pool: string[];
-      werewolfRatio: number;
       /**
-       * Keep the pack's size a secret: deal the ratio's count or one more, at
-       * even odds (e.g. 2 or 3), so nobody can be sure when the last wolf is gone.
+       * Keep the pack's size a secret: the table is told only the range the
+       * dealer could have picked (e.g. 2–3), not how many wolves it did.
        */
-      wolfCountVaries?: boolean;
+      secretWolfCount?: boolean;
       /**
-       * Which side the deal should favor; the dealer picks specials so the
-       * deck's balance points land near this target. Absent means "even".
+       * Which side the deal should favor; the dealer picks wolves and specials
+       * so the deck's balance points land near this target. Absent means "even".
        */
       balance?: Balance;
     };

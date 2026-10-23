@@ -3,11 +3,10 @@ import { getRole, roleCountsAsWolf, VILLAGER_ROLE_ID } from "./roles.js";
 import { shuffle, makeRng } from "./rng.js";
 
 /**
- * Default target fraction of werewolves in pool mode (~3 per 10 players). Was
- * 0.26; tables kept losing to the village, so the default leans a little
- * further toward the wolves.
+ * The band of wolf counts a pool deal may use, as shares of the table. The
+ * dealer picks the count along with the rest of the deck, by balance points.
  */
-export const DEFAULT_WEREWOLF_RATIO = 0.3;
+export const WOLF_SHARE_BAND = { min: 0.22, max: 0.36 } as const;
 
 /** A conservative, familiar default pool (the rest can be toggled on). */
 const DEFAULT_POOL = ["villager", "seer", "doctor"];
@@ -16,15 +15,9 @@ function clamp(n: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, n));
 }
 
-/** How many wolves for a given player count + ratio, kept in the legal range. */
-export function werewolfCountFor(playerCount: number, ratio: number): number {
-  const max = Math.max(1, Math.floor((playerCount - 1) / 2)); // wolves*2 < players
-  return clamp(Math.round(playerCount * ratio), 1, max);
-}
-
 /**
- * The fewest and most wolves a setup can deal. Equal unless the count varies,
- * in which case it's the ratio's whole count or one more (both kept legal).
+ * The fewest and most wolves a setup can deal: the configured count for exact
+ * counts, else the wolf share band (kept legal: never half the table).
  */
 export function werewolfRange(sel: RoleSelection, playerCount: number): { min: number; max: number } {
   if (sel.mode === "exact") {
@@ -33,13 +26,9 @@ export function werewolfRange(sel: RoleSelection, playerCount: number): { min: n
       if (roleCountsAsWolf(getRole(roleId))) n += Math.max(0, count);
     return { min: n, max: n };
   }
-  if (!sel.wolfCountVaries) {
-    const n = werewolfCountFor(playerCount, sel.werewolfRatio);
-    return { min: n, max: n };
-  }
-  const most = Math.max(1, Math.floor((playerCount - 1) / 2));
-  const min = clamp(Math.floor(playerCount * sel.werewolfRatio), 1, most);
-  return { min, max: Math.min(min + 1, most) };
+  const most = Math.max(1, Math.floor((playerCount - 1) / 2)); // wolves*2 < players
+  const min = clamp(Math.round(playerCount * WOLF_SHARE_BAND.min), 1, most);
+  return { min, max: clamp(Math.round(playerCount * WOLF_SHARE_BAND.max), min, most) };
 }
 
 /**
@@ -52,7 +41,6 @@ export function recommendedConfig(_playerCount: number): GameConfig {
     selection: {
       mode: "pool",
       pool: [...DEFAULT_POOL],
-      werewolfRatio: DEFAULT_WEREWOLF_RATIO,
     },
     revealRoleOnDeath: false,
     nightSummary: "discreet",
@@ -108,7 +96,6 @@ export function validateConfig(config: GameConfig, playerCount: number): ConfigP
     );
     if (sel.pool.length > 0 && !hasVillageSide)
       problems.push({ message: "Add a Villager or a village role so the town has a side." });
-    if (sel.werewolfRatio <= 0) problems.push({ message: "Werewolf ratio must be above zero." });
   }
   return problems;
 }
@@ -158,7 +145,7 @@ export const BALANCE_TARGETS: Record<Balance, number> = { wolves: -4, even: 0, v
 /** How far a deal may land from its target (when the pool can get that close). */
 export const BALANCE_TOLERANCE = 2;
 /** Candidate decks drawn per deal; plenty to find the in-band ones at any table size. */
-const CANDIDATE_DECKS = 400;
+const CANDIDATE_DECKS = 600;
 
 /** What the house rules are worth, in the same points: each one helps the village. */
 export function houseRuleBalance(config: GameConfig): number {
@@ -189,30 +176,33 @@ function splitPool(pool: readonly string[]) {
 }
 
 /**
- * Every candidate deck a pool deal could choose from, given its wolf count:
- * random draws of wolf specials and other specials, Villagers in the seats
- * left over, never a role twice (bar Werewolves and Villagers). Kept: the
- * decks whose balance lands within BALANCE_TOLERANCE of the target, or, if the
- * pool can't get that close, the nearest ones — and of those, only the ones
- * with the fewest Villagers. Villagers fill seats; they're never how a deck
- * gets balanced while the pool's specials can do it (a table of plain
- * Villagers is no fun).
+ * Every candidate deck a pool deal could choose from: random draws of a wolf
+ * count from the wolf share band, wolf specials and other specials, Villagers
+ * in the seats left over, never a role twice (bar Werewolves and Villagers).
+ *
+ * Acceptable: within BALANCE_TOLERANCE of the target (or, if the pool can't
+ * get that close, as near as it gets), with at most a quarter of the table
+ * plain Villagers (or as few as the pool allows) — a table of Villagers is no
+ * fun. The deal picks among these at random, so games vary.
  */
-function balancedDecks(config: GameConfig, playerCount: number, wolfCount: number, rng: () => number): string[][] {
+function balancedDecks(config: GameConfig, playerCount: number, rng: () => number): string[][] {
   const sel = config.selection;
   if (sel.mode !== "pool") return [];
   const { wolfSpecials, restPool } = splitPool(sel.pool);
-  const restSeats = Math.max(0, playerCount - wolfCount);
+  const wolves = werewolfRange(sel, playerCount);
   // Without Villagers in the pool, specials fill every seat they can.
   const villagerAllowed = sel.pool.includes(VILLAGER_ROLE_ID);
-  const most = Math.min(restPool.length, restSeats);
   const target = balanceTarget(sel);
-  const randInt = (n: number) => Math.floor(rng() * (n + 1)); // 0..n
-  const decks: { deck: string[]; off: number }[] = [];
+  const randInt = (lo: number, hi: number) => lo + Math.floor(rng() * (hi - lo + 1));
+  const villagers = (deck: string[]) => deck.filter((id) => id === VILLAGER_ROLE_ID).length;
+  const decks: { deck: string[]; off: number; villagers: number }[] = [];
   for (let i = 0; i < CANDIDATE_DECKS; i++) {
+    const wolfCount = randInt(wolves.min, wolves.max);
+    const restSeats = Math.max(0, playerCount - wolfCount);
+    const most = Math.min(restPool.length, restSeats);
     // Always at least one plain Werewolf, so the pack has a killer.
-    const nWolfSpecials = randInt(Math.min(wolfSpecials.length, Math.max(0, wolfCount - 1)));
-    const k = villagerAllowed ? randInt(most) : most;
+    const nWolfSpecials = randInt(0, Math.min(wolfSpecials.length, Math.max(0, wolfCount - 1)));
+    const k = villagerAllowed ? randInt(0, most) : most;
     const deck = [
       ...shuffle(wolfSpecials, rng).slice(0, nWolfSpecials),
       ...Array<string>(wolfCount - nWolfSpecials).fill("werewolf"),
@@ -221,15 +211,13 @@ function balancedDecks(config: GameConfig, playerCount: number, wolfCount: numbe
     ];
     // A Henchman votes with the pack, so the whole team must start short of half.
     if (deck.filter((id) => getRole(id).team === "werewolf").length * 2 >= playerCount) continue;
-    decks.push({ deck, off: Math.abs(deckBalance(deck, config) - target) });
+    decks.push({ deck, off: Math.abs(deckBalance(deck, config) - target), villagers: villagers(deck) });
   }
   if (!decks.length) return [];
-  const best = Math.min(...decks.map((d) => d.off));
-  const bar = Math.max(best, BALANCE_TOLERANCE);
+  const bar = Math.max(Math.min(...decks.map((d) => d.off)), BALANCE_TOLERANCE);
   const near = decks.filter((d) => d.off <= bar);
-  const villagers = (deck: string[]) => deck.filter((id) => id === VILLAGER_ROLE_ID).length;
-  const fewest = Math.min(...near.map((d) => villagers(d.deck)));
-  return near.filter((d) => villagers(d.deck) === fewest).map((d) => d.deck);
+  const cap = Math.max(Math.floor(playerCount / 4), Math.min(...near.map((d) => d.villagers)));
+  return near.filter((d) => d.villagers <= cap).map((d) => d.deck);
 }
 
 export interface DealPreview {
@@ -254,8 +242,7 @@ export function dealPreview(config: GameConfig, playerCount: number): DealPrevie
     while (deck.length < playerCount) deck.push(VILLAGER_ROLE_ID);
     decks.push(deck);
   } else {
-    const range = werewolfRange(sel, playerCount);
-    for (let w = range.min; w <= range.max; w++) decks.push(...balancedDecks(config, playerCount, w, makeRng(1)));
+    decks.push(...balancedDecks(config, playerCount, makeRng(1)));
   }
   const span = (f: (d: string[]) => number) => {
     const xs = decks.map(f);
@@ -316,12 +303,9 @@ function buildDeck(config: GameConfig, playerCount: number, rng: () => number): 
       for (let i = 0; i < Math.max(0, count); i++) deck.push(roleId);
     }
   } else {
-    const range = werewolfRange(sel, playerCount);
-    // Only draw when it can vary, so a fixed count leaves the shuffle untouched.
-    const wolfCount = range.max > range.min && rng() < 0.5 ? range.max : range.min;
-    const choices = balancedDecks(config, playerCount, wolfCount, rng);
+    const choices = balancedDecks(config, playerCount, rng);
     if (choices.length) deck.push(...choices[Math.floor(rng() * choices.length)]);
-    else deck.push(...Array<string>(wolfCount).fill("werewolf"));
+    else deck.push(...Array<string>(werewolfRange(sel, playerCount).min).fill("werewolf"));
   }
   while (deck.length < playerCount) deck.push(VILLAGER_ROLE_ID);
   return deck.slice(0, playerCount);

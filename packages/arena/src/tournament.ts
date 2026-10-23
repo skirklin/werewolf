@@ -38,7 +38,7 @@ Options
   --discussion N        times round the table before each vote (default 2)
   --lethal              let the wolves kill on night one (default: they do not)
   --roles a,b,c         role pool to draw from (default villager,seer,doctor)
-  --ratio N             share of the table that is werewolf (default 0.26)
+  --balance B             wolves | even | village: which side the deal favors (default even)
   --out FILE            append the anonymous records here as JSONL
   --transcript FILE     append everything said here, tagged with the playbook
 

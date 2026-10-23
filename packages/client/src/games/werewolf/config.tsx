@@ -5,7 +5,6 @@ import {
   recommendedConfig,
   validateConfig,
   dealPreview,
-  DEFAULT_WEREWOLF_RATIO,
   type Balance,
   type GameConfig,
   type RoleSelection,
@@ -156,15 +155,14 @@ function PoolEditor({
     <div className="stack">
       <div>
         <div className="muted small" style={{ marginBottom: 8 }}>
-          Who should the deal favor? Wolves scale with your group; the dealer picks specials to match.
+          Who should the deal favor? The dealer picks how many wolves (about a quarter to a third of your group) and which roles, to match.
         </div>
         <div className="btn-row">
           {BALANCE_PRESETS.map((p) => (
             <button
               key={p.value}
               className={(sel.balance ?? "even") === p.value ? "primary" : ""}
-              // The balance does the tuning now, so the wolf share goes back to standard.
-              onClick={() => onChange({ ...sel, balance: p.value, werewolfRatio: DEFAULT_WEREWOLF_RATIO })}
+              onClick={() => onChange({ ...sel, balance: p.value })}
             >
               {p.label}
               <div className="small" style={{ fontWeight: 400, opacity: 0.8 }}>
@@ -301,11 +299,11 @@ function SharedToggles({
         <Rule
           icon="🎲"
           label="Secret wolf count"
-          help="Deal one extra wolf half the time (say, 2 or 3), so nobody can be sure the last wolf is gone."
-          checked={!!config.selection.wolfCountVaries}
+          help="The table is told only how many wolves there could be (say, 2 or 3), not how many there are — so nobody can be sure the last wolf is gone."
+          checked={!!config.selection.secretWolfCount}
           onChange={(on) =>
             config.selection.mode === "pool" &&
-            onChange({ ...config, selection: { ...config.selection, wolfCountVaries: on } })
+            onChange({ ...config, selection: { ...config.selection, secretWolfCount: on } })
           }
         />
       )}
