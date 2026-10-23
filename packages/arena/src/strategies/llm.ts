@@ -1,7 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import {
   MAX_CHAT_TEXT,
-  previewComposition,
   ROLES,
   type WerewolfAction,
   type PlayerId,
@@ -430,17 +429,9 @@ export class LlmStrategy implements Strategy {
  * doctor. It goes in the system prompt because it never changes during a game.
  */
 function setup(view: PlayerView): string {
-  const total = view.players.length;
-  // Never let a prompt garnish break a turn: if the setup can't be described,
-  // the agent should still get its rules, role and situation.
-  let comp;
-  try {
-    comp = previewComposition(view.config, total);
-  } catch {
-    return "";
-  }
+  const { min, max } = view.wolfCount; // exactly what the table is told
   const parts = [
-    `The game: ${total} players, ${comp.werewolves} of them werewolves.`,
+    `The game: ${view.players.length} players, ${min === max ? min : `${min} or ${max}`} of them werewolves.`,
   ];
 
   const sel = view.config.selection;

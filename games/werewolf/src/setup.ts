@@ -84,42 +84,6 @@ export function validateConfig(config: GameConfig, playerCount: number): ConfigP
   return problems;
 }
 
-/** Human-readable summary of who will be dealt (used by the UI to preview). */
-export function previewComposition(
-  config: GameConfig,
-  playerCount: number,
-  /** Preview with this many wolves (pool mode), e.g. each end of werewolfRange. */
-  wolfCount?: number
-): { werewolves: number; villageSpecials: number; villagers: number } {
-  const sel = config.selection;
-  if (sel.mode === "exact") {
-    let wolves = 0;
-    let specials = 0;
-    for (const [roleId, count] of Object.entries(sel.roleCounts)) {
-      const c = Math.max(0, count);
-      if (onWolfTeam(roleId)) wolves += c;
-      else specials += c;
-    }
-    return {
-      werewolves: wolves,
-      villageSpecials: specials,
-      villagers: Math.max(0, playerCount - wolves - specials),
-    };
-  }
-  const wolves = wolfCount ?? werewolfRange(sel, playerCount).min;
-  const restSlots = Math.max(0, playerCount - wolves);
-  const restPoolLen = sel.pool.filter(
-    (id) => id !== "werewolf" && id !== VILLAGER_ROLE_ID && !isWolf(id)
-  ).length;
-  const villagerAllowed = sel.pool.includes(VILLAGER_ROLE_ID);
-  const distinct = Math.min(restPoolLen, restSlots);
-  return {
-    werewolves: wolves, // wolf-team specials (Infector) fill part of this count
-    villageSpecials: villagerAllowed ? distinct : restSlots,
-    villagers: villagerAllowed ? restSlots - distinct : 0,
-  };
-}
-
 /**
  * Balance targets, in role weight points (see RoleDef.weight). Zero is an even
  * game on the Ultimate Werewolf scale; each side's preset leans four points
@@ -200,7 +164,7 @@ function balancedDecks(config: GameConfig, playerCount: number, rng: () => numbe
   // Every draw put the wolf team at half the table: fall back to plain wolves and Villagers.
   if (!decks.length) {
     const wolves = Array<string>(werewolfRange(sel, playerCount).min).fill("werewolf");
-    return [[...wolves, ...Array<string>(playerCount - wolves.length).fill(VILLAGER_ROLE_ID)]];
+    return [[...wolves, ...Array<string>(Math.max(0, playerCount - wolves.length)).fill(VILLAGER_ROLE_ID)]];
   }
   const bar = Math.max(Math.min(...decks.map((d) => d.off)), BALANCE_TOLERANCE);
   const near = decks.filter((d) => d.off <= bar);

@@ -1,12 +1,12 @@
 import { describe, it, expect } from "vitest";
-import { previewComposition } from "@party/werewolf";
+import { werewolfRange } from "@party/werewolf";
 import { tableConfig, describeTable } from "./table.js";
 
 describe("the table", () => {
   it("defaults to the classic pool", () => {
     const config = tableConfig({ peaceful: true }, 7);
     expect(config.selection).toMatchObject({ mode: "pool", pool: ["villager", "seer", "doctor"] });
-    expect(previewComposition(config, 7).werewolves).toBe(2);
+    expect(werewolfRange(config.selection, 7).min).toBe(2);
   });
 
   it("says so when a table can only deal one deck", () => {

@@ -13,7 +13,7 @@ import {
   MAX_CHAT_MESSAGES,
 } from "./engine.js";
 import { projectView, publicPlayers } from "./views.js";
-import { recommendedConfig, validateConfig, dealRoles, previewComposition, werewolfRange, deckBalance, dealPreview, possibleRoles, BALANCE_TOLERANCE } from "./setup.js";
+import { recommendedConfig, validateConfig, dealRoles, werewolfRange, deckBalance, dealPreview, possibleRoles, BALANCE_TOLERANCE } from "./setup.js";
 import { makeRng } from "@party/core";
 
 const exact = (roleCounts: Record<string, number>): GameConfig => ({
@@ -167,13 +167,6 @@ describe("role selection", () => {
     expect(countRoles(a)).toEqual({ werewolf: 2, seer: 1, villager: 3 });
   });
 
-  it("previews composition for both modes", () => {
-    expect(previewComposition(recommendedConfig(7), 7)).toMatchObject({ werewolves: 2 });
-    expect(previewComposition(exact({ werewolf: 2, seer: 1 }), 6)).toEqual({
-      werewolves: 2, villageSpecials: 1, villagers: 3,
-    });
-  });
-
   it("the dealer picks the wolf count from the band, by points, and it varies", () => {
     const base = pool(RICH);
     const seen = new Set<number>();
@@ -202,9 +195,9 @@ describe("role selection", () => {
   });
 
   it("never previews negative counts (e.g. before any players are added)", () => {
-    const c = previewComposition(recommendedConfig(0), 0);
-    expect(c.villageSpecials).toBeGreaterThanOrEqual(0);
-    expect(c.villagers).toBeGreaterThanOrEqual(0);
+    const c = dealPreview(recommendedConfig(0), 0);
+    expect(c.specials.min).toBeGreaterThanOrEqual(0);
+    expect(c.villagers.min).toBeGreaterThanOrEqual(0);
   });
 
   it("flags impossible configs", () => {

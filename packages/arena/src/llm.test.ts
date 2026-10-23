@@ -70,6 +70,7 @@ const view = {
   winner: null,
   soloWinnerId: null,
   code: "TEST",
+  wolfCount: { min: 1, max: 1 },
   config: {
     selection: { mode: "pool", pool: ["villager", "seer", "doctor"], balance: "even" },
     revealRoleOnDeath: false,
@@ -158,12 +159,6 @@ describe("what every agent is told about the game", () => {
     expect(system).toMatch(/do not kill on the first night/i);
     expect(system).toMatch(/never revealed when a player dies/i);
     expect(system).toMatch(/can hide a rescue/i);
-  });
-
-  it("survives a config it cannot describe rather than losing the turn", async () => {
-    const s = new LlmStrategy({ client: stubClient("Bailey is quiet.") });
-    const broken = { ...view, config: {} } as unknown as PlayerView;
-    expect(await s.speak(broken)).toBe("Bailey is quiet.");
   });
 });
 
