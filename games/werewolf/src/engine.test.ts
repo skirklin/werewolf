@@ -95,6 +95,15 @@ describe("role selection", () => {
     }
   });
 
+  it("balances with specials, not Villagers, when the pool allows", () => {
+    // The table that dealt 2 wolves, a Doctor and 4 Villagers: same pool, same size.
+    const config = { ...pool(["villager", "seer", "doctor", "witch", "medium", "hunter", "drunk"]), peacefulFirstNight: true };
+    for (let seed = 1; seed <= 40; seed++) {
+      const c = countRoles(dealRoles(seats(7), config, makeRng(seed)));
+      expect(c.villager ?? 0).toBe(0);
+    }
+  });
+
   it("the balance setting moves the deal toward that side", () => {
     const avg = (b: "wolves" | "even" | "village") => {
       let sum = 0;

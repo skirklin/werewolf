@@ -193,7 +193,10 @@ function splitPool(pool: readonly string[]) {
  * random draws of wolf specials and other specials, Villagers in the seats
  * left over, never a role twice (bar Werewolves and Villagers). Kept: the
  * decks whose balance lands within BALANCE_TOLERANCE of the target, or, if the
- * pool can't get that close, the nearest ones.
+ * pool can't get that close, the nearest ones — and of those, only the ones
+ * with the fewest Villagers. Villagers fill seats; they're never how a deck
+ * gets balanced while the pool's specials can do it (a table of plain
+ * Villagers is no fun).
  */
 function balancedDecks(config: GameConfig, playerCount: number, wolfCount: number, rng: () => number): string[][] {
   const sel = config.selection;
@@ -223,7 +226,10 @@ function balancedDecks(config: GameConfig, playerCount: number, wolfCount: numbe
   if (!decks.length) return [];
   const best = Math.min(...decks.map((d) => d.off));
   const bar = Math.max(best, BALANCE_TOLERANCE);
-  return decks.filter((d) => d.off <= bar).map((d) => d.deck);
+  const near = decks.filter((d) => d.off <= bar);
+  const villagers = (deck: string[]) => deck.filter((id) => id === VILLAGER_ROLE_ID).length;
+  const fewest = Math.min(...near.map((d) => villagers(d.deck)));
+  return near.filter((d) => villagers(d.deck) === fewest).map((d) => d.deck);
 }
 
 export interface DealPreview {
