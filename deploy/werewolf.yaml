@@ -1,8 +1,9 @@
 # Werewolf Deployment + Service for the homelab k3s cluster (namespace: homelab).
 # Modeled on homelab/infra/k8s/api.yaml (the Node-service template).
 ---
-# Anonymous finished-game records (one JSON line each) live here, so the stats
-# survive redeploys. k3s's default local-path provisioner backs this.
+# Anonymous finished-game records (one JSON line each) and the saved live rooms
+# (rooms.json) live here, so the stats and games in progress survive redeploys.
+# k3s's default local-path provisioner backs this.
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:

@@ -1,6 +1,6 @@
-import { readFile } from "node:fs/promises";
-import { aggregate, parseGameRecord, type GameRecord } from "@party/werewolf";
+import { aggregate, type GameRecord } from "@party/werewolf";
 import { report, confidenceNote } from "./report.js";
+import { readRecords } from "./saved.js";
 
 /**
  * Re-read records saved by an earlier run and print the table again — useful
@@ -21,26 +21,14 @@ async function main() {
   const records: GameRecord[] = [];
   let skipped = 0;
   for (const file of files) {
-    const text = await readFile(file, "utf8");
-    for (const line of text.split("\n")) {
-      if (!line.trim()) continue;
-      const record = safeParse(line);
-      if (record) records.push(record);
-      else skipped++;
-    }
+    const read = await readRecords(file);
+    records.push(...read.records);
+    skipped += read.skipped;
   }
 
   console.log(`${files.join(", ")}\n`);
   console.log(report(records) + confidenceNote(aggregate(records)));
   if (skipped) console.log(`\n${skipped} unreadable line${skipped === 1 ? "" : "s"} skipped.`);
-}
-
-function safeParse(line: string): GameRecord | null {
-  try {
-    return parseGameRecord(JSON.parse(line));
-  } catch {
-    return null;
-  }
 }
 
 main().catch((err) => {

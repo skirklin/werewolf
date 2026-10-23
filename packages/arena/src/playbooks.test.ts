@@ -136,8 +136,8 @@ describe("assigning playbooks by team", () => {
       winner: null,
       soloWinnerId: null,
       code: "T",
-config: {
-        selection: { mode: "pool", pool: ["villager", "seer", "doctor"], werewolfRatio: 0.26 },
+      config: {
+        selection: { mode: "pool", pool: ["villager", "seer", "doctor"], balance: "even" },
         revealRoleOnDeath: false,
         nightSummary: "discreet",
         peacefulFirstNight: true,

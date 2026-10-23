@@ -1,5 +1,5 @@
 import type { WerewolfAction, PlayerId, PlayerView } from "@party/werewolf";
-import { nameOf, nightMessage, otherLiving, picksNeeded, type Strategy } from "../strategy.js";
+import { nightMessage, otherLiving, picksNeeded, type Strategy } from "../strategy.js";
 
 /**
  * The control. Picks uniformly at random from whatever the server says is legal
@@ -45,6 +45,3 @@ export class RandomStrategy implements Strategy {
     return others.length ? this.pick(others) : null;
   }
 }
-
-/** Handy for log lines: who a strategy just picked. */
-export const describe = nameOf;

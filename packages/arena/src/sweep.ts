@@ -1,5 +1,4 @@
-import { appendFile, mkdir } from "node:fs/promises";
-import { dirname } from "node:path";
+import { appendFile } from "node:fs/promises";
 import {
   aggregate,
   recommendedConfig,
@@ -7,9 +6,11 @@ import {
   type GameConfig,
   type GameRecord,
 } from "@party/werewolf";
+import { ensureDir, parseArgs, pct, type Args } from "./args.js";
 import { Arena } from "./match.js";
 import { makeStrategy } from "./lineup.js";
-import { LlmStrategy, totalSpend } from "./strategies/llm.js";
+import { LlmStrategy, spendLine, totalSpend } from "./strategies/llm.js";
+import { parseRoles } from "./table.js";
 
 /**
  * Sweep table size against wolf count and report how the odds move.
@@ -110,19 +111,13 @@ async function main() {
   }
 
   console.log(`\n${grid(cells)}`);
-  if (seats.length) {
-    const spend = totalSpend(seats);
-    console.log(`\nAPI: ${spend.calls} calls · ~$${(spend.dollars ?? 0).toFixed(2)}`);
-  }
+  if (seats.length) console.log(`\n${spendLine(totalSpend(seats))}`);
   if (outFile) console.log(`Records appended to ${outFile}`);
 }
 
 function configFor(players: number, wolves: number, args: Args): GameConfig {
   const base = recommendedConfig(players);
-  const pool =
-    typeof args.roles === "string"
-      ? args.roles.split(",").map((r) => r.trim()).filter(Boolean)
-      : ["villager", "seer", "doctor"];
+  const pool = parseRoles(args) ?? ["villager", "seer", "doctor"];
   const roleCounts: Record<string, number> = { werewolf: wolves };
   for (const id of pool) if (id !== "villager") roleCounts[id] = 1;
   return {
@@ -169,8 +164,6 @@ function grid(cells: Cell[]): string {
   return lines.join("\n");
 }
 
-type Args = Record<string, string | boolean>;
-
 function numbers(value: string | boolean | undefined, fallback: number[]): number[] {
   if (typeof value !== "string") return fallback;
   const out = value
@@ -179,29 +172,6 @@ function numbers(value: string | boolean | undefined, fallback: number[]): numbe
     .filter((n) => Number.isInteger(n) && n > 0);
   return out.length ? out : fallback;
 }
-
-async function ensureDir(file: string) {
-  const dir = dirname(file);
-  if (dir && dir !== ".") await mkdir(dir, { recursive: true });
-}
-
-function parseArgs(argv: string[]): Args {
-  const out: Args = {};
-  for (let i = 0; i < argv.length; i++) {
-    const arg = argv[i];
-    if (!arg.startsWith("--")) continue;
-    const key = arg.slice(2);
-    const next = argv[i + 1];
-    if (next && !next.startsWith("--")) {
-      out[key] = next;
-      i++;
-    } else out[key] = true;
-  }
-  if ("help" in out || "h" in out) out.help = true;
-  return out;
-}
-
-const pct = (n: number) => `${Math.round(n * 100)}%`;
 
 main().catch((err) => {
   console.error(`\n${err instanceof Error ? err.message : String(err)}`);

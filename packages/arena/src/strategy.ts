@@ -59,11 +59,6 @@ export function otherLiving(view: PlayerView): PlayerId[] {
   return view.players.filter((p) => p.alive && p.id !== view.you.id).map((p) => p.id);
 }
 
-/** This seat's fellow wolves, if it has any. */
-export function packmates(view: PlayerView): Set<PlayerId> {
-  return new Set(view.packmates);
-}
-
 export function nameOf(view: PlayerView, id: PlayerId): string {
   return view.players.find((p) => p.id === id)?.name ?? "someone";
 }

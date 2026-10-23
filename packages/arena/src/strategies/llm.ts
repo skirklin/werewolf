@@ -65,10 +65,21 @@ export function totalSpend(strategies: readonly LlmStrategy[]): Spend {
   return spend;
 }
 
+/** The end-of-run API summary, with a per-game cost when `games` is given. */
+export function spendLine(spend: Spend, games = 0): string {
+  const cost = spend.dollars === null ? "unpriced model" : `~$${spend.dollars.toFixed(2)}`;
+  const perGame = spend.dollars !== null && games ? ` · $${(spend.dollars / games).toFixed(3)}/game` : "";
+  return (
+    `API: ${spend.calls} calls · ${kilo(spend.inputTokens)} in / ${kilo(spend.outputTokens)} out · ${cost}${perGame}` +
+    (spend.failures ? `\n${spend.failures} calls fell back to a random move.` : "") +
+    (spend.leaks ? `\n${spend.leaks} replies read as notes; ${spend.silences} of those cost a seat its turn.` : "")
+  );
+}
+
+const kilo = (n: number) => (n >= 1000 ? `${Math.round(n / 1000)}k` : String(n));
+
 export interface LlmOptions {
   model?: string;
-  /** Label used in the results table. Defaults to `llm:<model>`. */
-  name?: string;
   client?: Anthropic;
   /**
    * Which prompt variant this seat plays. Either a fixed playbook, or a choice
@@ -120,9 +131,8 @@ export class LlmStrategy implements Strategy {
   /** The model this seat is running, exposed so a run can price itself. */
   readonly modelId: string;
   private readonly client: Anthropic;
-  private readonly choose_playbook: Playbook | PlaybookChoice;
+  private readonly playbookChoice: Playbook | PlaybookChoice;
   private resolved: Playbook | null = null;
-  private readonly label: string | undefined;
   private readonly pinnedModel: boolean;
   private readonly fallback = new RandomStrategy();
   /** Rough running totals, reported at the end of a run. */
@@ -141,9 +151,8 @@ export class LlmStrategy implements Strategy {
 
   constructor(opts: LlmOptions = {}) {
     this.modelId = opts.model ?? DEFAULT_MODEL;
-    this.choose_playbook = opts.playbook ?? BASELINE;
+    this.playbookChoice = opts.playbook ?? BASELINE;
     this.client = opts.client ?? new Anthropic();
-    this.label = opts.name;
     this.pinnedModel = !!opts.model;
   }
 
@@ -154,7 +163,7 @@ export class LlmStrategy implements Strategy {
    */
   get playbook(): Playbook {
     if (this.resolved) return this.resolved;
-    return typeof this.choose_playbook === "function" ? BASELINE : this.choose_playbook;
+    return typeof this.playbookChoice === "function" ? BASELINE : this.playbookChoice;
   }
 
   /**
@@ -162,7 +171,7 @@ export class LlmStrategy implements Strategy {
    * testing; the model only appears when it was pinned explicitly.
    */
   get name(): string {
-    return this.label ?? `llm:${this.playbook.name}${this.pinnedModel ? `@${this.modelId}` : ""}`;
+    return `llm:${this.playbook.name}${this.pinnedModel ? `@${this.modelId}` : ""}`;
   }
 
   // -- prompt building ------------------------------------------------------
@@ -176,9 +185,9 @@ export class LlmStrategy implements Strategy {
     if (this.resolved) return;
     const team = view.you.roleId ? (ROLES[view.you.roleId]?.team ?? "village") : "village";
     this.resolved =
-      typeof this.choose_playbook === "function"
-        ? this.choose_playbook(team, view.you.roleId)
-        : this.choose_playbook;
+      typeof this.playbookChoice === "function"
+        ? this.playbookChoice(team, view.you.roleId)
+        : this.playbookChoice;
   }
 
   private system(view: PlayerView): string {

@@ -22,17 +22,21 @@ export interface TableArgs {
   peaceful?: string | boolean;
 }
 
+/** The `--roles` list, or null when not given. Throws on an unknown role. */
+export function parseRoles(args: Pick<TableArgs, "roles">): string[] | null {
+  if (typeof args.roles !== "string") return null;
+  const pool = args.roles
+    .split(",")
+    .map((r) => r.trim())
+    .filter(Boolean);
+  for (const id of pool) getRole(id); // fail loudly on a typo, before spending
+  return pool;
+}
+
 /** Build the game config from `--roles` / `--balance` / `--peaceful`. */
 export function tableConfig(args: TableArgs, players: number): GameConfig {
   const base = recommendedConfig(players);
-  const pool =
-    typeof args.roles === "string"
-      ? args.roles
-          .split(",")
-          .map((r) => r.trim())
-          .filter(Boolean)
-      : null;
-  if (pool) for (const id of pool) getRole(id); // fail loudly on a typo, before spending
+  const pool = parseRoles(args);
 
   const balance = typeof args.balance === "string" ? args.balance : "even";
   if (balance !== "wolves" && balance !== "even" && balance !== "village")

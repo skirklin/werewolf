@@ -9,7 +9,7 @@ import {
   type WerewolfAction,
 } from "@party/werewolf";
 import { foulplayModule, botMove, Solver, makeRng, type PlayerView as DropView } from "@party/foulplay";
-import { RoomManager, displayName, type Client, type Room } from "./rooms.js";
+import { RoomManager, displayName, HOST_AWAY_GRACE_MS, type Client, type Room } from "./rooms.js";
 
 /** A fake client that records every message it received. */
 class FakeClient<V = PlayerView> implements Client {
@@ -177,9 +177,9 @@ describe("rooms", () => {
       const { room, clients } = seatPlayers(3, "counter");
       room.handle(clients[0].playerId, { type: "startGame", config: { target: 3 } });
       room.disconnect(clients[0]);
-      vi.advanceTimersByTime(room.hostGraceMs - 1000);
+      vi.advanceTimersByTime(HOST_AWAY_GRACE_MS - 1000);
       expect(room.rejoin(clients[0].playerId, clients[0].token, clients[0])).toBe(true);
-      vi.advanceTimersByTime(room.hostGraceMs * 2);
+      vi.advanceTimersByTime(HOST_AWAY_GRACE_MS * 2);
       expect(clients[1].room!.players.find((p) => p.isHost)!.id).toBe(clients[0].playerId);
     });
 
@@ -187,7 +187,7 @@ describe("rooms", () => {
       const { room, clients } = seatPlayers(3, "counter");
       room.handle(clients[0].playerId, { type: "startGame", config: { target: 3 } });
       room.disconnect(clients[0]);
-      vi.advanceTimersByTime(room.hostGraceMs + 1);
+      vi.advanceTimersByTime(HOST_AWAY_GRACE_MS + 1);
       const host = clients[1].room!.players.find((p) => p.isHost)!;
       expect(host.id).not.toBe(clients[0].playerId);
       expect(host.connected).toBe(true);

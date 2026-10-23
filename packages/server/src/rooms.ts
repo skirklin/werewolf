@@ -94,8 +94,6 @@ export class Room {
   private devices = new Map<string, string>();
   /** When the room last became empty (for sweeping), or null while occupied. */
   emptySince: number | null = null;
-  /** How long the host may be away before the job moves (see HOST_AWAY_GRACE_MS). */
-  hostGraceMs = HOST_AWAY_GRACE_MS;
   /** Pending hand-off while the host is away, or null. */
   private hostTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -189,11 +187,16 @@ export class Room {
   private claim(seat: RosterEntry, client: Client): { playerId: string; token: string } {
     const token = randomUUID();
     this.tokens.set(seat.id, token);
+    this.connect(seat, client);
+    return { playerId: seat.id, token };
+  }
+
+  /** Put a client back in an existing seat. */
+  private connect(seat: RosterEntry, client: Client) {
     seat.connected = true;
     this.clients.set(seat.id, client);
     this.emptySince = null;
     this.rosterChanged();
-    return { playerId: seat.id, token };
   }
 
   /** "Sam", or "Sam 2" if there's already a Sam. */
@@ -210,10 +213,7 @@ export class Room {
     if (!token || this.tokens.get(playerId) !== token) return false;
     const player = this.players.find((p) => p.id === playerId);
     if (!player) return false;
-    player.connected = true;
-    this.clients.set(playerId, client);
-    this.emptySince = null;
-    this.rosterChanged();
+    this.connect(player, client);
     return true;
   }
 
@@ -260,7 +260,6 @@ export class Room {
         if (!this.inLobby) throw new GameError("Can only kick in the lobby.");
         if (msg.playerId === playerId) throw new GameError("You can't kick yourself.");
         this.remove(msg.playerId);
-        this.clients.delete(msg.playerId);
         this.broadcast();
         return;
       }
@@ -337,6 +336,7 @@ export class Room {
     const i = this.players.findIndex((p) => p.id === playerId);
     if (i < 0) return;
     const [gone] = this.players.splice(i, 1);
+    this.clients.delete(playerId);
     this.tokens.delete(playerId);
     this.devices.delete(playerId);
     if (gone.isHost) this.reassignHostFrom(playerId);
@@ -374,7 +374,7 @@ export class Room {
       if (this.clients.has(host.id) || !host.isHost) return;
       this.reassignHostFrom(host.id);
       this.rosterChanged();
-    }, this.hostGraceMs);
+    }, HOST_AWAY_GRACE_MS);
     this.hostTimer.unref?.();
   }
 

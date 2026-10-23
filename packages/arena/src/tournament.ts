@@ -1,8 +1,9 @@
-import { appendFile, mkdir } from "node:fs/promises";
-import { dirname } from "node:path";
+import { appendFile } from "node:fs/promises";
 import { aggregate, type GameRecord } from "@party/werewolf";
+import { ensureDir, parseArgs, pct } from "./args.js";
 import { Arena, type Said } from "./match.js";
-import { LlmStrategy, totalSpend } from "./strategies/llm.js";
+import { transcriptLine } from "./saved.js";
+import { LlmStrategy, spendLine, totalSpend } from "./strategies/llm.js";
 import { getPlaybook, PLAYBOOKS } from "./playbooks.js";
 import { analyzeSpeech } from "./speech.js";
 import { tableConfig, describeTable } from "./table.js";
@@ -38,7 +39,7 @@ Options
   --discussion N        times round the table before each vote (default 2)
   --lethal              let the wolves kill on night one (default: they do not)
   --roles a,b,c         role pool to draw from (default villager,seer,doctor)
-  --balance B             wolves | even | village: which side the deal favors (default even)
+  --balance B           wolves | even | village: which side the deal favors (default even)
   --out FILE            append the anonymous records here as JSONL
   --transcript FILE     append everything said here, tagged with the playbook
 
@@ -124,12 +125,7 @@ async function main() {
         if (transcriptFile && result.transcript.length)
           await appendFile(
             transcriptFile,
-            result.transcript
-              .map(
-                (t) =>
-                  `[game ${done + 1} day ${t.round}] ${t.speaker} (${t.strategy}): ${t.text}`
-              )
-              .join("\n") + "\n"
+            result.transcript.map((said) => transcriptLine(done + 1, said)).join("\n") + "\n"
           );
         done++;
         console.log(
@@ -143,13 +139,7 @@ async function main() {
 
   console.log(`\n${table(played)}`);
 
-  const spend = totalSpend(seats);
-  const cost = spend.dollars === null ? "unpriced model" : `~$${spend.dollars.toFixed(2)}`;
-  console.log(`\nAPI: ${spend.calls} calls · ${cost}`);
-  if (spend.leaks)
-    console.log(
-      `${spend.leaks} replies read as notes; ${spend.silences} of those cost a seat its turn.`
-    );
+  console.log(`\n${spendLine(totalSpend(seats), played.length)}`);
   if (outFile) console.log(`Records appended to ${outFile}`);
   if (transcriptFile) console.log(`Transcript appended to ${transcriptFile}`);
 }
@@ -193,29 +183,6 @@ function table(played: { record: GameRecord; transcript: readonly Said[] }[]): s
   );
   return lines.join("\n");
 }
-
-async function ensureDir(file: string) {
-  const dir = dirname(file);
-  if (dir && dir !== ".") await mkdir(dir, { recursive: true });
-}
-
-function parseArgs(argv: string[]): Record<string, string | boolean> {
-  const out: Record<string, string | boolean> = {};
-  for (let i = 0; i < argv.length; i++) {
-    const arg = argv[i];
-    if (!arg.startsWith("--")) continue;
-    const key = arg.slice(2);
-    const next = argv[i + 1];
-    if (next && !next.startsWith("--")) {
-      out[key] = next;
-      i++;
-    } else out[key] = true;
-  }
-  if ("help" in out || "h" in out) out.help = true;
-  return out;
-}
-
-const pct = (n: number) => `${Math.round(n * 100)}%`;
 
 main().catch((err) => {
   console.error(`\n${err instanceof Error ? err.message : String(err)}`);
