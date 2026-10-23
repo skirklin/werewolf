@@ -1,12 +1,12 @@
 import { describe, it, expect } from "vitest";
 import { castVotes, voteAll, settleVote, settleNight } from "./testutil.js";
 import type { GameState, Player, GameConfig } from "./types.js";
-import { reduce, createGame, checkWinner, living, allVotesIn, validNightTargets, fabricatedReveal, fabricatedInspect, fabricatedSameTeam, DRUNK_MIMIC_KINDS } from "./engine.js";
+import { reduce, createGame, checkWinner, living, allVotesIn, validNightTargets, fabricatedInspect, fabricatedSameTeam, DRUNK_MIMIC_KINDS } from "./engine.js";
 import { getRole } from "./roles.js";
 import { projectView } from "./views.js";
 import { dealRoles, validateConfig } from "./setup.js";
 import { mimicableRoleIds } from "./roles.js";
-import { makeRng } from "./rng.js";
+import { makeRng } from "@party/core";
 
 function countRoles(players: Player[]): Record<string, number> {
   return players.reduce<Record<string, number>>((acc, p) => {
@@ -1022,9 +1022,9 @@ describe("wolf-team roles in the pool", () => {
   });
 });
 
-describe("fabricatedReveal", () => {
+describe("fabricatedInspect", () => {
   it("is deterministic and yields a plausible exact role", () => {
-    expect(fabricatedReveal(5, 2, "abc")).toBe(fabricatedReveal(5, 2, "abc"));
-    expect(["villager", "werewolf", "seer", "doctor"]).toContain(fabricatedReveal(5, 2, "abc"));
+    expect(fabricatedInspect(5, 2, "abc", "exactRole")).toBe(fabricatedInspect(5, 2, "abc", "exactRole"));
+    expect(["villager", "werewolf", "seer", "doctor"]).toContain(fabricatedInspect(5, 2, "abc", "exactRole"));
   });
 });

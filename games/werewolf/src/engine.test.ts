@@ -14,7 +14,7 @@ import {
 } from "./engine.js";
 import { projectView, publicPlayers } from "./views.js";
 import { recommendedConfig, validateConfig, dealRoles, previewComposition, werewolfRange, deckBalance, dealPreview, possibleRoles, BALANCE_TOLERANCE } from "./setup.js";
-import { makeRng } from "./rng.js";
+import { makeRng } from "@party/core";
 
 const exact = (roleCounts: Record<string, number>): GameConfig => ({
   selection: { mode: "exact", roleCounts },

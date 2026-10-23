@@ -1,14 +1,12 @@
 import type { RoleDef } from "./types.js";
 
 /**
- * The role registry. To add a role, add an entry here. If it reuses an
- * existing night `kind` (kill/protect/inspect) no engine changes are needed;
- * a brand-new mechanic is the one place you extend resolveNight in engine.ts.
- */
-/*
- * Weights follow Ultimate Werewolf's published scale as a starting point, then
- * adjusted for how these roles work here (e.g. the Witch's heal is blind, the
- * Infector adds a wolf). They're a prior, meant to be tuned from real games.
+ * The role registry. To add a role, add an entry here: one that reuses a
+ * night `kind`, or a RoleDef flag (sparedOnFirstVote, succeeds, ...), needs no
+ * engine change; a brand-new mechanic is resolved in endNight (engine.ts).
+ *
+ * Weights start from Ultimate Werewolf's published scale, adjusted for how the
+ * roles work here. They're a prior, meant to be tuned from real games.
  */
 export const ROLES: Record<string, RoleDef> = {
   villager: {
@@ -213,7 +211,6 @@ export const ROLES: Record<string, RoleDef> = {
 };
 
 export const VILLAGER_ROLE_ID = "villager";
-export const DRUNK_ROLE_ID = "drunk";
 
 export function getRole(id: string): RoleDef {
   const role = ROLES[id];
@@ -233,14 +230,20 @@ export function assignableSpecialRoles(): RoleDef[] {
   return Object.values(ROLES).filter((r) => r.id !== VILLAGER_ROLE_ID);
 }
 
-/** Whether a role counts as a real werewolf for win math (default: wolf team). */
-export function roleCountsAsWolf(role: RoleDef): boolean {
+/** On the wolves' side: wins with them and knows them (the Henchman and Poisoner included). */
+export function onWolfTeam(roleId: string): boolean {
+  return getRole(roleId).team === "werewolf";
+}
+
+/** A real werewolf, for the win check, the Aura Seer and the wolf count (not the Henchman). */
+export function isWolf(roleId: string): boolean {
+  const role = getRole(roleId);
   return role.countsAsWolf ?? role.team === "werewolf";
 }
 
 /**
  * Roles eligible for a pool: everything except the base Werewolf (whose count
- * comes from the team ratio). Wolf-team specials (Henchman, Infector) ARE
+ * comes from the wolf band). Wolf-team specials (Henchman, Infector) ARE
  * included, as are the Villager and every village/solo role.
  */
 export function poolEligibleRoles(): RoleDef[] {

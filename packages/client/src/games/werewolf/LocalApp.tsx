@@ -5,7 +5,7 @@ import {
   getRole,
   fabricatedInspect,
   fabricatedSameTeam,
-  isWolfForWin,
+  isWolf,
   isPowerless,
   publicPlayers,
   publicLog,
@@ -138,7 +138,7 @@ function LocalPlay({
       ? fabricatedInspect(state.seed, state.round, targetId, format)
       : format === "exactRole"
         ? t.roleId!
-        : isWolfForWin(t.roleId!)
+        : isWolf(t.roleId!)
           ? "werewolf"
           : "not-werewolf";
     if (reveal === "werewolf") return { name: t.name, isWolf: true, label: "is a Werewolf." };

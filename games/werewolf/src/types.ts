@@ -8,7 +8,7 @@ export type Team = "village" | "werewolf" | "solo";
  * The kind of night action a role performs. The engine has explicit
  * resolution logic for each kind, so adding a role that reuses an existing
  * kind is data-only; a genuinely new mechanic is the one place you touch
- * engine code (see resolveNight).
+ * engine code (see endNight).
  */
 export type NightActionKind =
   | "kill"
@@ -28,7 +28,7 @@ export type NightActionKind =
  * target; the Witch, Troublemaker and Detective submit richer shapes.
  */
 export type NightSubmission =
-  | { t: "target"; target: PlayerId } // kill / protect / inspect / silence
+  | { t: "target"; target: PlayerId } // every one-pick kind
   | { t: "witch"; heal: boolean; poison: PlayerId | null }
   | { t: "skip" } // an optional power held back for another night (Troublemaker, Infector)
   | { t: "swap"; a: PlayerId; b: PlayerId }
@@ -154,7 +154,7 @@ export interface GameConfig {
   peacefulFirstNight: boolean;
   /**
    * The in-app town square. Off suits a table playing in person, where people
-   * just talk out loud. Absent means on (configs saved before it existed).
+   * just talk out loud. Absent means on.
    */
   chat?: boolean;
 }
@@ -287,7 +287,7 @@ export interface GameState {
   inspects: InspectResult[];
   /** Every detective reading (each detective sees only their own). */
   detections: DetectionResult[];
-  /** Players who may not vote in the upcoming day (set by the Silencer). */
+  /** Players getting the cold shoulder today: no talking, no vote (set by the Gossip). */
   silenced: PlayerId[];
   /** Per-Medium: whether their one-time raise has been spent. */
   mediumUsed: Record<PlayerId, boolean>;
