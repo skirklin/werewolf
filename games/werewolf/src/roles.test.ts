@@ -27,14 +27,10 @@ function gameWith(roles: string[]): GameState {
   }));
   // Mirror startGame's per-role state init, since this helper bypasses startGame.
   const witchPotions: GameState["witchPotions"] = {};
-  const mediumUsed: GameState["mediumUsed"] = {};
-  const convertUsed: GameState["convertUsed"] = {};
   for (const p of players) {
     if (p.roleId === "witch") witchPotions[p.id] = { heal: true, poison: true };
-    if (p.roleId === "medium") mediumUsed[p.id] = false;
-    if (p.roleId === "infector") convertUsed[p.id] = false;
   }
-  return { ...createGame("TEST", 12345), phase: "roleReveal", players, witchPotions, mediumUsed, convertUsed, config: exact() };
+  return { ...createGame("TEST", 12345), phase: "roleReveal", players, witchPotions, config: exact() };
 }
 
 const alive = (s: GameState, id: string) => living(s).some((p) => p.id === id);
@@ -450,7 +446,7 @@ describe("Village Drunk (mimics any role)", () => {
     s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p3" });
     s = settleNight(s);
     expect(alive(s, "p2")).toBe(false); // stayed dead
-    expect(s.mediumUsed["p1"]).toBe(true); // ...but the fake power is spent
+    expect(s.used["p1"]).toBe(true); // ...but the fake power is spent
   });
 
   it("hides the pack and real roles from the Drunk (no leak)", () => {
@@ -805,7 +801,7 @@ describe("Medium", () => {
     s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p3" });
     s = settleNight(s);
     expect(alive(s, "p2")).toBe(true); // back from the dead
-    expect(s.mediumUsed["p1"]).toBe(true);
+    expect(s.used["p1"]).toBe(true);
     expect(s.log.some((e) => e.type === "raised" && e.playerId === "p2")).toBe(true);
     // Power spent: no raise step on the next night.
     s = reduce(s, { type: "startVote" });
@@ -830,8 +826,8 @@ describe("Medium", () => {
     s = settleNight(s);
     expect(alive(s, "p3")).toBe(true); // raised
     expect(s.players.find((p) => p.id === "p5")!.roleId).toBe("medium"); // role moved
-    expect(s.mediumUsed["p5"]).toBe(true); // ...carrying the SPENT flag
-    expect(s.mediumUsed["p1"]).toBeUndefined();
+    expect(s.used["p5"]).toBe(true); // ...carrying the SPENT flag
+    expect(s.used["p1"]).toBeUndefined();
     // The new Medium (p5) gets no raise step — the power is truly gone.
     s = reduce(s, { type: "startVote" });
     s = voteAll(s, () => null);
@@ -849,7 +845,7 @@ describe("Medium", () => {
     s = settleVote(s); // night 2
     expect(() => reduce(s, { type: "raiseAction", actorId: "p1", targetId: "p3" })).toThrow(); // p3 alive
     s = reduce(s, { type: "raiseAction", actorId: "p1", targetId: null }); // hold
-    expect(s.mediumUsed["p1"]).toBe(false);
+    expect(s.used["p1"]).toBeFalsy();
   });
 });
 
@@ -871,7 +867,7 @@ describe("a tie with the wolves", () => {
     const witch = gameWith(["werewolf", "witch"]);
     expect(checkWinner({ ...witch, witchPotions: { p1: { heal: true, poison: false } } })).toBe("werewolf");
     const medium = gameWith(["werewolf", "medium"]);
-    expect(checkWinner({ ...medium, mediumUsed: { p1: true } })).toBe("werewolf");
+    expect(checkWinner({ ...medium, used: { p1: true } })).toBe("werewolf");
   });
 
   it("ends anyway when the wolves outnumber everyone else", () => {
@@ -980,7 +976,7 @@ describe("Infector", () => {
     s = reduce(s, { type: "nightChoice", actorId: "p1", targetId: "p3" }); // infector converts p3
     s = settleNight(s);
     expect(s.players.find((p) => p.id === "p3")!.roleId).toBe("werewolf");
-    expect(s.convertUsed["p1"]).toBe(true);
+    expect(s.used["p1"]).toBe(true);
     // Power spent — no convert prompt next night.
     s = reduce(s, { type: "startVote" });
     s = voteAll(s, () => null);
@@ -1002,7 +998,7 @@ describe("Infector", () => {
     s = settleNight(s);
     expect(alive(s, "p3")).toBe(false);
     expect(s.players.find((p) => p.id === "p3")!.roleId).toBe("villager"); // not a wolf — stayed dead
-    expect(s.convertUsed["p1"]).toBe(false); // power preserved
+    expect(s.used["p1"]).toBeFalsy(); // power preserved
   });
 
   it("a conversion can complete a werewolf parity win at night's end", () => {

@@ -22,7 +22,6 @@ import {
   effectiveRoleId,
   playerById,
   unackedNightResults,
-  SKIPPABLE_KINDS,
   nightIdlers,
   currentVoter,
   packmatesOf,
@@ -240,14 +239,9 @@ export function projectView(state: GameState, viewerId: PlayerId): PlayerView {
         // myStep.roleId is already the effective (disguised) role, so a Drunk
         // sees itself acting as the role it impersonates.
         roleId: myStep.roleId,
-        targetIds:
-          myStep.kind === "witch" || myStep.kind === "swap" || myStep.kind === "detect"
-            ? living(state).filter((p) => p.id !== viewerId).map((p) => p.id)
-            : myStep.kind === "raise"
-              ? state.players.filter((p) => !p.alive).map((p) => p.id) // dead players to raise
-              : validNightTargets(state, viewerId).map((p) => p.id),
+        targetIds: validNightTargets(state, viewerId).map((p) => p.id),
         canTargetSelf: !!ability.canTargetSelf,
-        canSkip: SKIPPABLE_KINDS.includes(myStep.kind),
+        canSkip: !!ability.optional,
         witch:
           myStep.kind === "witch"
             ? {
