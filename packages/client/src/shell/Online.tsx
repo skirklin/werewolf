@@ -223,6 +223,7 @@ function Lobby({
   const [config, setConfig] = useState(() => game.initialConfig(players, room.config));
   const problems = game.configProblems(config, players);
   const Settings = game.LobbySettings;
+  const Notes = game.LobbyNotes;
 
   return (
     <div className="app">
@@ -245,6 +246,8 @@ function Lobby({
             ))}
           </div>
         </div>
+
+        {Notes && <Notes />}
 
         {isHost ? (
           <>

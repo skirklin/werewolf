@@ -9,6 +9,7 @@ import type { ClientGame } from "../../shell/game.js";
 import { WerewolfHome } from "./Home.js";
 import { WerewolfTable } from "./Table.js";
 import { RoleConfigEditor } from "./config.js";
+import { WhatsNew } from "./WhatsNew.js";
 
 export const werewolf: ClientGame<GameConfig, PlayerView, WerewolfAction> = {
   id: "werewolf",
@@ -35,6 +36,8 @@ export const werewolf: ClientGame<GameConfig, PlayerView, WerewolfAction> = {
   LobbySettings: ({ config, players, onChange }) => (
     <RoleConfigEditor config={config} playerCount={players} onChange={onChange} online />
   ),
+
+  LobbyNotes: WhatsNew,
 
   Table: WerewolfTable,
 };

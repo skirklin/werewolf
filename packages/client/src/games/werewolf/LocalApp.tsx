@@ -9,6 +9,7 @@ import {
 } from "@party/werewolf";
 import { useLocalGame } from "./local.js";
 import { RoleConfigEditor } from "./config.js";
+import { WhatsNew } from "./WhatsNew.js";
 import { RoleCard, LogFeed, RolesInPlay, TownNews, BallotLines, useTimeTheme, timeLabel, nameOf } from "./ui.js";
 import { TargetGrid, NightAction, NightResult, ColdShoulderNote, GameOver, PlayerList, AnnouncementScreen, NoticeCard } from "./phases.js";
 
@@ -68,6 +69,7 @@ function Setup({
         <span className="pill">Pass the device</span>
       </div>
       <div className="phase-banner"><div className="big">🤝</div><h2>Who's playing?</h2></div>
+      <WhatsNew />
 
       <div className="stack">
         {names.map((n, i) => (
