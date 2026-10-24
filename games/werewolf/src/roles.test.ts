@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { castVotes, voteAll, settleVote, settleNight } from "./testutil.js";
 import type { GameState, Player, GameConfig } from "./types.js";
-import { reduce, createGame, checkWinner, living, allVotesIn, validNightTargets, fabricatedInspect, fabricatedSameTeam, DRUNK_MIMIC_KINDS } from "./engine.js";
+import { reduce, createGame, checkWinner, wonGame, living, allVotesIn, validNightTargets, fabricatedInspect, fabricatedSameTeam, DRUNK_MIMIC_KINDS } from "./engine.js";
 import { getRole } from "./roles.js";
 import { projectView } from "./views.js";
 import { dealRoles, validateConfig, onlyRoles } from "./setup.js";
@@ -143,17 +143,21 @@ describe("Cursed", () => {
 });
 
 describe("Poisoner", () => {
-  it("knows the pack, and wins with it", () => {
-    const s = gameWith(["werewolf", "poisoner", "villager", "villager", "villager"]);
-    expect(projectView(s, "p1").packmates).toEqual(["p0"]);
-    expect(projectView(s, "p0").packmates).toEqual(["p1"]);
-    expect(getRole("poisoner").team).toBe("werewolf");
+  it("is on its own: doesn't know the wolves, they don't know it, and it can spike anyone", () => {
+    let s = gameWith(["werewolf", "poisoner", "villager", "villager", "villager"]);
+    expect(projectView(s, "p1").packmates).toEqual([]);
+    expect(projectView(s, "p0").packmates).toEqual([]);
+    s = reduce(s, { type: "startNight" });
+    expect(projectView(s, "p1").nightPrompt!.targetIds).toContain("p0");
   });
 
-  it("can't spike its own pack", () => {
-    let s = gameWith(["werewolf", "poisoner", "villager", "villager", "villager"]);
-    s = reduce(s, { type: "startNight" });
-    expect(projectView(s, "p1").nightPrompt!.targetIds).not.toContain("p0");
+  it("wins alongside whoever wins, if still alive", () => {
+    const s = gameWith(["werewolf", "poisoner", "villager", "villager", "villager"]);
+    const poisoner = s.players[1];
+    expect(wonGame(poisoner, "village", null)).toBe(true);
+    expect(wonGame(poisoner, "werewolf", null)).toBe(true);
+    expect(wonGame({ ...poisoner, alive: false }, "village", null)).toBe(false);
+    expect(wonGame(s.players[0], "village", null)).toBe(false);
   });
 
   it("spikes someone tonight; their power fails the NEXT night, and they can't tell", () => {

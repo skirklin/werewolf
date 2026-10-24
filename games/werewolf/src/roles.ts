@@ -157,14 +157,14 @@ export const ROLES: Record<string, RoleDef> = {
   },
   poisoner: {
     id: "poisoner",
-    weight: -5,
-    autoFrom: 9,
+    weight: -3,
+    autoFrom: 7,
     name: "Poisoner",
-    team: "werewolf",
+    team: "solo",
     emoji: "🍄",
-    countsAsWolf: false, // on the pack's side, but no fangs
+    winsBySurviving: true,
     blurb:
-      "You brew for the pack. Each night, spike someone's supper: the following night their power quietly fails, and they never know. Never the same person two nights running.",
+      "You're on nobody's side but your own. Each night, spike someone's supper: the following night their power quietly fails, and they never know. Never the same person two nights running. Whoever wins, you win too — if you're still alive.",
     night: { kind: "block", order: 8, canTargetSelf: false },
   },
   witch: {

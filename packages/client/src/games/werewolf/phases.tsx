@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ROLES, MAX_CHAT_TEXT, type PlayerView, type WerewolfAction, type PublicPlayer } from "@party/werewolf";
+import { ROLES, MAX_CHAT_TEXT, wonGame, type PlayerView, type WerewolfAction, type PublicPlayer } from "@party/werewolf";
 import { PlayerChip, roleEmoji, RolesInPlay, TownNews, nameOf, hostName, packNames } from "./ui.js";
 
 export type Send = (msg: WerewolfAction) => void;
@@ -709,8 +709,7 @@ export function GameOver({
   const soloRoleId = view.players.find((p) => p.id === view.soloWinnerId)?.roleId;
   const emoji = view.winner === "solo" ? (soloRoleId ? roleEmoji(soloRoleId) : "🃏") : view.winner === "village" ? "🎉" : "🐺";
   // Roles can move mid-game (swaps, infections); a player's final role decides their side.
-  const won = (p: PublicPlayer) =>
-    view.winner === "solo" ? p.id === view.soloWinnerId : !!p.roleId && ROLES[p.roleId]?.team === view.winner;
+  const won = (p: PublicPlayer) => wonGame(p, view.winner, view.soloWinnerId);
   return (
     <div className="stack">
       <div className="phase-banner">

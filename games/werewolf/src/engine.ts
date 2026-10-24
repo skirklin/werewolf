@@ -75,6 +75,21 @@ export function checkWinner(state: GameState): Team | null {
   return null;
 }
 
+/**
+ * Whether a player won: their final role's side won (or they're the solo
+ * winner), or they only needed to survive (the Poisoner) and did.
+ */
+export function wonGame(
+  p: { id: PlayerId; roleId: string | null; alive: boolean },
+  winner: Team | null,
+  soloWinnerId: PlayerId | null
+): boolean {
+  if (!winner || !p.roleId) return false;
+  const role = getRole(p.roleId);
+  if (role.winsBySurviving) return p.alive;
+  return winner === "solo" ? p.id === soloWinnerId : role.team === winner;
+}
+
 /** Whether every actor in every night step has submitted a choice. */
 export function allNightStepsDone(state: GameState): boolean {
   if (!state.night) return false;
@@ -125,13 +140,8 @@ export function validNightTargets(state: GameState, actorId: PlayerId): Player[]
   if (!ability) return [];
   const targets = living(state).filter((t) => {
     if (t.id === actorId && !ability.canTargetSelf) return false;
-    // The wolf team never targets its own: no eating, infecting or spiking the pack.
-    if (
-      (ability.kind === "kill" || ability.kind === "convert" || ability.kind === "block") &&
-      t.roleId &&
-      onWolfTeam(t.roleId)
-    )
-      return false;
+    // The wolf team never targets its own: no eating or infecting the pack.
+    if (onWolfTeam(roleId) && t.roleId && onWolfTeam(t.roleId)) return false;
     return true;
   });
   // No picking the same player two nights running (the Doctor's patient, the

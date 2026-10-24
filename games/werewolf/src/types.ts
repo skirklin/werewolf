@@ -80,6 +80,8 @@ export interface RoleDef {
   turnsWhenBitten?: boolean;
   /** Becomes this role once nobody alive holds it (the Apprentice Seer takes over as Seer). */
   succeeds?: string;
+  /** Wins alongside whoever wins, as long as they're alive at the end (Poisoner). */
+  winsBySurviving?: boolean;
   /** A solo role that wins immediately if the town votes to eliminate them (Tanner). */
   winsIfLynched?: boolean;
   /** This role can be secretly impersonated by the Drunk (its power does nothing). */
