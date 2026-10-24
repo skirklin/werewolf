@@ -88,6 +88,7 @@ export const ROLES: Record<string, RoleDef> = {
   },
   hunter: {
     id: "hunter",
+    canBreakTie: () => true, // a dying shot can take a wolf
     weight: 3,
     autoFrom: 0,
     name: "Hunter",
@@ -169,6 +170,7 @@ export const ROLES: Record<string, RoleDef> = {
   },
   witch: {
     id: "witch",
+    canBreakTie: (state, id) => !!state.witchPotions[id]?.poison, // she can poison a wolf
     weight: 4,
     autoFrom: 7,
     name: "Witch",
@@ -193,6 +195,7 @@ export const ROLES: Record<string, RoleDef> = {
   // Id kept as "silencer" so saved setups and stats still line up.
   silencer: {
     id: "silencer",
+    canBreakTie: () => true, // silencing a wolf un-ties the vote
     weight: 1,
     autoFrom: 8,
     name: "Gossip",
@@ -217,6 +220,7 @@ export const ROLES: Record<string, RoleDef> = {
   },
   medium: {
     id: "medium",
+    canBreakTie: (state, id) => !state.mediumUsed[id], // a raise puts the village ahead
     weight: 2,
     autoFrom: 8,
     name: "Medium",

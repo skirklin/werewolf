@@ -80,6 +80,12 @@ export interface RoleDef {
   turnsWhenBitten?: boolean;
   /** Becomes this role once nobody alive holds it (the Apprentice Seer takes over as Seer). */
   succeeds?: string;
+  /**
+   * At a tie with the wolves, whether this living player could still break it
+   * (the Witch's unused poison, a Gossip's silence...). While anyone can, the
+   * game plays on.
+   */
+  canBreakTie?: (state: GameState, playerId: PlayerId) => boolean;
   /** Wins alongside whoever wins, as long as they're alive at the end (Poisoner). */
   winsBySurviving?: boolean;
   /** A solo role that wins immediately if the town votes to eliminate them (Tanner). */

@@ -856,6 +856,34 @@ describe("Medium", () => {
 // ---------------------------------------------------------------------------
 // Henchman
 // ---------------------------------------------------------------------------
+describe("a tie with the wolves", () => {
+  it("ends the game when nothing can break it", () => {
+    expect(checkWinner(gameWith(["werewolf", "villager"]))).toBe("werewolf");
+    expect(checkWinner(gameWith(["werewolf", "werewolf", "seer", "doctor"]))).toBe("werewolf");
+  });
+
+  it("plays on while the Witch's poison, the Medium's raise, a Hunter or a Gossip could break it", () => {
+    for (const role of ["witch", "medium", "hunter", "silencer"])
+      expect(checkWinner(gameWith(["werewolf", "werewolf", "villager", role])), role).toBeNull();
+  });
+
+  it("ends once those powers are spent", () => {
+    const witch = gameWith(["werewolf", "witch"]);
+    expect(checkWinner({ ...witch, witchPotions: { p1: { heal: true, poison: false } } })).toBe("werewolf");
+    const medium = gameWith(["werewolf", "medium"]);
+    expect(checkWinner({ ...medium, mediumUsed: { p1: true } })).toBe("werewolf");
+  });
+
+  it("ends anyway when the wolves outnumber everyone else", () => {
+    expect(checkWinner(gameWith(["werewolf", "werewolf", "silencer"]))).toBe("werewolf");
+  });
+
+  it("doesn't count a Drunk's imagined power", () => {
+    const s = gameWith(["werewolf", "drunk"]);
+    expect(checkWinner({ ...s, drunkDisguise: { p1: "silencer" } })).toBe("werewolf");
+  });
+});
+
 describe("Henchman", () => {
   it("wins with the wolves but doesn't keep them alive", () => {
     const s = gameWith(["werewolf", "henchman", "villager", "villager"]);
