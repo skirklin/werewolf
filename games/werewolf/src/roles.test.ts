@@ -1010,7 +1010,7 @@ describe("wolf-team roles in the pool", () => {
   it("deals the Henchman into a non-wolf seat (wolves still come from the band)", () => {
     let seen = 0;
     for (let seed = 0; seed < 40; seed++) {
-      const counts = countRoles(dealRoles(players(8), poolConfig(["villager", "henchman", "seer", "doctor", "witch"]), makeRng(seed)));
+      const counts = countRoles(dealRoles(players(10), poolConfig(["villager", "henchman", "seer", "doctor", "witch"]), makeRng(seed)));
       expect([2, 3]).toContain(counts.werewolf);
       seen += counts.henchman ?? 0;
     }

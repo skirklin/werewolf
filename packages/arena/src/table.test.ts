@@ -25,7 +25,7 @@ describe("the table", () => {
 
   it("takes a custom pool and balance", () => {
     const config = tableConfig({ roles: "villager, seer, hunter", balance: "wolves" }, 9);
-    expect(rolePool(config.selection as Extract<typeof config.selection, { mode: "pool" }>, 9)).toEqual(["villager", "seer", "hunter"]);
+    expect(rolePool(config.selection as Extract<typeof config.selection, { mode: "pool" }>, 9)).toEqual(["seer", "hunter"]);
     expect(config.selection).toMatchObject({ balance: "wolves" });
   });
 
@@ -37,7 +37,5 @@ describe("the table", () => {
   it("refuses a bad table before a run spends anything", () => {
     expect(() => tableConfig({ roles: "villager,wizard" }, 7)).toThrow(/Unknown role/i);
     expect(() => tableConfig({ roles: "villager", balance: "maybe" }, 7)).toThrow(/balance/i);
-    // A pool with no village side is unplayable, and validateConfig says so.
-    expect(() => tableConfig({ roles: "tanner" }, 7)).toThrow(/Unplayable table/);
   });
 });

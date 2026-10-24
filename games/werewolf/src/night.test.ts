@@ -212,7 +212,7 @@ describe("possible roles", () => {
 
   it("lists the whole pool in pool mode, even roles that may not be dealt", () => {
     const c = config({ selection: { mode: "pool", overrides: onlyRoles(["villager", "seer", "doctor", "tanner"]) } });
-    expect(possibleRoles(c, 6)).toEqual(["werewolf", "villager", "seer", "doctor", "tanner"]);
+    expect(possibleRoles(c, 6)).toEqual(["werewolf", "seer", "doctor", "villager", "tanner"]);
   });
 
   it("is in every player's view", () => {

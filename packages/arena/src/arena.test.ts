@@ -169,7 +169,8 @@ describe("the referee", () => {
 
     // Every seat learned its role, including whoever was eaten first.
     expect(watchers.every((w) => w.seen !== null)).toBe(true);
-    expect(watchers.map((w) => w.seen).sort()).toEqual(record.seats.map((s) => s.dealt).sort());
+    // A Drunk is shown its disguise, never "drunk".
+    expect(watchers.map((w) => w.seen).sort()).toEqual(record.seats.map((s) => s.disguise ?? s.dealt).sort());
   }, 60_000);
 
   it("rotates who speaks first instead of always opening with seat one", async () => {

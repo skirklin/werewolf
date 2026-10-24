@@ -33,7 +33,7 @@ export const ROLES: Record<string, RoleDef> = {
   henchman: {
     id: "henchman",
     weight: -4,
-    autoFrom: 8,
+    autoFrom: 9,
     name: "Henchman",
     team: "werewolf",
     emoji: "🦹",
@@ -54,7 +54,7 @@ export const ROLES: Record<string, RoleDef> = {
   },
   seer: {
     id: "seer",
-    weight: 7,
+    weight: 6,
     autoFrom: 0,
     name: "Seer",
     team: "village",
@@ -66,7 +66,7 @@ export const ROLES: Record<string, RoleDef> = {
   auraSeer: {
     id: "auraSeer",
     weight: 4,
-    autoFrom: 10,
+    autoFrom: 9,
     name: "Aura Seer",
     team: "village",
     emoji: "👁️",
@@ -89,7 +89,7 @@ export const ROLES: Record<string, RoleDef> = {
   hunter: {
     id: "hunter",
     weight: 3,
-    autoFrom: 6,
+    autoFrom: 0,
     name: "Hunter",
     team: "village",
     emoji: "🏹",
@@ -102,7 +102,7 @@ export const ROLES: Record<string, RoleDef> = {
   drunk: {
     id: "drunk",
     weight: -1,
-    autoFrom: 12,
+    autoFrom: 5,
     name: "Village Drunk",
     team: "village",
     emoji: "🍺",
@@ -115,7 +115,7 @@ export const ROLES: Record<string, RoleDef> = {
   tanner: {
     id: "tanner",
     weight: -2,
-    autoFrom: 8,
+    autoFrom: 5,
     name: "Tanner",
     team: "solo",
     emoji: "🃏",
@@ -125,7 +125,7 @@ export const ROLES: Record<string, RoleDef> = {
   prince: {
     id: "prince",
     weight: 3,
-    autoFrom: 7,
+    autoFrom: 6,
     name: "Prince",
     team: "village",
     emoji: "👑",
@@ -136,7 +136,7 @@ export const ROLES: Record<string, RoleDef> = {
   apprenticeSeer: {
     id: "apprenticeSeer",
     weight: 4,
-    autoFrom: 9,
+    autoFrom: 8,
     name: "Apprentice Seer",
     team: "village",
     emoji: "🔭",
@@ -147,7 +147,7 @@ export const ROLES: Record<string, RoleDef> = {
   cursed: {
     id: "cursed",
     weight: -3,
-    autoFrom: 8,
+    autoFrom: 5,
     name: "Cursed",
     team: "village",
     emoji: "😈",
@@ -181,7 +181,7 @@ export const ROLES: Record<string, RoleDef> = {
   troublemaker: {
     id: "troublemaker",
     weight: -1,
-    autoFrom: 12,
+    autoFrom: 8,
     name: "Troublemaker",
     team: "village",
     emoji: "🎭",
@@ -194,7 +194,7 @@ export const ROLES: Record<string, RoleDef> = {
   silencer: {
     id: "silencer",
     weight: 1,
-    autoFrom: 10,
+    autoFrom: 9,
     name: "Gossip",
     team: "village",
     emoji: "🗣️",
@@ -206,7 +206,7 @@ export const ROLES: Record<string, RoleDef> = {
   detective: {
     id: "detective",
     weight: 4,
-    autoFrom: 9,
+    autoFrom: 8,
     name: "Detective",
     team: "village",
     emoji: "🕵️",
@@ -261,10 +261,9 @@ export function isWolf(roleId: string): boolean {
 }
 
 /**
- * Roles eligible for a pool: everything except the base Werewolf (whose count
- * comes from the wolf band). Wolf-team specials (Henchman, Infector) ARE
- * included, as are the Villager and every village/solo role.
+ * The roles a pool can offer: every special. Werewolves come from the wolf
+ * band, and Villagers only fill seats the specials can't.
  */
 export function poolEligibleRoles(): RoleDef[] {
-  return Object.values(ROLES).filter((r) => r.id !== "werewolf");
+  return Object.values(ROLES).filter((r) => r.id !== "werewolf" && r.id !== VILLAGER_ROLE_ID);
 }

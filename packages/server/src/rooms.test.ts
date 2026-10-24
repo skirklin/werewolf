@@ -393,7 +393,7 @@ describe("werewolf in a room", () => {
   });
 
   it("werewolves see each other but the seer sees only their own visions", () => {
-    const { room, clients } = seatPlayers(6);
+    const { room, clients } = seatPlayers(7);
     room.handle(clients[0].playerId, { type: "startGame", config: exact({ werewolf: 2, seer: 1 }) });
     const wolves = clients.filter((c) => c.view!.you.roleId === "werewolf");
     expect(wolves.length).toBe(2);

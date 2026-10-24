@@ -14,15 +14,25 @@ function clamp(n: number, lo: number, hi: number): number {
 }
 
 /**
+ * The biggest wolf team a table can start with: strictly less than n/2 - 1,
+ * so the wolves are never one death (a night kill, or a single vote) from
+ * winning. The whole team counts — a Henchman votes with the pack. At least
+ * one, so a tiny table still has a wolf.
+ */
+export function maxWolfTeam(playerCount: number): number {
+  return Math.max(1, Math.ceil(playerCount / 2) - 2);
+}
+
+/**
  * The fewest and most wolves a setup can deal: the configured count for exact
- * counts, else the wolf share band (kept legal: never half the table).
+ * counts, else the wolf team's share band (capped by maxWolfTeam).
  */
 export function werewolfRange(sel: RoleSelection, playerCount: number): { min: number; max: number } {
   if (sel.mode === "exact") {
     const n = exactDeck(sel, 0).filter(isWolf).length;
     return { min: n, max: n };
   }
-  const most = Math.max(1, Math.floor((playerCount - 1) / 2)); // wolves*2 < players
+  const most = maxWolfTeam(playerCount);
   const min = clamp(Math.round(playerCount * WOLF_SHARE_BAND.min), 1, most);
   return { min, max: clamp(Math.round(playerCount * WOLF_SHARE_BAND.max), min, most) };
 }
@@ -63,17 +73,14 @@ export function validateConfig(config: GameConfig, playerCount: number): ConfigP
     if (!assigned.some(isWolf)) problems.push({ message: "Need at least 1 werewolf." });
     if (assigned.length > playerCount)
       problems.push({ message: `Assigned roles (${assigned.length}) exceed player count (${playerCount}).` });
-    // The whole wolf team counts toward the wolves' majority (a Henchman votes with them).
-    if (assigned.filter(onWolfTeam).length * 2 >= playerCount)
-      problems.push({ message: "Too many on the wolf team — the wolves would start already winning." });
+    if (assigned.filter(onWolfTeam).length > maxWolfTeam(playerCount))
+      problems.push({ message: "Too many on the wolf team — one death would hand them the game." });
   } else {
     for (const roleId of Object.keys(sel.overrides)) {
       getRole(roleId); // throws on unknown
       if (roleId === "werewolf")
         problems.push({ message: "Werewolves are added automatically — no need to pool them." });
     }
-    if (!rolePool(sel, playerCount).some((id) => getRole(id).team === "village"))
-      problems.push({ message: "Add a Villager or a village role so the town has a side." });
   }
   return problems;
 }
@@ -120,24 +127,21 @@ export function onlyRoles(ids: readonly string[]): Record<string, boolean> {
   return Object.fromEntries(poolEligibleRoles().map((r) => [r.id, ids.includes(r.id)]));
 }
 
-/** Specials that can fill a wolf seat (Infector), and the rest of the pool (village, solo, Henchman). */
+/** The pool's wolf-team specials (they take wolf seats) and the rest (village and solo). */
 function splitPool(pool: readonly string[]) {
-  const wolfSpecials = pool.filter((id) => id !== "werewolf" && isWolf(id));
-  const restPool = pool.filter(
-    (id) => id !== "werewolf" && id !== VILLAGER_ROLE_ID && !isWolf(id)
-  );
-  return { wolfSpecials, restPool };
+  return { wolfSpecials: pool.filter(onWolfTeam), restPool: pool.filter((id) => !onWolfTeam(id)) };
 }
 
 /**
  * Every candidate deck a pool deal could choose from: random draws of a wolf
- * count from the wolf share band, wolf specials and other specials, Villagers
- * in the seats left over, never a role twice (bar Werewolves and Villagers).
+ * team size from the wolf share band — Werewolves, plus any wolf-team
+ * specials (Infector, Henchman, Poisoner) in some of those seats — then
+ * specials in every other seat, never a role twice. Villagers only fill seats
+ * the pool runs out of specials for.
  *
  * Acceptable: within BALANCE_TOLERANCE of the target (or, if the pool can't
- * get that close, as near as it gets), with at most a quarter of the table
- * plain Villagers (or as few as the pool allows) — a table of Villagers is no
- * fun. The deal picks among these at random, so games vary.
+ * get that close, as near as it gets). The deal picks among these at random,
+ * so games vary.
  */
 function balancedDecks(config: GameConfig, playerCount: number, rng: () => number): string[][] {
   const sel = config.selection;
@@ -145,38 +149,25 @@ function balancedDecks(config: GameConfig, playerCount: number, rng: () => numbe
   const pool = rolePool(sel, playerCount);
   const { wolfSpecials, restPool } = splitPool(pool);
   const wolves = werewolfRange(sel, playerCount);
-  // Without Villagers in the pool, specials fill every seat they can.
-  const villagerAllowed = pool.includes(VILLAGER_ROLE_ID);
   const target = balanceTarget(sel);
   const randInt = (lo: number, hi: number) => lo + Math.floor(rng() * (hi - lo + 1));
-  const villagers = (deck: string[]) => deck.filter((id) => id === VILLAGER_ROLE_ID).length;
-  const decks: { deck: string[]; off: number; villagers: number }[] = [];
+  const decks: { deck: string[]; off: number }[] = [];
   for (let i = 0; i < CANDIDATE_DECKS; i++) {
     const wolfCount = randInt(wolves.min, wolves.max);
     const restSeats = Math.max(0, playerCount - wolfCount);
-    const most = Math.min(restPool.length, restSeats);
+    const k = Math.min(restPool.length, restSeats);
     // Always at least one plain Werewolf, so the pack has a killer.
     const nWolfSpecials = randInt(0, Math.min(wolfSpecials.length, Math.max(0, wolfCount - 1)));
-    const k = villagerAllowed ? randInt(0, most) : most;
     const deck = [
       ...shuffle(wolfSpecials, rng).slice(0, nWolfSpecials),
       ...Array<string>(wolfCount - nWolfSpecials).fill("werewolf"),
       ...shuffle(restPool, rng).slice(0, k),
       ...Array<string>(restSeats - k).fill(VILLAGER_ROLE_ID),
     ];
-    // A Henchman votes with the pack, so the whole team must start short of half.
-    if (deck.filter(onWolfTeam).length * 2 >= playerCount) continue;
-    decks.push({ deck, off: Math.abs(deckBalance(deck, config) - target), villagers: villagers(deck) });
-  }
-  // Every draw put the wolf team at half the table: fall back to plain wolves and Villagers.
-  if (!decks.length) {
-    const wolves = Array<string>(werewolfRange(sel, playerCount).min).fill("werewolf");
-    return [[...wolves, ...Array<string>(Math.max(0, playerCount - wolves.length)).fill(VILLAGER_ROLE_ID)]];
+    decks.push({ deck, off: Math.abs(deckBalance(deck, config) - target) });
   }
   const bar = Math.max(Math.min(...decks.map((d) => d.off)), BALANCE_TOLERANCE);
-  const near = decks.filter((d) => d.off <= bar);
-  const cap = Math.max(Math.floor(playerCount / 4), Math.min(...near.map((d) => d.villagers)));
-  return near.filter((d) => d.villagers <= cap).map((d) => d.deck);
+  return decks.filter((d) => d.off <= bar).map((d) => d.deck);
 }
 
 export interface DealPreview {
