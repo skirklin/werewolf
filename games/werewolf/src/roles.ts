@@ -88,6 +88,7 @@ export const ROLES: Record<string, RoleDef> = {
   },
   hunter: {
     id: "hunter",
+    drunkMimicable: true,
     canBreakTie: () => true, // a dying shot can take a wolf
     weight: 3,
     autoFrom: 0,
@@ -125,6 +126,7 @@ export const ROLES: Record<string, RoleDef> = {
   },
   prince: {
     id: "prince",
+    drunkMimicable: true,
     weight: 3,
     autoFrom: 6,
     name: "Prince",
@@ -147,6 +149,7 @@ export const ROLES: Record<string, RoleDef> = {
   },
   cursed: {
     id: "cursed",
+    drunkMimicable: true,
     weight: -3,
     autoFrom: 5,
     name: "Cursed",
@@ -203,7 +206,6 @@ export const ROLES: Record<string, RoleDef> = {
     emoji: "🗣️",
     blurb:
       "Each night, start a juicy rumor about someone. Tomorrow the town gives them the cold shoulder: they can't speak up or vote. Never the same person two nights running.",
-    drunkMimicable: true,
     night: { kind: "silence", order: 35, canTargetSelf: false, noRepeat: true },
   },
   detective: {
@@ -228,7 +230,6 @@ export const ROLES: Record<string, RoleDef> = {
     emoji: "👻",
     blurb:
       "You've got exactly one séance in you. Once per game, on a night you choose, yank a dead player back to the land of the living.",
-    drunkMimicable: true,
     night: { kind: "raise", order: 5, once: true },
   },
 };

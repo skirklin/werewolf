@@ -39,21 +39,17 @@ export function isPowerless(state: GameState, id: PlayerId): boolean {
 }
 
 /**
- * Night-action kinds the Drunk is known to handle safely. Effect kinds are
- * nullified automatically (a Drunk's submissions are stripped in endNight);
- * info kinds are fabricated (see nightChoice / detectAction). A role flagged
- * `drunkMimicable` MUST use a kind in this set (a test enforces it), and its
- * prompt/view must not expose real info. The Witch's potions are a one-time
- * resource a fake couldn't track convincingly, so she is not mimicable.
+ * Night-action kinds the Drunk can fake without being found out while it
+ * still matters. Effect kinds are nullified automatically (a Drunk's
+ * submissions are stripped in endNight) and info kinds are fabricated (see
+ * nightChoice / detectAction); either way the failure must be invisible. A
+ * Gossip's silence or a Medium's raise would visibly not happen at dawn, so
+ * those kinds are out. A `drunkMimicable` role must have no night power or
+ * one of these kinds (a test enforces it); passive powers (the Hunter's shot,
+ * the Prince's reprieve, the Cursed's turn) check the real role, so a Drunk
+ * never triggers them — and is only found out once it's dead.
  */
-export const DRUNK_MIMIC_KINDS: NightActionKind[] = [
-  "inspect",
-  "protect",
-  "silence",
-  "swap",
-  "detect",
-  "raise",
-];
+export const DRUNK_MIMIC_KINDS: NightActionKind[] = ["inspect", "protect", "swap", "detect", "mark"];
 
 /** The role a player ACTS AS: their Drunk disguise if any, else their real role. */
 export function effectiveRoleId(state: GameState, id: PlayerId): string | null {

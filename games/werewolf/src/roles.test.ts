@@ -501,14 +501,35 @@ describe("Village Drunk (mimics any role)", () => {
   });
 
   it("every mimicable role uses a night kind the Drunk safely handles (extension guard)", () => {
-    // Adding a new mimicable role is just a flag — unless it introduces a NEW
-    // night kind, in which case this fails until DRUNK_MIMIC_KINDS + handling
-    // (and a leak check) are added. This is the tripwire that keeps it safe.
+    // Adding a new mimicable role is just a flag — unless it brings a night
+    // kind the Drunk can't fake invisibly, in which case this fails until
+    // DRUNK_MIMIC_KINDS + handling (and a leak check) are added.
     for (const id of mimicableRoleIds()) {
       const kind = getRole(id).night?.kind;
-      expect(kind, `${id} is drunkMimicable but has no night action`).toBeDefined();
-      expect(DRUNK_MIMIC_KINDS, `Drunk can't safely fake '${kind}' (role ${id})`).toContain(kind!);
+      if (kind) expect(DRUNK_MIMIC_KINDS, `Drunk can't safely fake '${kind}' (role ${id})`).toContain(kind);
     }
+  });
+
+  it("a Drunk posing as a passive role never triggers it — and is found out only in death", () => {
+    const drunkAs = (disguise: string, roles: string[]): GameState => ({ ...gameWith(roles), drunkDisguise: { p1: disguise } });
+    // A fake Hunter's mark fires nothing.
+    let s = drunkAs("hunter", ["werewolf", "drunk", "villager", "villager", "villager", "villager"]);
+    s = reduce(s, { type: "startNight" });
+    s = reduce(s, { type: "nightChoice", actorId: "p1", targetId: "p0" });
+    s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p1" });
+    s = reduce(s, { type: "endNight" });
+    expect(alive(s, "p0")).toBe(true);
+    // A fake Cursed dies of the bite.
+    s = drunkAs("cursed", ["werewolf", "drunk", "villager", "villager", "villager", "villager"]);
+    s = reduce(s, { type: "startNight" });
+    s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p1" });
+    s = reduce(s, { type: "endNight" });
+    expect(alive(s, "p1")).toBe(false);
+    // A fake Prince is voted out like anyone else.
+    s = { ...drunkAs("prince", ["werewolf", "drunk", "villager", "villager", "villager"]), phase: "dayDiscussion", round: 1 };
+    s = reduce(s, { type: "startVote" });
+    s = reduce(voteAll(s, (v) => (v === "p1" ? "p0" : "p1")), { type: "resolveVote" });
+    expect(s.announcement!.events).toEqual([{ t: "votedOut", playerId: "p1" }]);
   });
 
   it("startGame secretly assigns each Drunk a random mimicable role", () => {
