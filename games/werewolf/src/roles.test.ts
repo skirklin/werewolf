@@ -561,6 +561,7 @@ describe("Village Drunk (mimics any role)", () => {
     const drunk = s.players.find((p) => p.roleId === "drunk")!;
     // Only a role this game could have: anything else would tell the Drunk what they are.
     expect(["seer", "werewolf"]).toContain(s.drunkDisguise[drunk.id]);
+    expect(s.dealtDisguises).toEqual(s.drunkDisguise); // kept for the record
   });
 
   it("a Drunk Werewolf hunts with a pack it imagines, and the real pack never sees it", () => {

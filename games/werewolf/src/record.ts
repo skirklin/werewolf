@@ -25,7 +25,7 @@ export interface SeatRecord {
   dealt: string;
   /** The role it held at the end — swaps and conversions move roles around. */
   final: string;
-  /** The role a Drunk secretly believed they had, if this seat was the Drunk. */
+  /** The role a Drunk secretly believed they had, if this seat was dealt the Drunk. */
   disguise: string | null;
   survived: boolean;
   won: boolean;
@@ -98,7 +98,7 @@ export function toGameRecord(state: GameState, mode: GameMode): GameRecord | nul
     return {
       dealt: state.dealtRoles[i] ?? final,
       final,
-      disguise: state.drunkDisguise[p.id] ?? null,
+      disguise: state.dealtDisguises[p.id] ?? null,
       survived: p.alive,
       won: wonGame(p, winner, state.soloWinnerId),
       agent: null, // the arena labels its own seats after the fact

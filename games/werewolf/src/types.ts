@@ -352,6 +352,11 @@ export interface GameState {
    * record of the original deal — used for post-game stats.
    */
   dealtRoles: string[];
+  /**
+   * Each Drunk's disguise as dealt. `drunkDisguise` travels with the role on a
+   * swap, so this keeps who was fooled into what — for post-game stats.
+   */
+  dealtDisguises: Record<PlayerId, string>;
   /** Everything said out loud this game, oldest first. */
   chat: ChatMessage[];
   /** voterId -> targetId, or null for an explicit skip. */
