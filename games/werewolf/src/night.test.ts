@@ -349,7 +349,7 @@ describe("one-time powers can wait for the right night", () => {
     expect(s.phase).toBe("announce"); // dawn
     s = dawn(s);
     expect(s.phase).toBe("dayDiscussion");
-    expect(s.swapUsed["p1"]).toBeFalsy();
+    expect(s.used["p1"]).toBeFalsy();
     s = act(s, "p0", { type: "startVote" });
     s = voteInOrder(s, {});
     s = act(s, "p0", { type: "proceed" });
@@ -358,7 +358,7 @@ describe("one-time powers can wait for the right night", () => {
     s = act(s, "p1", { type: "swapAction", aId: "p2", bId: "p3" });
     s = act(s, "p0", { type: "nightChoice", targetId: "p5" });
     s = dawn(idleRest(s));
-    expect(s.swapUsed["p1"]).toBe(true);
+    expect(s.used["p1"]).toBe(true);
     s = act(s, "p0", { type: "startVote" });
     s = voteInOrder(s, {});
     s = act(s, "p0", { type: "proceed" });
@@ -378,7 +378,7 @@ describe("one-time powers can wait for the right night", () => {
     expect(s.phase).toBe("announce"); // dawn
     s = dawn(s);
     expect(s.phase).toBe("dayDiscussion");
-    expect(s.convertUsed["p1"]).toBeFalsy(); // not spent
+    expect(s.used["p1"]).toBeFalsy(); // not spent
     expect(s.players.filter((p) => p.roleId === "werewolf")).toHaveLength(1);
   });
 });

@@ -39,6 +39,12 @@ export interface NightAbility {
   kind: NightActionKind;
   /** Presentation/resolution order. Lower goes first. */
   order: number;
+  /** A one-time power: once spent (GameState.used), the role sleeps through the night. */
+  once?: boolean;
+  /** Can't pick the same player two nights running (the Doctor, the Gossip, the Poisoner). */
+  noRepeat?: boolean;
+  /** May be held for a later night ("Not tonight"). */
+  optional?: boolean;
   /** Members act together and know each other (werewolves). */
   group?: boolean;
   /** May the actor target themselves? */
@@ -302,10 +308,6 @@ export interface GameState {
   detections: DetectionResult[];
   /** Players getting the cold shoulder today: no talking, no vote (set by the Gossip). */
   silenced: PlayerId[];
-  /** Per-Medium: whether their one-time raise has been spent. */
-  mediumUsed: Record<PlayerId, boolean>;
-  /** Per-Troublemaker: whether their one-time swap has been spent. */
-  swapUsed: Record<PlayerId, boolean>;
   /** What's being announced (phase "announce"), else null. */
   announcement: Announcement | null;
   /** Private dawn notices, per player: kept through the day, cleared at nightfall. */
@@ -323,12 +325,20 @@ export interface GameState {
    * never find out.
    */
   drugged: PlayerId[];
-  /** Per-Prince: whether their one reprieve from the vote has been spent. */
-  princeSpared: Record<PlayerId, boolean>;
-  /** Per-Infector: whether their one-time conversion has been spent. */
-  convertUsed: Record<PlayerId, boolean>;
+  /**
+   * Per-player: their one-time power is spent (the Medium's raise, the
+   * Troublemaker's swap, the Infector's bite, the Prince's reprieve). Travels
+   * with the role on a swap.
+   */
+  used: Record<PlayerId, boolean>;
   /** Per-Drunk: the role they've been dealt to secretly impersonate. */
   drunkDisguise: Record<PlayerId, string>;
+  /**
+   * Per-Drunk posing as a Werewolf: the pack they imagine, picked at random
+   * from the table (so it says nothing about the real one, which never sees
+   * them). Travels with the role on a swap.
+   */
+  drunkPack: Record<PlayerId, PlayerId[]>;
   /**
    * Per-actor: who they picked last night, for powers that can't pick the same
    * player two nights running (the Doctor's shield, the Gossip's rumor).

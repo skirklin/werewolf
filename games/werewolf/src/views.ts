@@ -1,5 +1,6 @@
 import type {
   GameState,
+  Player,
   PlayerId,
   Phase,
   Team,
@@ -22,7 +23,6 @@ import {
   effectiveRoleId,
   playerById,
   unackedNightResults,
-  SKIPPABLE_KINDS,
   nightIdlers,
   currentVoter,
   packmatesOf,
@@ -213,13 +213,19 @@ export function projectView(state: GameState, viewerId: PlayerId): PlayerView {
   const displayRoleId =
     state.phase !== "gameOver" ? effectiveRoleId(state, viewerId) : you.roleId;
 
+  // A Drunk Werewolf sees its imagined pack as wolves, until a death reveals one.
+  const imagined = state.phase !== "gameOver" ? (state.drunkPack[viewerId] ?? []) : [];
+  const deathRevealed = (p: Player) => !p.alive && state.config.revealRoleOnDeath;
+
   const players: PublicPlayer[] = publicPlayers(state).map((pub, i) => ({
     ...pub,
     roleId: !roleVisibleTo(state, pub.id, viewerId)
       ? null
       : pub.id === viewerId
         ? displayRoleId // keep the disguise consistent with the role card
-        : state.players[i].roleId,
+        : imagined.includes(pub.id) && !deathRevealed(state.players[i])
+          ? "werewolf"
+          : state.players[i].roleId,
   }));
 
   // Night prompt. Built ONLY from the viewer's own step and public state: no
@@ -240,14 +246,9 @@ export function projectView(state: GameState, viewerId: PlayerId): PlayerView {
         // myStep.roleId is already the effective (disguised) role, so a Drunk
         // sees itself acting as the role it impersonates.
         roleId: myStep.roleId,
-        targetIds:
-          myStep.kind === "witch" || myStep.kind === "swap" || myStep.kind === "detect"
-            ? living(state).filter((p) => p.id !== viewerId).map((p) => p.id)
-            : myStep.kind === "raise"
-              ? state.players.filter((p) => !p.alive).map((p) => p.id) // dead players to raise
-              : validNightTargets(state, viewerId).map((p) => p.id),
+        targetIds: validNightTargets(state, viewerId).map((p) => p.id),
         canTargetSelf: !!ability.canTargetSelf,
-        canSkip: SKIPPABLE_KINDS.includes(myStep.kind),
+        canSkip: !!ability.optional,
         witch:
           myStep.kind === "witch"
             ? {

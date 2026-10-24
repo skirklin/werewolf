@@ -13,7 +13,7 @@ import type {
   Notice,
 } from "./types.js";
 import { getRole, mimicableRoleIds, isWolf, onWolfTeam } from "./roles.js";
-import { dealRoles, possibleRoles } from "./setup.js";
+import { dealRoles, maxWolfTeam, possibleRoles } from "./setup.js";
 import { makeRng, shuffle, pick, nextSeed } from "@party/core";
 import { GameError } from "@party/core";
 
@@ -39,21 +39,21 @@ export function isPowerless(state: GameState, id: PlayerId): boolean {
 }
 
 /**
- * Night-action kinds the Drunk is known to handle safely. Effect kinds are
- * nullified automatically (a Drunk's submissions are stripped in endNight);
- * info kinds are fabricated (see nightChoice / detectAction). A role flagged
- * `drunkMimicable` MUST use a kind in this set (a test enforces it), and its
- * prompt/view must not expose real info. The Witch's potions are a one-time
- * resource a fake couldn't track convincingly, so she is not mimicable.
+ * Night-action kinds the Drunk can fake without being found out while it
+ * still matters. Effect kinds are nullified automatically (a Drunk's
+ * submissions are stripped in endNight) and info kinds are fabricated (see
+ * nightChoice / detectAction); either way the failure should be invisible.
+ * A Gossip's silence would visibly not happen, so it's out. The Medium is
+ * the one exception, kept on purpose: a séance that fails at dawn is a good
+ * reveal, and the table can't tell who held it. A `drunkMimicable` role must
+ * have no night power or one of these kinds (a test enforces it); passive
+ * powers (the Hunter's shot, the Prince's reprieve, the Cursed's turn) and
+ * solo wins (the Tanner's, the Poisoner's) check the real role, so a Drunk
+ * never triggers them — and is only found out once it's dead. A Drunk
+ * Werewolf hunts alone with a pack it imagines (see drunkPack), which takes
+ * the blame for every kill it didn't pick, so it can go all game.
  */
-export const DRUNK_MIMIC_KINDS: NightActionKind[] = [
-  "inspect",
-  "protect",
-  "silence",
-  "swap",
-  "detect",
-  "raise",
-];
+export const DRUNK_MIMIC_KINDS: NightActionKind[] = ["inspect", "protect", "swap", "detect", "mark", "raise", "block", "kill"];
 
 /** The role a player ACTS AS: their Drunk disguise if any, else their real role. */
 export function effectiveRoleId(state: GameState, id: PlayerId): string | null {
@@ -140,25 +140,27 @@ export function nightReadyToEnd(state: GameState): boolean {
   );
 }
 
-/** Powers that can't pick the same player two nights in a row. */
-const NO_REPEAT_KINDS: NightActionKind[] = ["protect", "silence", "block"];
-
-/** Valid targets for a given actor's (effective, possibly disguised) night ability. */
+/**
+ * Who an actor's night power can pick — the one place that decides it, for
+ * every kind. Uses the effective (possibly disguised) role.
+ */
 export function validNightTargets(state: GameState, actorId: PlayerId): Player[] {
   const roleId = effectiveRoleId(state, actorId);
   if (!playerById(state, actorId)?.alive || !roleId) return [];
   const ability = getRole(roleId).night;
   if (!ability) return [];
-  const targets = living(state).filter((t) => {
+  // The Medium calls on the dead; every other power picks among the living.
+  const candidates = ability.kind === "raise" ? state.players.filter((p) => !p.alive) : living(state);
+  const targets = candidates.filter((t) => {
     if (t.id === actorId && !ability.canTargetSelf) return false;
     // The wolf team never targets its own: no eating or infecting the pack.
-    if (onWolfTeam(roleId) && t.roleId && onWolfTeam(t.roleId)) return false;
+    if (onWolfTeam(roleId) && packmatesOf(state, actorId).includes(t.id)) return false;
     return true;
   });
   // No picking the same player two nights running (the Doctor's patient, the
   // Gossip's mark) — unless that would leave nobody at all, which would wedge
   // the night.
-  if (NO_REPEAT_KINDS.includes(ability.kind)) {
+  if (ability.noRepeat) {
     const fresh = targets.filter((t) => t.id !== state.lastTarget[actorId]);
     if (fresh.length) return fresh;
   }
@@ -306,38 +308,36 @@ function startGame(state: GameState, config: GameConfig): GameState {
   const rng = makeRng(state.seed);
   const players = dealRoles(state.players, config, rng);
   const witchPotions: GameState["witchPotions"] = {};
-  const mediumUsed: GameState["mediumUsed"] = {};
-  const convertUsed: GameState["convertUsed"] = {};
   const drunkDisguise: GameState["drunkDisguise"] = {};
+  const drunkPack: GameState["drunkPack"] = {};
   // The Drunk's disguise comes only from roles this game could have: a role the
   // whole table can see isn't in play would tell the Drunk what they are.
   const inPlay = new Set(possibleRoles(config, players.length));
-  const mimicable = mimicableRoleIds().filter((id) => inPlay.has(id));
-  for (const [i, p] of players.entries()) {
-    // No believable disguise to hand out: deal a plain Villager instead.
-    if (p.roleId === "drunk" && !mimicable.length) players[i] = { ...p, roleId: "villager" };
-  }
+  const mimicable = mimicableRoleIds().filter((id) => inPlay.has(id)); // never empty: there's always a Werewolf
   const dealtRoles = players.map((p) => p.roleId!);
   // Dealt an apprentice to a role nobody holds? They start out holding it.
   const startingPlayers = promoteSuccessors(players).players;
   for (const p of players) {
     if (p.roleId === "witch") witchPotions[p.id] = { heal: true, poison: true };
-    if (p.roleId === "medium") mediumUsed[p.id] = false;
-    if (p.roleId === "infector") convertUsed[p.id] = false;
     // Each Drunk secretly becomes a random mimicable role for the whole game.
-    if (p.roleId === "drunk" && mimicable.length) {
+    if (p.roleId === "drunk") {
       const disguise = pick(mimicable, rng);
       drunkDisguise[p.id] = disguise;
-      if (disguise === "medium") mediumUsed[p.id] = false; // so the fake step can appear
+      if (disguise === "werewolf") {
+        // At least one packmate to blame for kills it didn't pick, and no more
+        // than this table's biggest real pack, so the size gives nothing away.
+        const most = maxWolfTeam(players.length) - 1;
+        const others = players.filter((o) => o.id !== p.id).map((o) => o.id);
+        drunkPack[p.id] = shuffle(others, rng).slice(0, most && 1 + Math.floor(rng() * most));
+      }
     }
   }
   return {
     ...state,
     config,
     witchPotions,
-    mediumUsed,
-    convertUsed,
     drunkDisguise,
+    drunkPack,
     players: startingPlayers,
     dealtRoles,
     phase: "roleReveal",
@@ -351,8 +351,9 @@ function beginNight(state: GameState): GameState {
   const round = state.round + 1;
   const deadExist = state.players.some((p) => !p.alive);
   // Group by EFFECTIVE role, so a Drunk wakes with (and alongside) the role it
-  // impersonates. Its action comes to nothing (see isPowerless).
-  const byRole = new Map<string, PlayerId[]>();
+  // impersonates. Its action comes to nothing (see isPowerless). A group (the
+  // pack) never sees a Drunk among it, though: it hunts in a step of its own.
+  const byRole = new Map<string, { roleId: string; actorIds: PlayerId[] }>();
   for (const p of living(state)) {
     const roleId = effectiveRoleId(state, p.id);
     if (!roleId) continue;
@@ -360,23 +361,17 @@ function beginNight(state: GameState): GameState {
     if (!ability) continue;
     // Peaceful first night: no killing at all, so the wolves and the Witch sleep.
     if ((ability.kind === "kill" || ability.kind === "witch") && round === 1 && state.config.peacefulFirstNight) continue;
-    // The Troublemaker has one swap a game; once it's spent they sleep through.
-    if (ability.kind === "swap" && state.swapUsed[p.id]) continue;
-    // The Medium only wakes while their raise is unspent and someone is dead.
-    if (ability.kind === "raise" && (state.mediumUsed[p.id] || !deadExist)) continue;
-    // The Infector only wakes while their conversion is unspent and a non-wolf lives.
-    if (
-      ability.kind === "convert" &&
-      (state.convertUsed[p.id] ||
-        !living(state).some((t) => t.roleId && !onWolfTeam(t.roleId)))
-    )
-      continue;
-    const list = byRole.get(roleId) ?? [];
-    list.push(p.id);
-    byRole.set(roleId, list);
+    // A spent one-time power sleeps through; so does one with nothing to work on.
+    if (ability.once && state.used[p.id]) continue;
+    if (ability.kind === "raise" && !deadExist) continue;
+    if (ability.kind === "convert" && !living(state).some((t) => t.roleId && !onWolfTeam(t.roleId))) continue;
+    const key = ability.group && p.roleId === "drunk" ? p.id : roleId;
+    const entry = byRole.get(key) ?? { roleId, actorIds: [] };
+    entry.actorIds.push(p.id);
+    byRole.set(key, entry);
   }
   const steps: NightStep[] = [];
-  for (const [roleId, actorIds] of byRole) {
+  for (const { roleId, actorIds } of byRole.values()) {
     const ability = getRole(roleId).night!;
     steps.push({
       roleId,
@@ -422,13 +417,11 @@ function submit(state: GameState, step: NightStep, actorId: PlayerId, sub: Night
   return { ...state, night: { ...state.night!, steps } };
 }
 
-/** Two distinct other living players, for the Troublemaker's swap and the Detective's comparison. */
+/** Two different valid targets, for the Troublemaker's swap and the Detective's comparison. */
 function assertPair(state: GameState, actorId: PlayerId, aId: PlayerId, bId: PlayerId) {
   assert(aId !== bId, "Pick two different players.");
-  for (const id of [aId, bId]) {
-    assert(id !== actorId, "Pick two other players, not yourself.");
-    assert(playerById(state, id)?.alive, "Pick living players.");
-  }
+  const valid = validNightTargets(state, actorId).map((p) => p.id);
+  assert(valid.includes(aId) && valid.includes(bId), "Pick two other living players.");
 }
 
 function nightChoice(state: GameState, actorId: PlayerId, targetId: PlayerId): GameState {
@@ -460,8 +453,7 @@ function witchAction(state: GameState, actorId: PlayerId, heal: boolean, poison:
   if (heal) assert(potions.heal, "Your healing potion is already spent.");
   if (poison !== null) {
     assert(potions.poison, "Your poison is already spent.");
-    assert(poison !== actorId, "You can't poison yourself.");
-    assert(playerById(state, poison)?.alive, "Can't poison a dead player.");
+    assert(validNightTargets(state, actorId).some((p) => p.id === poison), "Poison another living player.");
   }
   return submit(state, step, actorId, { t: "witch", heal, poison });
 }
@@ -479,13 +471,10 @@ function nightIdle(state: GameState, actorId: PlayerId, targetId: PlayerId): Gam
   return { ...state, night: { ...state.night, idleDone: [...state.night.idleDone, actorId] } };
 }
 
-/** Night powers that may be held back for a later night. */
-export const SKIPPABLE_KINDS: NightActionKind[] = ["swap", "convert"];
-
 /** Hold an optional one-time power for another night (it isn't spent). */
 function nightSkip(state: GameState, actorId: PlayerId): GameState {
   const step = openStep(state, actorId);
-  assert(SKIPPABLE_KINDS.includes(step.kind), "That power can't be saved for later.");
+  assert(getRole(step.roleId).night?.optional, "That power can't be saved for later.");
   return submit(state, step, actorId, { t: "skip" });
 }
 
@@ -516,14 +505,15 @@ function detectAction(state: GameState, actorId: PlayerId, aId: PlayerId, bId: P
 
 function raiseAction(state: GameState, actorId: PlayerId, targetId: PlayerId | null): GameState {
   const step = openStep(state, actorId, "raise");
-  if (targetId !== null) assert(playerById(state, targetId)?.alive === false, "You can only raise a dead player.");
+  if (targetId !== null)
+    assert(validNightTargets(state, actorId).some((p) => p.id === targetId), "You can only raise a dead player.");
   return submit(state, step, actorId, { t: "raise", target: targetId });
 }
 
-/** Each actor's target on steps of these kinds (actorId -> target). */
-function picksOf(steps: NightStep[], kinds: NightActionKind[]): Record<PlayerId, PlayerId> {
+/** Each actor's target on these steps (actorId -> target). */
+function picksOf(steps: NightStep[]): Record<PlayerId, PlayerId> {
   const picks: Record<PlayerId, PlayerId> = {};
-  for (const step of steps.filter((s) => kinds.includes(s.kind)))
+  for (const step of steps)
     for (const [actorId, sub] of Object.entries(step.subs)) if (sub.t === "target") picks[actorId] = sub.target;
   return picks;
 }
@@ -648,6 +638,8 @@ function proceed(state: GameState): GameState {
 
 /** The rest of the wolf team, if `id` is on it: who a pack member knows. */
 export function packmatesOf(state: GameState, id: PlayerId): PlayerId[] {
+  const imagined = state.drunkPack[id];
+  if (imagined) return imagined.filter((m) => m !== id); // a swap can hand you your own name
   const roleId = playerById(state, id)?.roleId;
   if (!roleId || !onWolfTeam(roleId)) return [];
   return state.players.filter((p) => p.id !== id && p.roleId && onWolfTeam(p.roleId)).map((p) => p.id);
@@ -661,14 +653,14 @@ function endNight(state: GameState): GameState {
   // A powerless player's action (the Drunk, or anyone poisoned) has no effect:
   // their fake info was handed out at submit time, and here their submissions
   // are dropped, so no effect kind can ever apply. A one-time power they used is
-  // still spent, so its reappearing tomorrow can't give the game away.
-  const mediumUsed = { ...state.mediumUsed };
-  const convertUsed = { ...state.convertUsed };
+  // still spent, so its reappearing tomorrow can't give the game away — and a
+  // swap is spent even when it fizzles. Raises and bites are spent as they land.
+  const used = { ...state.used };
   for (const step of steps) {
+    if (!getRole(step.roleId).night?.once) continue;
     for (const [actorId, sub] of Object.entries(step.subs)) {
-      if (!isPowerless(state, actorId)) continue;
-      if (step.kind === "raise" && sub.t === "raise" && sub.target !== null) mediumUsed[actorId] = true;
-      if (step.kind === "convert" && sub.t === "target") convertUsed[actorId] = true;
+      const usedIt = sub.t === "swap" || sub.t === "target" || (sub.t === "raise" && sub.target !== null);
+      if (usedIt && (sub.t === "swap" || isPowerless(state, actorId))) used[actorId] = true;
     }
   }
   const liveSteps: NightStep[] = steps.map((s) => ({
@@ -679,11 +671,12 @@ function endNight(state: GameState): GameState {
 
   // Picks, not powers, so taken from the RAW steps: a powerless Doctor is barred
   // from repeating a patient like a real one, and a poisoned Hunter's mark holds.
-  const lastTarget = picksOf(steps, NO_REPEAT_KINDS);
-  const hunterMark = { ...state.hunterMark, ...picksOf(steps, ["mark"]) };
+  const lastTarget = picksOf(steps.filter((st) => getRole(st.roleId).night?.noRepeat));
+  const hunterMark = { ...state.hunterMark, ...picksOf(steps.filter((st) => st.kind === "mark")) };
 
   const protectedIds = new Set(targetsOf("protect"));
-  const killStep = liveSteps.find((s) => s.kind === "kill");
+  // The pack's step: a Drunk Werewolf's own step is empty by now.
+  const killStep = liveSteps.find((s) => s.kind === "kill" && Object.keys(s.subs).length);
   const victimId = killStep ? pluralityTarget(killStep, rng) : null;
 
   // Witch: heal the victim and/or poison a player, spending potions.
@@ -750,26 +743,20 @@ function endNight(state: GameState): GameState {
   const killed = markDead(state.players, [...deaths]);
   // Dying Hunters fire at whoever they marked (tonight's pick).
   const afterShots = fireDyingShots(killed.players, killed.deadShooters, hunterMark, events, log, state.round);
-  // A Troublemaker who swapped has spent their one swap, even if it fizzled (or
-  // they were powerless: from the RAW steps, so the disguise holds).
-  const swapUsed = { ...state.swapUsed };
-  for (const step of steps)
-    for (const [actorId, sub] of Object.entries(step.subs)) if (sub.t === "swap") swapUsed[actorId] = true;
   const roleState: RoleState = {
     witchPotions,
-    mediumUsed,
-    swapUsed,
-    convertUsed,
+    used,
     drunkDisguise: { ...state.drunkDisguise },
+    drunkPack: { ...state.drunkPack },
     lastTarget,
     hunterMark,
-    princeSpared: { ...state.princeSpared },
   };
   // Spend one-time powers (Medium raise, Infector convert) BEFORE swaps, so the
   // spent flag is written under the current id and then travels with the role...
-  let players = applyRaises(afterShots, mediumUsed, liveSteps, log, events, state.round);
+  let players = applyRaises(afterShots, used, liveSteps, log, events, state.round);
   const infected: PlayerId[] = [];
-  players = applyConverts(players, roleState.convertUsed, roleState.drunkDisguise, liveSteps, infected, events, log, state.round);
+  players = applyConverts(players, used, roleState.drunkDisguise, liveSteps, infected, events, log, state.round);
+  for (const id of infected) delete roleState.drunkPack[id]; // bitten for real: meets the real pack
   if (turned) {
     players = players.map((p) => (p.id === turned ? { ...p, roleId: "werewolf" } : p));
     infected.push(turned);
@@ -834,13 +821,11 @@ function swapEntry<T>(map: Record<string, T>, a: PlayerId, b: PlayerId) {
 /** Mutable bundle of per-player role state that swaps carry with the role. */
 interface RoleState {
   witchPotions: GameState["witchPotions"];
-  mediumUsed: GameState["mediumUsed"];
-  swapUsed: GameState["swapUsed"];
-  convertUsed: GameState["convertUsed"];
+  used: GameState["used"];
   drunkDisguise: GameState["drunkDisguise"];
+  drunkPack: GameState["drunkPack"];
   lastTarget: GameState["lastTarget"];
   hunterMark: GameState["hunterMark"];
-  princeSpared: GameState["princeSpared"];
 }
 
 /**
@@ -886,7 +871,7 @@ function promoteSuccessors(players: Player[]): { players: Player[]; promoted: Pl
 /** Apply Medium raises, mutating the shared log, events and spent flags. */
 function applyRaises(
   players: Player[],
-  mediumUsed: GameState["mediumUsed"],
+  used: GameState["used"],
   steps: NightStep[],
   log: GameState["log"],
   events: AnnouncementEvent[],
@@ -896,11 +881,11 @@ function applyRaises(
   for (const step of steps) {
     if (step.kind !== "raise") continue;
     for (const [actorId, sub] of Object.entries(step.subs)) {
-      if (sub.t !== "raise" || sub.target === null || mediumUsed[actorId]) continue;
+      if (sub.t !== "raise" || sub.target === null || used[actorId]) continue;
       const target = next.find((p) => p.id === sub.target);
       if (!target || target.alive) continue;
       next = next.map((p) => (p.id === sub.target ? { ...p, alive: true } : p));
-      mediumUsed[actorId] = true;
+      used[actorId] = true;
       log.push({ type: "raised", round, playerId: sub.target });
       events.push({ t: "raised", playerId: sub.target });
     }
@@ -914,7 +899,7 @@ function applyRaises(
  */
 function applyConverts(
   players: Player[],
-  convertUsed: GameState["convertUsed"],
+  used: GameState["used"],
   drunkDisguise: GameState["drunkDisguise"],
   steps: NightStep[],
   /** Collects who was infected, so they can be told at dawn. */
@@ -927,14 +912,14 @@ function applyConverts(
   for (const step of steps) {
     if (step.kind !== "convert") continue;
     for (const [actorId, sub] of Object.entries(step.subs)) {
-      if (sub.t !== "target" || convertUsed[actorId]) continue;
+      if (sub.t !== "target" || used[actorId]) continue;
       const target = next.find((p) => p.id === sub.target);
       if (!target?.alive || (target.roleId && onWolfTeam(target.roleId))) continue;
       next = next.map((p) => (p.id === sub.target ? { ...p, roleId: "werewolf" } : p));
       // A converted Drunk becomes a real wolf — drop the fake disguise so it no
       // longer wakes as its old village role (and stops faking effects).
       delete drunkDisguise[sub.target];
-      convertUsed[actorId] = true;
+      used[actorId] = true;
       infected.push(sub.target);
       if (next.find((p) => p.id === actorId)?.alive) {
         next = markDead(next, [actorId]).players;
@@ -1043,10 +1028,10 @@ function resolveVote(state: GameState): GameState {
   const lynchedId = top[0][0];
   const lynched = playerById(state, lynchedId)!;
   // The Prince's first trip to the gallows ends with a reveal and a reprieve.
-  if (lynched.roleId && getRole(lynched.roleId).sparedOnFirstVote && !state.princeSpared[lynchedId]) {
+  if (lynched.roleId && getRole(lynched.roleId).sparedOnFirstVote && !state.used[lynchedId]) {
     log.push({ type: "spared", round: state.round, playerId: lynchedId });
     return announce(
-      { ...state, log, princeSpared: { ...state.princeSpared, [lynchedId]: true } },
+      { ...state, log, used: { ...state.used, [lynchedId]: true } },
       "vote",
       [{ t: "spared", playerId: lynchedId, roleId: lynched.roleId }]
     );
@@ -1098,16 +1083,14 @@ export function createGame(code: string, seed: number): GameState {
     inspects: [],
     detections: [],
     silenced: [],
-    mediumUsed: {},
-    convertUsed: {},
-    swapUsed: {},
-    princeSpared: {},
+    used: {},
     drugged: [],
     ready: [],
     announcement: null,
     notices: {},
     hunterMark: {},
     drunkDisguise: {},
+    drunkPack: {},
     lastTarget: {},
     dealtRoles: [],
     chat: [],

@@ -21,6 +21,7 @@ export const ROLES: Record<string, RoleDef> = {
   },
   werewolf: {
     id: "werewolf",
+    drunkMimicable: true,
     weight: -6,
     autoFrom: 0,
     name: "Werewolf",
@@ -50,7 +51,7 @@ export const ROLES: Record<string, RoleDef> = {
     emoji: "🧛",
     blurb:
       "A wolf with a deadly gift. Once per game, on a night of your choosing, pass your curse to a neighbor — at dawn they wake up furry and secretly join the pack, and you're found dead.",
-    night: { kind: "convert", order: 12, canTargetSelf: false },
+    night: { kind: "convert", order: 12, canTargetSelf: false, once: true, optional: true },
   },
   seer: {
     id: "seer",
@@ -84,10 +85,11 @@ export const ROLES: Record<string, RoleDef> = {
     blurb:
       "Each night, patch someone up (yourself counts) — but never the same patient two nights running. If the wolves come knocking, your patient just shrugs it off.",
     drunkMimicable: true,
-    night: { kind: "protect", order: 30, canTargetSelf: true },
+    night: { kind: "protect", order: 30, canTargetSelf: true, noRepeat: true },
   },
   hunter: {
     id: "hunter",
+    drunkMimicable: true,
     canBreakTie: () => true, // a dying shot can take a wolf
     weight: 3,
     autoFrom: 0,
@@ -115,6 +117,7 @@ export const ROLES: Record<string, RoleDef> = {
   },
   tanner: {
     id: "tanner",
+    drunkMimicable: true,
     weight: -2,
     autoFrom: 5,
     name: "Tanner",
@@ -125,6 +128,7 @@ export const ROLES: Record<string, RoleDef> = {
   },
   prince: {
     id: "prince",
+    drunkMimicable: true,
     weight: 3,
     autoFrom: 6,
     name: "Prince",
@@ -147,6 +151,7 @@ export const ROLES: Record<string, RoleDef> = {
   },
   cursed: {
     id: "cursed",
+    drunkMimicable: true,
     weight: -3,
     autoFrom: 5,
     name: "Cursed",
@@ -158,6 +163,7 @@ export const ROLES: Record<string, RoleDef> = {
   },
   poisoner: {
     id: "poisoner",
+    drunkMimicable: true,
     weight: -3,
     autoFrom: 7,
     name: "Poisoner",
@@ -166,7 +172,7 @@ export const ROLES: Record<string, RoleDef> = {
     winsBySurviving: true,
     blurb:
       "You're on nobody's side but your own. Each night, spike someone's supper: the following night their power quietly fails, and they never know. Never the same person two nights running. Whoever wins, you win too — if you're still alive.",
-    night: { kind: "block", order: 8, canTargetSelf: false },
+    night: { kind: "block", order: 8, canTargetSelf: false, noRepeat: true },
   },
   witch: {
     id: "witch",
@@ -190,7 +196,7 @@ export const ROLES: Record<string, RoleDef> = {
     blurb:
       "A quiet agent of chaos with one trick per game: on a night of your choosing, secretly swap two players' roles. The swap lands at dawn — they wake up as someone new and never know.",
     drunkMimicable: true,
-    night: { kind: "swap", order: 40 },
+    night: { kind: "swap", order: 40, once: true, optional: true },
   },
   // Id kept as "silencer" so saved setups and stats still line up.
   silencer: {
@@ -203,8 +209,7 @@ export const ROLES: Record<string, RoleDef> = {
     emoji: "🗣️",
     blurb:
       "Each night, start a juicy rumor about someone. Tomorrow the town gives them the cold shoulder: they can't speak up or vote. Never the same person two nights running.",
-    drunkMimicable: true,
-    night: { kind: "silence", order: 35, canTargetSelf: false },
+    night: { kind: "silence", order: 35, canTargetSelf: false, noRepeat: true },
   },
   detective: {
     id: "detective",
@@ -220,7 +225,8 @@ export const ROLES: Record<string, RoleDef> = {
   },
   medium: {
     id: "medium",
-    canBreakTie: (state, id) => !state.mediumUsed[id], // a raise puts the village ahead
+    drunkMimicable: true,
+    canBreakTie: (state, id) => !state.used[id], // a raise puts the village ahead
     weight: 2,
     autoFrom: 8,
     name: "Medium",
@@ -228,8 +234,7 @@ export const ROLES: Record<string, RoleDef> = {
     emoji: "👻",
     blurb:
       "You've got exactly one séance in you. Once per game, on a night you choose, yank a dead player back to the land of the living.",
-    drunkMimicable: true,
-    night: { kind: "raise", order: 5 },
+    night: { kind: "raise", order: 5, once: true },
   },
 };
 
