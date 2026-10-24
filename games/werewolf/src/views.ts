@@ -128,6 +128,8 @@ export interface PlayerView {
   myDetections: DetectionResult[];
   /** Who has read their role card (phase "roleReveal"; public — everyone has a card). */
   ready: PlayerId[];
+  /** How many times the host has redealt (public — everyone gets a new card). */
+  redeals: number;
   /** Players silenced for the current day (public — they can't vote). */
   silencedIds: PlayerId[];
   /** Your current vote this round (undefined if not cast). */
@@ -294,6 +296,7 @@ export function projectView(state: GameState, viewerId: PlayerId): PlayerView {
     myInspects,
     myDetections,
     ready: state.phase === "roleReveal" ? [...state.ready] : [],
+    redeals: state.redeals,
     // Only surface silenced players who are still alive (a silenced-then-killed
     // player shouldn't linger on the day board).
     silencedIds: state.silenced.filter((id) => playerById(state, id)?.alive),

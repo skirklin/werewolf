@@ -122,6 +122,9 @@ export function toEngineAction(actorId: string, msg: WerewolfAction, isHost: boo
     case "proceed":
       hostOnly(); // the host moves the table on once everyone has read the news
       return { type: "proceed" };
+    case "redeal":
+      hostOnly();
+      return { type: "redeal" };
     case "say":
       return { type: "say", speakerId: actorId, text: msg.text };
     default:

@@ -319,6 +319,8 @@ export interface GameState {
    * night falls once everyone has.
    */
   ready: PlayerId[];
+  /** How many times the host has redealt this game (see redeal). */
+  redeals: number;
   /**
    * Players whose power fails tonight (picked by the Poisoner last night).
    * They still act — nothing happens, and info comes back fake — so they

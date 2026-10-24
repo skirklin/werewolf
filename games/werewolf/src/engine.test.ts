@@ -14,6 +14,7 @@ import {
   MAX_CHAT_MESSAGES,
 } from "./engine.js";
 import { projectView, publicPlayers } from "./views.js";
+import { toEngineAction } from "./module.js";
 import { maxWolfTeam, recommendedConfig, validateConfig, dealRoles, werewolfRange, deckBalance, dealPreview, possibleRoles, BALANCE_TOLERANCE } from "./setup.js";
 import { makeRng } from "@party/core";
 
@@ -672,6 +673,37 @@ describe("rematch", () => {
 
   it("refuses to restart a game that is still running", () => {
     expect(() => reduce(gameWith(["werewolf", "villager", "villager"]), { type: "playAgain" })).toThrow();
+  });
+});
+
+describe("redeal", () => {
+  const roles = ["werewolf", "seer", "doctor", "villager", "villager", "villager"];
+  const roleOf = (s: GameState) => s.players.map((p) => p.roleId).join();
+
+  it("reshuffles from the same setup and goes back to the role cards", () => {
+    let s = reduce(gameWith(roles, exact({ werewolf: 1, seer: 1, doctor: 1 })), { type: "ready", actorId: "p1" });
+    const deals = new Set<string>();
+    for (let i = 0; i < 5; i++) {
+      s = reduce(s, { type: "redeal" });
+      deals.add(roleOf(s));
+      expect(s.phase).toBe("roleReveal");
+      expect(s.ready).toEqual([]);
+      expect([...s.players.map((p) => p.roleId!)].sort()).toEqual([...roles].sort());
+    }
+    expect(deals.size).toBeGreaterThan(1); // a new shuffle, not the same cards
+    expect(s.redeals).toBe(5);
+    expect(projectView(s, "p3").redeals).toBe(5);
+  });
+
+  it("works on the first night, but not once dawn has come", () => {
+    let s = reduce(gameWith(roles, exact({ werewolf: 1, seer: 1, doctor: 1 })), { type: "startNight" });
+    expect(reduce(s, { type: "redeal" }).phase).toBe("roleReveal");
+    s = settleNight(s);
+    expect(() => reduce(s, { type: "redeal" })).toThrow("Too late");
+  });
+
+  it("is the host's call", () => {
+    expect(() => toEngineAction("p1", { type: "redeal" }, false)).toThrow("Only the host");
   });
 });
 

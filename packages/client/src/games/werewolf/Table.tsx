@@ -14,6 +14,7 @@ export function WerewolfTable({ view, act, playAgain, onExit }: TableProps<Playe
       <TimeBadge phase={view.phase} round={view.round} />
       {renderPhase(view, act, playAgain, onExit)}
       <HostRecovery view={view} send={act} />
+      <Redeal view={view} send={act} />
     </>
   );
 }
@@ -27,6 +28,7 @@ function renderPhase(view: PlayerView, send: Send, playAgain: () => void, onExit
       const waiting = view.players.filter((p) => !view.ready.includes(p.id)).map((p) => p.name);
       return (
         <div className="stack">
+          {view.redeals > 0 && <p className="center small">🔄 The host redealt — this is your new role.</p>}
           <RoleCard view={view} />
           <RolesInPlay roleIds={view.possibleRoles} open />
           {imReady ? (
@@ -117,6 +119,24 @@ function HostRecovery({ view, send }: { view: PlayerView; send: Send }) {
       <button className="ghost small" onClick={() => send(action.msg)}>
         {action.label}
       </button>
+    </div>
+  );
+}
+
+/**
+ * The host's way out of a spoiled deal (a card seen, a question that gave a
+ * role away): reshuffle everyone, any time before the first dawn.
+ */
+function Redeal({ view, send }: { view: PlayerView; send: Send }) {
+  const early = view.phase === "roleReveal" || (view.phase === "night" && view.round === 1);
+  if (!view.you.isHost || !early) return null;
+  const redeal = () => {
+    if (confirm("Redeal every role? Everyone gets a new card and the night starts over.")) send({ type: "redeal" });
+  };
+  return (
+    <div className="host-tools">
+      <span className="muted small">Host · if a role got out</span>
+      <button className="ghost small" onClick={redeal}>Redeal roles</button>
     </div>
   );
 }

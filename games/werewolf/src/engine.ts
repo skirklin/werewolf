@@ -190,6 +190,7 @@ export type Action =
   | { type: "resolveVote" }
   | { type: "proceed" }
   | { type: "playAgain" }
+  | { type: "redeal" }
   | { type: "say"; speakerId: PlayerId; text: string };
 
 /** Longest single message, and the most a game will keep before it stops listening. */
@@ -247,6 +248,8 @@ export function reduce(state: GameState, action: Action): GameState {
       return proceed(state);
     case "playAgain":
       return playAgain(state);
+    case "redeal":
+      return redeal(state);
     case "say":
       return say(state, action.speakerId, action.text);
   }
@@ -301,6 +304,18 @@ function playAgain(state: GameState): GameState {
   assert(players.length > 0, "Nobody's still here to play.");
   if (!players.some((p) => p.isHost)) players[0] = { ...players[0], isHost: true };
   return { ...createGame(state.code, nextSeed(state.seed)), players, config: state.config };
+}
+
+/**
+ * Shuffle again from the same setup and go back to the role cards: the way out
+ * when someone's card got seen, or a question gave a role away, before it
+ * mattered. Only until the first dawn, so no death is ever undone.
+ */
+function redeal(state: GameState): GameState {
+  assert(state.phase === "roleReveal" || (state.phase === "night" && state.round === 1), "Too late to redeal.");
+  const players = state.players.map((p) => ({ ...p, roleId: null, alive: true }));
+  const fresh = { ...createGame(state.code, nextSeed(state.seed)), players, redeals: state.redeals + 1 };
+  return startGame(fresh, state.config);
 }
 
 function startGame(state: GameState, config: GameConfig): GameState {
@@ -1086,6 +1101,7 @@ export function createGame(code: string, seed: number): GameState {
     used: {},
     drugged: [],
     ready: [],
+    redeals: 0,
     announcement: null,
     notices: {},
     hunterMark: {},
