@@ -936,15 +936,17 @@ function applyConverts(
 }
 
 /**
- * The order the town votes in today: every eligible voter in seat order,
- * starting from a seat that moves one place round the table each day — going
- * last (seeing every other vote) shouldn't always fall to the same people.
+ * The order the town votes in today: every eligible voter, in an order
+ * shuffled once per game (so joining last doesn't mean voting last), starting
+ * one place further round it each day — going last (seeing every other vote)
+ * shouldn't always fall to the same people.
  */
 function voteOrderFor(state: GameState): PlayerId[] {
   const n = state.players.length;
   if (n === 0) return [];
+  const order = shuffle(state.players, makeRng(state.seed));
   const start = (((state.round - 1) % n) + n) % n;
-  const seats = [...state.players.slice(start), ...state.players.slice(0, start)];
+  const seats = [...order.slice(start), ...order.slice(0, start)];
   const eligible = new Set(eligibleVoters(state).map((p) => p.id));
   return seats.filter((p) => eligible.has(p.id)).map((p) => p.id);
 }
