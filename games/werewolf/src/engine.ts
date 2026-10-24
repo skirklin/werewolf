@@ -13,7 +13,7 @@ import type {
   Notice,
 } from "./types.js";
 import { getRole, mimicableRoleIds, isWolf, onWolfTeam } from "./roles.js";
-import { dealRoles, possibleRoles } from "./setup.js";
+import { dealRoles, maxWolfTeam, possibleRoles } from "./setup.js";
 import { makeRng, shuffle, pick, nextSeed } from "@party/core";
 import { GameError } from "@party/core";
 
@@ -49,9 +49,11 @@ export function isPowerless(state: GameState, id: PlayerId): boolean {
  * have no night power or one of these kinds (a test enforces it); passive
  * powers (the Hunter's shot, the Prince's reprieve, the Cursed's turn) and
  * solo wins (the Tanner's, the Poisoner's) check the real role, so a Drunk
- * never triggers them — and is only found out once it's dead.
+ * never triggers them — and is only found out once it's dead. A Drunk
+ * Werewolf hunts alone with a pack it imagines (see drunkPack), which takes
+ * the blame for every kill it didn't pick, so it can go all game.
  */
-export const DRUNK_MIMIC_KINDS: NightActionKind[] = ["inspect", "protect", "swap", "detect", "mark", "raise", "block"];
+export const DRUNK_MIMIC_KINDS: NightActionKind[] = ["inspect", "protect", "swap", "detect", "mark", "raise", "block", "kill"];
 
 /** The role a player ACTS AS: their Drunk disguise if any, else their real role. */
 export function effectiveRoleId(state: GameState, id: PlayerId): string | null {
@@ -152,7 +154,7 @@ export function validNightTargets(state: GameState, actorId: PlayerId): Player[]
   const targets = candidates.filter((t) => {
     if (t.id === actorId && !ability.canTargetSelf) return false;
     // The wolf team never targets its own: no eating or infecting the pack.
-    if (onWolfTeam(roleId) && t.roleId && onWolfTeam(t.roleId)) return false;
+    if (onWolfTeam(roleId) && packmatesOf(state, actorId).includes(t.id)) return false;
     return true;
   });
   // No picking the same player two nights running (the Doctor's patient, the
@@ -307,23 +309,27 @@ function startGame(state: GameState, config: GameConfig): GameState {
   const players = dealRoles(state.players, config, rng);
   const witchPotions: GameState["witchPotions"] = {};
   const drunkDisguise: GameState["drunkDisguise"] = {};
+  const drunkPack: GameState["drunkPack"] = {};
   // The Drunk's disguise comes only from roles this game could have: a role the
   // whole table can see isn't in play would tell the Drunk what they are.
   const inPlay = new Set(possibleRoles(config, players.length));
-  const mimicable = mimicableRoleIds().filter((id) => inPlay.has(id));
-  for (const [i, p] of players.entries()) {
-    // No believable disguise to hand out: deal a plain Villager instead.
-    if (p.roleId === "drunk" && !mimicable.length) players[i] = { ...p, roleId: "villager" };
-  }
+  const mimicable = mimicableRoleIds().filter((id) => inPlay.has(id)); // never empty: there's always a Werewolf
   const dealtRoles = players.map((p) => p.roleId!);
   // Dealt an apprentice to a role nobody holds? They start out holding it.
   const startingPlayers = promoteSuccessors(players).players;
   for (const p of players) {
     if (p.roleId === "witch") witchPotions[p.id] = { heal: true, poison: true };
     // Each Drunk secretly becomes a random mimicable role for the whole game.
-    if (p.roleId === "drunk" && mimicable.length) {
+    if (p.roleId === "drunk") {
       const disguise = pick(mimicable, rng);
       drunkDisguise[p.id] = disguise;
+      if (disguise === "werewolf") {
+        // At least one packmate to blame for kills it didn't pick, and no more
+        // than this table's biggest real pack, so the size gives nothing away.
+        const most = maxWolfTeam(players.length) - 1;
+        const others = players.filter((o) => o.id !== p.id).map((o) => o.id);
+        drunkPack[p.id] = shuffle(others, rng).slice(0, most && 1 + Math.floor(rng() * most));
+      }
     }
   }
   return {
@@ -331,6 +337,7 @@ function startGame(state: GameState, config: GameConfig): GameState {
     config,
     witchPotions,
     drunkDisguise,
+    drunkPack,
     players: startingPlayers,
     dealtRoles,
     phase: "roleReveal",
@@ -344,8 +351,9 @@ function beginNight(state: GameState): GameState {
   const round = state.round + 1;
   const deadExist = state.players.some((p) => !p.alive);
   // Group by EFFECTIVE role, so a Drunk wakes with (and alongside) the role it
-  // impersonates. Its action comes to nothing (see isPowerless).
-  const byRole = new Map<string, PlayerId[]>();
+  // impersonates. Its action comes to nothing (see isPowerless). A group (the
+  // pack) never sees a Drunk among it, though: it hunts in a step of its own.
+  const byRole = new Map<string, { roleId: string; actorIds: PlayerId[] }>();
   for (const p of living(state)) {
     const roleId = effectiveRoleId(state, p.id);
     if (!roleId) continue;
@@ -357,12 +365,13 @@ function beginNight(state: GameState): GameState {
     if (ability.once && state.used[p.id]) continue;
     if (ability.kind === "raise" && !deadExist) continue;
     if (ability.kind === "convert" && !living(state).some((t) => t.roleId && !onWolfTeam(t.roleId))) continue;
-    const list = byRole.get(roleId) ?? [];
-    list.push(p.id);
-    byRole.set(roleId, list);
+    const key = ability.group && p.roleId === "drunk" ? p.id : roleId;
+    const entry = byRole.get(key) ?? { roleId, actorIds: [] };
+    entry.actorIds.push(p.id);
+    byRole.set(key, entry);
   }
   const steps: NightStep[] = [];
-  for (const [roleId, actorIds] of byRole) {
+  for (const { roleId, actorIds } of byRole.values()) {
     const ability = getRole(roleId).night!;
     steps.push({
       roleId,
@@ -629,6 +638,8 @@ function proceed(state: GameState): GameState {
 
 /** The rest of the wolf team, if `id` is on it: who a pack member knows. */
 export function packmatesOf(state: GameState, id: PlayerId): PlayerId[] {
+  const imagined = state.drunkPack[id];
+  if (imagined) return imagined.filter((m) => m !== id); // a swap can hand you your own name
   const roleId = playerById(state, id)?.roleId;
   if (!roleId || !onWolfTeam(roleId)) return [];
   return state.players.filter((p) => p.id !== id && p.roleId && onWolfTeam(p.roleId)).map((p) => p.id);
@@ -664,7 +675,8 @@ function endNight(state: GameState): GameState {
   const hunterMark = { ...state.hunterMark, ...picksOf(steps.filter((st) => st.kind === "mark")) };
 
   const protectedIds = new Set(targetsOf("protect"));
-  const killStep = liveSteps.find((s) => s.kind === "kill");
+  // The pack's step: a Drunk Werewolf's own step is empty by now.
+  const killStep = liveSteps.find((s) => s.kind === "kill" && Object.keys(s.subs).length);
   const victimId = killStep ? pluralityTarget(killStep, rng) : null;
 
   // Witch: heal the victim and/or poison a player, spending potions.
@@ -735,6 +747,7 @@ function endNight(state: GameState): GameState {
     witchPotions,
     used,
     drunkDisguise: { ...state.drunkDisguise },
+    drunkPack: { ...state.drunkPack },
     lastTarget,
     hunterMark,
   };
@@ -743,6 +756,7 @@ function endNight(state: GameState): GameState {
   let players = applyRaises(afterShots, used, liveSteps, log, events, state.round);
   const infected: PlayerId[] = [];
   players = applyConverts(players, used, roleState.drunkDisguise, liveSteps, infected, events, log, state.round);
+  for (const id of infected) delete roleState.drunkPack[id]; // bitten for real: meets the real pack
   if (turned) {
     players = players.map((p) => (p.id === turned ? { ...p, roleId: "werewolf" } : p));
     infected.push(turned);
@@ -809,6 +823,7 @@ interface RoleState {
   witchPotions: GameState["witchPotions"];
   used: GameState["used"];
   drunkDisguise: GameState["drunkDisguise"];
+  drunkPack: GameState["drunkPack"];
   lastTarget: GameState["lastTarget"];
   hunterMark: GameState["hunterMark"];
 }
@@ -1075,6 +1090,7 @@ export function createGame(code: string, seed: number): GameState {
     notices: {},
     hunterMark: {},
     drunkDisguise: {},
+    drunkPack: {},
     lastTarget: {},
     dealtRoles: [],
     chat: [],

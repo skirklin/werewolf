@@ -560,11 +560,39 @@ describe("Village Drunk (mimics any role)", () => {
     const s = reduce({ ...createGame("X", 99), phase: "lobby", players }, { type: "startGame", config: cfg });
     const drunk = s.players.find((p) => p.roleId === "drunk")!;
     // Only a role this game could have: anything else would tell the Drunk what they are.
-    expect(s.drunkDisguise[drunk.id]).toBe("seer");
+    expect(["seer", "werewolf"]).toContain(s.drunkDisguise[drunk.id]);
   });
 
-  it("is dealt as a plain Villager when no believable disguise is in play", () => {
-    const players: Player[] = Array.from({ length: 6 }, (_, i) => ({
+  it("a Drunk Werewolf hunts with a pack it imagines, and the real pack never sees it", () => {
+    let s: GameState = {
+      ...gameWith(["werewolf", "drunk", "villager", "villager", "villager", "villager"]),
+      drunkDisguise: { p1: "werewolf" },
+      drunkPack: { p1: ["p2"] },
+    };
+    s = reduce(s, { type: "startNight" });
+    // It wakes alone; the real wolf's step holds only the real wolf.
+    expect(s.night!.steps.map((st) => st.actorIds)).toEqual([["p0"], ["p1"]]);
+    const real = projectView(s, "p0");
+    expect(real.packmates).toEqual([]);
+    expect(real.players.find((p) => p.id === "p1")!.roleId).toBeNull();
+    const drunk = projectView(s, "p1");
+    expect(drunk.packmates).toEqual(["p2"]);
+    expect(drunk.players.find((p) => p.id === "p2")!.roleId).toBe("werewolf");
+    expect(drunk.players.find((p) => p.id === "p0")!.roleId).toBeNull();
+    // It may hunt the real wolf, but not its imagined packmate.
+    const targets = validNightTargets(s, "p1").map((p) => p.id);
+    expect(targets).toContain("p0");
+    expect(targets).not.toContain("p2");
+    // Only the real pack's kill lands.
+    s = reduce(s, { type: "nightChoice", actorId: "p1", targetId: "p3" });
+    s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p4" });
+    s = reduce(s, { type: "endNight" });
+    expect(alive(s, "p3")).toBe(true);
+    expect(alive(s, "p4")).toBe(false);
+  });
+
+  it("deals a Drunk Werewolf an imagined pack of one or more, no bigger than the table's biggest real one", () => {
+    const players: Player[] = Array.from({ length: 10 }, (_, i) => ({
       id: `p${i}`, name: `P${i}`, roleId: null, alive: true, connected: true, isHost: false,
     }));
     const cfg: GameConfig = {
@@ -572,9 +600,15 @@ describe("Village Drunk (mimics any role)", () => {
       revealRoleOnDeath: false,
       nightSummary: "discreet", peacefulFirstNight: false,
     };
-    const s = reduce({ ...createGame("X", 99), phase: "lobby", players }, { type: "startGame", config: cfg });
-    expect(s.players.some((p) => p.roleId === "drunk")).toBe(false);
-    expect(s.players.filter((p) => p.roleId === "villager")).toHaveLength(5);
+    const sizes = new Set<number>();
+    for (let seed = 1; seed <= 60; seed++) {
+      const s = reduce({ ...createGame("X", seed), phase: "lobby", players }, { type: "startGame", config: cfg });
+      const drunk = s.players.find((p) => p.roleId === "drunk")!;
+      expect(s.drunkDisguise[drunk.id]).toBe("werewolf"); // the only role in play it can pose as
+      expect(s.drunkPack[drunk.id]).not.toContain(drunk.id);
+      sizes.add(s.drunkPack[drunk.id].length);
+    }
+    expect([...sizes].sort()).toEqual([1, 2]); // up to maxWolfTeam(10) = 3, counting itself
   });
 
   it("is on the village team and reveals as the Drunk at game over", () => {

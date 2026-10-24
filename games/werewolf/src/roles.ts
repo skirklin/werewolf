@@ -21,6 +21,7 @@ export const ROLES: Record<string, RoleDef> = {
   },
   werewolf: {
     id: "werewolf",
+    drunkMimicable: true,
     weight: -6,
     autoFrom: 0,
     name: "Werewolf",

@@ -334,6 +334,12 @@ export interface GameState {
   /** Per-Drunk: the role they've been dealt to secretly impersonate. */
   drunkDisguise: Record<PlayerId, string>;
   /**
+   * Per-Drunk posing as a Werewolf: the pack they imagine, picked at random
+   * from the table (so it says nothing about the real one, which never sees
+   * them). Travels with the role on a swap.
+   */
+  drunkPack: Record<PlayerId, PlayerId[]>;
+  /**
    * Per-actor: who they picked last night, for powers that can't pick the same
    * player two nights running (the Doctor's shield, the Gossip's rumor).
    */
