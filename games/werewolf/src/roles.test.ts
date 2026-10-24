@@ -776,7 +776,7 @@ describe("Silencer", () => {
     expect(projectView(s, "p0").silencedIds).toContain("p3"); // public
 
     s = reduce(s, { type: "startVote" });
-    expect(() => reduce(s, { type: "castVote", voterId: "p3", targetId: "p1" })).toThrow(/silenced/i);
+    expect(() => reduce(s, { type: "castVote", voterId: "p3", targetId: "p1" })).toThrow(/cold shoulder/);
     // The remaining eligible voters (p0, p1, p4) can still resolve the day.
     s = castVotes(s, { "p0": "p4", "p1": "p4", "p4": "p1" });
     expect(allVotesIn(s)).toBe(true); // p3 not required

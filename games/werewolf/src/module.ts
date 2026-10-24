@@ -29,7 +29,7 @@ export const werewolfModule: GameModule<GameConfig, GameState, PlayerView> & {
       problems = validateConfig(raw as GameConfig, players);
     } catch {
       // A malformed config, or a role this server doesn't know.
-      throw new GameError("That game setup isn't one this server understands.");
+      throw new GameError("That setup doesn't work with this version of the game.");
     }
     if (problems.length) throw new GameError(problems[0].message);
     return raw as GameConfig;
@@ -122,6 +122,9 @@ export function toEngineAction(actorId: string, msg: WerewolfAction, isHost: boo
     case "proceed":
       hostOnly(); // the host moves the table on once everyone has read the news
       return { type: "proceed" };
+    case "redeal":
+      hostOnly();
+      return { type: "redeal" };
     case "say":
       return { type: "say", speakerId: actorId, text: msg.text };
     default:

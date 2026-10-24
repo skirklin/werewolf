@@ -45,5 +45,7 @@ export interface ClientGame<Config = any, View = any, Action = any> {
   /** Why the host can't start yet, or [] when they can. */
   configProblems(config: Config, players: number): string[];
   LobbySettings?: ComponentType<LobbySettingsProps<Config>>;
+  /** Shown to everyone in the lobby, e.g. a change log. */
+  LobbyNotes?: ComponentType;
   Table: ComponentType<TableProps<View, Action>>;
 }

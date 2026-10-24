@@ -64,7 +64,7 @@ export function StatsPage({ onExit }: { onExit: () => void }) {
             <b>By role</b>
             <div className="spread small muted">
               <span>Role</span>
-              <span>Dealt · won · survived</span>
+              <span>Played · won · survived</span>
             </div>
             {stats.roles.map((r) => (
               <div key={r.roleId} className="spread small">
@@ -100,7 +100,7 @@ export function StatsPage({ onExit }: { onExit: () => void }) {
           />
 
           <p className="center small muted">
-            Records keep no names, no player ids and no room codes — just the shape of the game.
+            No names and no room codes are kept — just the shape of each game.
           </p>
         </div>
       )}

@@ -14,6 +14,7 @@ export function WerewolfTable({ view, act, playAgain, onExit }: TableProps<Playe
       <TimeBadge phase={view.phase} round={view.round} />
       {renderPhase(view, act, playAgain, onExit)}
       <HostRecovery view={view} send={act} />
+      <Redeal view={view} send={act} />
     </>
   );
 }
@@ -27,6 +28,7 @@ function renderPhase(view: PlayerView, send: Send, playAgain: () => void, onExit
       const waiting = view.players.filter((p) => !view.ready.includes(p.id)).map((p) => p.name);
       return (
         <div className="stack">
+          {view.redeals > 0 && <p className="center small">🔄 The host started the game over. Everyone has a new role — this one is yours.</p>}
           <RoleCard view={view} />
           <RolesInPlay roleIds={view.possibleRoles} open />
           {imReady ? (
@@ -35,7 +37,7 @@ function renderPhase(view: PlayerView, send: Send, playAgain: () => void, onExit
             </p>
           ) : (
             <>
-              <p className="center muted small">Read your card. Night falls once everyone has.</p>
+              <p className="center muted small">Take a good look at your role. Night falls once everyone has.</p>
               <button className="primary full lg" onClick={() => send({ type: "ready" })}>
                 I know my role
               </button>
@@ -117,6 +119,23 @@ function HostRecovery({ view, send }: { view: PlayerView; send: Send }) {
       <button className="ghost small" onClick={() => send(action.msg)}>
         {action.label}
       </button>
+    </div>
+  );
+}
+
+/**
+ * The host's way out of a spoiled game (a card seen, a question that gave a
+ * role away): start over with new roles, any time.
+ */
+function Redeal({ view, send }: { view: PlayerView; send: Send }) {
+  if (!view.you.isHost || view.phase === "gameOver") return null;
+  const redeal = () => {
+    if (confirm("Start the game over? This one ends, and everyone gets a new role.")) send({ type: "redeal" });
+  };
+  return (
+    <div className="host-tools">
+      <span className="muted small">Host · if a role got out</span>
+      <button className="ghost small" onClick={redeal}>Start over, new roles</button>
     </div>
   );
 }

@@ -92,7 +92,7 @@ export function RoleConfigEditor({
           <div className="section-title">Roles</div>
           {/* Exact counts are for the few who want them; the pool suits nearly every table. */}
           <button className="ghost small" onClick={() => switchMode(sel.mode === "pool" ? "exact" : "pool")}>
-            {sel.mode === "pool" ? "Advanced: exact counts" : "Back to a role pool"}
+            {sel.mode === "pool" ? "Advanced: exact counts" : "Back to automatic roles"}
           </button>
         </div>
         {sel.mode === "pool" ? (
@@ -119,7 +119,7 @@ export function RoleConfigEditor({
         <div className="muted small">
           {deal.target === null
             ? "Balance points: above zero favors the village, below favors the wolves."
-            : `Each game deals a different mix of your roles, picked so the balance lands near ${signed(deal.target)} (above zero favors the village).`}
+            : `Each game uses a different mix of your roles, picked so the balance lands near ${signed(deal.target)} (above zero favors the village).`}
         </div>
       </div>
 
@@ -160,7 +160,7 @@ function PoolEditor({
     <div className="stack">
       <div>
         <div className="muted small" style={{ marginBottom: 8 }}>
-          Who should the deal favor? The dealer picks how many wolves (about a quarter to a third of your group) and which roles, to match.
+          Who should the game favor? It picks how many wolves (about a quarter to a third of your group) and which roles, to match.
         </div>
         <div className="btn-row">
           {BALANCE_PRESETS.map((p) => (
@@ -180,7 +180,7 @@ function PoolEditor({
 
       <div className="spread">
         <div className="muted small">
-          Roles join the pool automatically as your group grows. Tap one to switch it on or off yourself.
+          Roles join in automatically as your group grows. Tap one to switch it on or off yourself.
         </div>
         {Object.keys(sel.overrides).length > 0 && (
           <button className="ghost small" onClick={() => onChange({ ...sel, overrides: {} })}>

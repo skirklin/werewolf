@@ -720,10 +720,10 @@ export function GameOver({
       <RevealGroup title="Lost" players={view.players.filter((p) => !won(p))} />
       {onPlayAgain ? (
         <button className="primary full lg" onClick={onPlayAgain}>
-          Deal another game
+          Play again
         </button>
       ) : (
-        <p className="center muted">{hostName(view.players)} can deal another game.</p>
+        <p className="center muted">{hostName(view.players)} can start another game.</p>
       )}
       <button className="ghost full" onClick={onExit}>
         Leave

@@ -14,6 +14,7 @@ import {
   MAX_CHAT_MESSAGES,
 } from "./engine.js";
 import { projectView, publicPlayers } from "./views.js";
+import { toEngineAction } from "./module.js";
 import { maxWolfTeam, recommendedConfig, validateConfig, dealRoles, werewolfRange, deckBalance, dealPreview, possibleRoles, BALANCE_TOLERANCE } from "./setup.js";
 import { makeRng } from "@party/core";
 
@@ -672,6 +673,46 @@ describe("rematch", () => {
 
   it("refuses to restart a game that is still running", () => {
     expect(() => reduce(gameWith(["werewolf", "villager", "villager"]), { type: "playAgain" })).toThrow();
+  });
+});
+
+describe("redeal", () => {
+  /** A pooled game for 8, freshly dealt. */
+  function dealt(): GameState {
+    const players: Player[] = Array.from({ length: 8 }, (_, i) => ({
+      id: `p${i}`, name: `P${i}`, roleId: null, alive: true, connected: true, isHost: i === 0,
+    }));
+    return reduce({ ...createGame("TEST", 7), players }, { type: "startGame", config: recommendedConfig(8) });
+  }
+  const deck = (s: GameState) => s.players.map((p) => p.roleId!).sort().join();
+
+  it("starts over with a whole new draw, back at the role cards", () => {
+    let s = reduce(dealt(), { type: "ready", actorId: "p1" });
+    const decks = new Set([deck(s)]);
+    for (let i = 0; i < 8; i++) {
+      s = reduce(s, { type: "redeal" });
+      decks.add(deck(s));
+      expect(s.phase).toBe("roleReveal");
+      expect(s.ready).toEqual([]);
+    }
+    expect(decks.size).toBeGreaterThan(2); // different roles, not just a reshuffle
+    expect(s.redeals).toBe(8);
+    expect(projectView(s, "p3").redeals).toBe(8);
+  });
+
+  it("works at any point in the game, and brings everyone back", () => {
+    let s = settleNight(reduce(gameWith(["werewolf", "seer", "villager", "villager", "villager"]), { type: "startNight" }));
+    s = settleVote(voteAll(reduce(s, { type: "startVote" }), (v) => (v === "p2" ? "p3" : "p2")));
+    expect(s.players.some((p) => !p.alive)).toBe(true);
+    s = reduce(s, { type: "redeal" });
+    expect(s.phase).toBe("roleReveal");
+    expect(s.round).toBe(0);
+    expect(s.players.every((p) => p.alive)).toBe(true);
+    expect(s.log).toEqual([{ type: "gameStart", round: 0 }]);
+  });
+
+  it("is the host's call", () => {
+    expect(() => toEngineAction("p1", { type: "redeal" }, false)).toThrow("Only the host");
   });
 });
 
