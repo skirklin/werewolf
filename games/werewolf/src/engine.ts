@@ -65,14 +65,39 @@ export function effectiveRoleId(state: GameState, id: PlayerId): string | null {
 /**
  * Standard win check. Village: no real wolves left (a wolf-aligned Henchman
  * doesn't keep the wolves alive). Wolves: the whole wolf team — Henchman
- * included, since they vote with the pack — is at least half the living.
+ * included, since they vote with the pack — outnumbers everyone else, or ties
+ * them with nothing left that could break the tie.
  */
 export function checkWinner(state: GameState): Team | null {
   const alive = living(state);
   if (!alive.some((p) => p.roleId && isWolf(p.roleId))) return "village";
-  const pack = alive.filter((p) => p.roleId && onWolfTeam(p.roleId));
-  if (pack.length * 2 >= alive.length) return "werewolf";
+  const pack = alive.filter((p) => p.roleId && onWolfTeam(p.roleId)).length;
+  const rest = alive.length - pack;
+  if (pack > rest || (pack === rest && !canBreakTie(state))) return "werewolf";
   return null;
+}
+
+/**
+ * At a tie the wolves hold half the votes, so the town can't vote them out —
+ * unless someone alive still holds a power that changes the count or the
+ * vote: the Witch's unused poison, the Medium's unused raise, a Hunter's
+ * dying shot, or a Gossip silencing a wolf. Real roles only (a Drunk has no
+ * power to use).
+ */
+function canBreakTie(state: GameState): boolean {
+  return living(state).some((p) => {
+    switch (p.roleId) {
+      case "witch":
+        return !!state.witchPotions[p.id]?.poison;
+      case "medium":
+        return !state.mediumUsed[p.id];
+      case "hunter":
+      case "silencer":
+        return true;
+      default:
+        return false;
+    }
+  });
 }
 
 /**
