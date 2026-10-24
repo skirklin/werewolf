@@ -530,6 +530,22 @@ describe("Village Drunk (mimics any role)", () => {
     s = reduce(s, { type: "startVote" });
     s = reduce(voteAll(s, (v) => (v === "p1" ? "p0" : "p1")), { type: "resolveVote" });
     expect(s.announcement!.events).toEqual([{ t: "votedOut", playerId: "p1" }]);
+    // A fake Tanner voted out just dies; nobody wins yet.
+    s = { ...drunkAs("tanner", ["werewolf", "drunk", "villager", "villager", "villager", "villager"]), phase: "dayDiscussion", round: 1 };
+    s = reduce(s, { type: "startVote" });
+    s = settleVote(voteAll(s, (v) => (v === "p1" ? "p0" : "p1")));
+    expect(s.phase).not.toBe("gameOver");
+    expect(alive(s, "p1")).toBe(false);
+    // A fake Poisoner's supper is harmless.
+    s = drunkAs("poisoner", ["werewolf", "drunk", "seer", "villager", "villager", "villager"]);
+    s = reduce(s, { type: "startNight" });
+    s = reduce(s, { type: "nightChoice", actorId: "p1", targetId: "p2" });
+    s = reduce(s, { type: "nightChoice", actorId: "p2", targetId: "p0" });
+    s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p3" });
+    s = reduce(s, { type: "endNight" });
+    expect(s.drugged).toEqual([]);
+    // Whatever they thought they were playing for, the Drunk wins with the village.
+    expect(wonGame({ id: "p1", roleId: "drunk", alive: false }, "village", null)).toBe(true);
   });
 
   it("startGame secretly assigns each Drunk a random mimicable role", () => {

@@ -116,6 +116,7 @@ export const ROLES: Record<string, RoleDef> = {
   },
   tanner: {
     id: "tanner",
+    drunkMimicable: true,
     weight: -2,
     autoFrom: 5,
     name: "Tanner",
@@ -161,6 +162,7 @@ export const ROLES: Record<string, RoleDef> = {
   },
   poisoner: {
     id: "poisoner",
+    drunkMimicable: true,
     weight: -3,
     autoFrom: 7,
     name: "Poisoner",

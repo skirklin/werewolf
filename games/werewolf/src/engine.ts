@@ -47,11 +47,11 @@ export function isPowerless(state: GameState, id: PlayerId): boolean {
  * the one exception, kept on purpose: a séance that fails at dawn is a good
  * reveal, and the table can't tell who held it. A `drunkMimicable` role must
  * have no night power or one of these kinds (a test enforces it); passive
- * powers (the Hunter's shot, the Prince's reprieve, the Cursed's turn) check
- * the real role, so a Drunk never triggers them — and is only found out once
- * it's dead.
+ * powers (the Hunter's shot, the Prince's reprieve, the Cursed's turn) and
+ * solo wins (the Tanner's, the Poisoner's) check the real role, so a Drunk
+ * never triggers them — and is only found out once it's dead.
  */
-export const DRUNK_MIMIC_KINDS: NightActionKind[] = ["inspect", "protect", "swap", "detect", "mark", "raise"];
+export const DRUNK_MIMIC_KINDS: NightActionKind[] = ["inspect", "protect", "swap", "detect", "mark", "raise", "block"];
 
 /** The role a player ACTS AS: their Drunk disguise if any, else their real role. */
 export function effectiveRoleId(state: GameState, id: PlayerId): string | null {
