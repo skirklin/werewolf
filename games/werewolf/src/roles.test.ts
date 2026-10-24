@@ -1137,3 +1137,158 @@ describe("fabricatedInspect", () => {
     expect(["villager", "werewolf", "seer", "doctor"]).toContain(fabricatedInspect(5, 2, "abc", "exactRole"));
   });
 });
+
+describe("Gravedigger", () => {
+  // The Gravedigger only makes sense while the dead keep their secrets.
+  const hidden = (roles: string[]): GameState => ({ ...gameWith(roles), config: { ...exact(), revealRoleOnDeath: false } });
+  /** Night 1: the wolf (p0) eats `victim`; then a quiet day, and night 2 falls. */
+  const afterFirstKill = (s: GameState, victim: string): GameState => {
+    s = reduce(s, { type: "startNight" });
+    s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: victim });
+    s = settleNight(s);
+    s = reduce(s, { type: "startVote" });
+    return settleVote(voteAll(s, () => null));
+  };
+
+  it("sleeps while nobody is dead (a decoy prompt keeps the phone busy)", () => {
+    let s = hidden(["werewolf", "gravedigger", "villager", "villager", "villager"]);
+    s = reduce(s, { type: "startNight" });
+    expect(s.night!.steps.map((st) => st.roleId)).toEqual(["werewolf"]);
+    expect(projectView(s, "p1").nightPrompt).toBeNull();
+    expect(projectView(s, "p1").idlePrompt).not.toBeNull();
+  });
+
+  it("digs up a dead player and learns their exact role — only the dead, only privately", () => {
+    let s = afterFirstKill(hidden(["werewolf", "gravedigger", "seer", "villager", "villager", "villager"]), "p2");
+    const prompt = projectView(s, "p1").nightPrompt!;
+    expect(prompt).toMatchObject({ kind: "inspect", roleId: "gravedigger" });
+    expect(prompt.targetIds).toEqual(["p2"]);
+    expect(() => reduce(s, { type: "nightChoice", actorId: "p1", targetId: "p3" })).toThrow();
+    s = reduce(s, { type: "nightChoice", actorId: "p1", targetId: "p2" });
+    expect(projectView(s, "p1").myInspects.at(-1)).toMatchObject({ targetId: "p2", reveal: "seer" });
+    expect(projectView(s, "p1").nightAwaitingAck).toBe(true);
+    expect(projectView(s, "p3").myInspects).toEqual([]);
+    expect(projectView(s, "p3").players.find((p) => p.id === "p2")!.roleId).toBeNull();
+  });
+
+  it("never digs the same grave twice, and sleeps once every grave is dug", () => {
+    let s = hidden(["werewolf", "gravedigger", "doctor", "villager", "villager", "villager", "villager"]);
+    s = reduce(s, { type: "startNight" });
+    s = reduce(s, { type: "nightChoice", actorId: "p2", targetId: "p4" });
+    s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p3" }); // p3 dies
+    s = settleNight(s);
+    s = reduce(s, { type: "startVote" });
+    s = settleVote(voteAll(s, () => null));
+    expect(projectView(s, "p1").nightPrompt!.targetIds).toEqual(["p3"]);
+    s = reduce(s, { type: "nightChoice", actorId: "p1", targetId: "p3" });
+    s = reduce(s, { type: "nightAck", actorId: "p1" });
+    s = reduce(s, { type: "nightChoice", actorId: "p2", targetId: "p5" });
+    s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p5" }); // saved: no new grave
+    s = settleNight(s);
+    s = reduce(s, { type: "startVote" });
+    s = settleVote(voteAll(s, () => null));
+    expect(s.night!.steps.some((st) => st.roleId === "gravedigger")).toBe(false);
+    expect(projectView(s, "p1").idlePrompt).not.toBeNull();
+  });
+
+  it("sees through a dead Drunk's disguise", () => {
+    let s: GameState = { ...hidden(["werewolf", "gravedigger", "drunk", "villager", "villager", "villager"]), drunkDisguise: { p2: "seer" } };
+    s = afterFirstKill(s, "p2");
+    s = reduce(s, { type: "nightChoice", actorId: "p1", targetId: "p2" });
+    expect(s.inspects.at(-1)!.reveal).toBe("drunk");
+  });
+
+  it("a Drunk posing as the Gravedigger digs up a made-up answer", () => {
+    let s: GameState = { ...hidden(["werewolf", "drunk", "seer", "villager", "villager", "villager"]), drunkDisguise: { p1: "gravedigger" } };
+    s = afterFirstKill(s, "p2");
+    expect(projectView(s, "p1").nightPrompt).toMatchObject({ roleId: "gravedigger", targetIds: ["p2"] });
+    s = reduce(s, { type: "nightChoice", actorId: "p1", targetId: "p2" });
+    expect(s.inspects.at(-1)!.reveal).toBe(fabricatedInspect(s.seed, s.round, "p2", "exactRole"));
+  });
+
+  it("sits out games that reveal the dead's roles", () => {
+    const players = (n: number): Player[] =>
+      Array.from({ length: n }, (_, i) => ({ id: `p${i}`, name: `P${i}`, roleId: null, alive: true, connected: true, isHost: false }));
+    const pool = (revealRoleOnDeath: boolean): GameConfig => ({
+      selection: { mode: "pool", overrides: { gravedigger: true } },
+      revealRoleOnDeath,
+      nightSummary: "discreet", peacefulFirstNight: false,
+    });
+    let dealtHidden = 0;
+    for (let seed = 0; seed < 40; seed++) {
+      expect(dealRoles(players(9), pool(true), makeRng(seed)).some((p) => p.roleId === "gravedigger")).toBe(false);
+      if (dealRoles(players(9), pool(false), makeRng(seed)).some((p) => p.roleId === "gravedigger")) dealtHidden++;
+    }
+    expect(dealtHidden).toBeGreaterThan(0);
+    const counts = { selection: { mode: "exact" as const, roleCounts: { werewolf: 1, gravedigger: 1 } }, nightSummary: "discreet" as const, peacefulFirstNight: false };
+    expect(validateConfig({ ...counts, revealRoleOnDeath: true }, 6).length).toBeGreaterThan(0);
+    expect(validateConfig({ ...counts, revealRoleOnDeath: false }, 6)).toEqual([]);
+  });
+});
+
+describe("Witness", () => {
+  it("killed in the night, vouches for a living player on the village's side — announced at dawn", () => {
+    let s = gameWith(["werewolf", "witness", "villager", "villager", "villager", "villager"]);
+    s = reduce(s, { type: "startNight" });
+    s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p1" });
+    s = reduce(s, { type: "endNight" });
+    const [killed, cleared] = s.announcement!.events;
+    expect(killed).toEqual({ t: "killed", playerId: "p1" });
+    expect(cleared).toMatchObject({ t: "cleared", witnessId: "p1" });
+    const named = (cleared as { playerId: string }).playerId;
+    expect(["p2", "p3", "p4", "p5"]).toContain(named);
+    expect(s.log.at(-1)).toEqual({ type: "cleared", round: 1, playerId: named });
+    expect(projectView(s, "p0").announcement!.events).toContainEqual(cleared); // the whole table hears it
+  });
+
+  it("voted out, vouches with the vote's result", () => {
+    let s: GameState = { ...gameWith(["werewolf", "witness", "villager", "villager", "villager", "villager"]), phase: "dayDiscussion", round: 1 };
+    s = reduce(s, { type: "startVote" });
+    s = reduce(voteAll(s, (v) => (v === "p1" ? "p0" : "p1")), { type: "resolveVote" });
+    expect(s.announcement!.events[0]).toEqual({ t: "votedOut", playerId: "p1" });
+    expect(s.announcement!.events[1]).toMatchObject({ t: "cleared", witnessId: "p1" });
+  });
+
+  it("taken down by a dying Hunter still gets their last words", () => {
+    let s = gameWith(["werewolf", "hunter", "witness", "villager", "villager", "villager", "villager"]);
+    s = reduce(s, { type: "startNight" });
+    s = reduce(s, { type: "nightChoice", actorId: "p1", targetId: "p2" });
+    s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p1" });
+    s = reduce(s, { type: "endNight" });
+    expect(s.announcement!.events.map((e) => e.t)).toEqual(["killed", "shot", "cleared"]);
+  });
+
+  it("never names a wolf, the Henchman, or a solo role (the Poisoner, the Tanner)", () => {
+    for (let seed = 0; seed < 30; seed++) {
+      let s: GameState = { ...gameWith(["werewolf", "witness", "henchman", "poisoner", "villager", "villager", "villager", "villager", "tanner"]), seed };
+      s = reduce(s, { type: "startNight" });
+      s = reduce(s, { type: "nightChoice", actorId: "p3", targetId: "p4" });
+      s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p1" });
+      s = reduce(s, { type: "endNight" });
+      const cleared = s.announcement!.events.find((e) => e.t === "cleared") as { playerId: string };
+      expect(["p4", "p5", "p6", "p7"]).toContain(cleared.playerId);
+    }
+  });
+
+  it("never vouches for someone already vouched for, and says nothing when nobody's left to name", () => {
+    let s: GameState = { ...gameWith(["werewolf", "witness", "witness", "villager"]), phase: "dayDiscussion", round: 1 };
+    s = { ...s, log: [...s.log, { type: "cleared", round: 0, playerId: "p3" }] };
+    s = reduce(s, { type: "startVote" });
+    s = reduce(voteAll(s, (v) => (v === "p1" ? "p0" : "p1")), { type: "resolveVote" });
+    // p2 (the other Witness) is the only one not yet vouched for.
+    expect(s.announcement!.events).toContainEqual({ t: "cleared", witnessId: "p1", playerId: "p2" });
+    let t: GameState = { ...gameWith(["werewolf", "witness", "henchman", "villager", "villager"]), phase: "dayDiscussion", round: 1 };
+    t = { ...t, log: [...t.log, { type: "cleared", round: 0, playerId: "p3" }, { type: "cleared", round: 0, playerId: "p4" }] };
+    t = reduce(t, { type: "startVote" });
+    t = reduce(voteAll(t, (v) => (v === "p1" ? "p0" : "p1")), { type: "resolveVote" });
+    expect(t.announcement!.events).toEqual([{ t: "votedOut", playerId: "p1" }]);
+  });
+
+  it("a Drunk posing as the Witness dies with nothing to say", () => {
+    let s: GameState = { ...gameWith(["werewolf", "drunk", "villager", "villager", "villager", "villager"]), drunkDisguise: { p1: "witness" } };
+    s = reduce(s, { type: "startNight" });
+    s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p1" });
+    s = reduce(s, { type: "endNight" });
+    expect(s.announcement!.events).toEqual([{ t: "killed", playerId: "p1" }]);
+  });
+});

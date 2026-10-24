@@ -96,7 +96,7 @@ export function RoleConfigEditor({
           </button>
         </div>
         {sel.mode === "pool" ? (
-          <PoolEditor sel={sel} playerCount={playerCount} onChange={setSelection} />
+          <PoolEditor sel={sel} playerCount={playerCount} revealRoleOnDeath={config.revealRoleOnDeath} onChange={setSelection} />
         ) : (
           <ExactEditor sel={sel} onChange={setSelection} />
         )}
@@ -137,16 +137,18 @@ export function RoleConfigEditor({
 function PoolEditor({
   sel,
   playerCount,
+  revealRoleOnDeath,
   onChange,
 }: {
   sel: Extract<RoleSelection, { mode: "pool" }>;
   playerCount: number;
+  revealRoleOnDeath: boolean;
   onChange: (s: RoleSelection) => void;
 }) {
   // The last role tapped, so its description shows without crowding the grid.
   const [shown, setShown] = useState<string | null>(null);
   const shownRole = poolEligibleRoles().find((r) => r.id === shown);
-  const inPool = new Set(rolePool(sel, playerCount));
+  const inPool = new Set(rolePool(sel, playerCount, revealRoleOnDeath));
   // Each tap moves a role along: automatic -> on -> off -> automatic.
   const cycle = (roleId: string) => {
     const { [roleId]: current, ...rest } = sel.overrides;
@@ -154,7 +156,9 @@ function PoolEditor({
     onChange({ ...sel, overrides: next === undefined ? rest : { ...rest, [roleId]: next } });
   };
   const setting = (role: RoleDef) =>
-    sel.overrides[role.id] === true ? "On" : sel.overrides[role.id] === false ? "Off" : role.autoFrom > 3 ? `Auto · ${role.autoFrom}+` : "Auto";
+    revealRoleOnDeath && role.needsHiddenDeaths
+      ? "Off · roles revealed"
+      : sel.overrides[role.id] === true ? "On" : sel.overrides[role.id] === false ? "Off" : role.autoFrom > 3 ? `Auto · ${role.autoFrom}+` : "Auto";
 
   return (
     <div className="stack">
@@ -218,6 +222,7 @@ function PoolEditor({
           {shownRole.emoji} <b>{shownRole.name}</b> — {shownRole.blurb}{" "}
           <span className="muted">
             Balance {signed(shownRole.weight)}.{shownRole.autoFrom > 3 && ` In automatically from ${shownRole.autoFrom} players.`}
+            {revealRoleOnDeath && shownRole.needsHiddenDeaths && " Left out while the dead's roles are revealed."}
           </span>
         </div>
       )}

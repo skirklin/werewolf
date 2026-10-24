@@ -149,10 +149,15 @@ export function validNightTargets(state: GameState, actorId: PlayerId): Player[]
   if (!playerById(state, actorId)?.alive || !roleId) return [];
   const ability = getRole(roleId).night;
   if (!ability) return [];
-  // The Medium calls on the dead; every other power picks among the living.
-  const candidates = ability.kind === "raise" ? state.players.filter((p) => !p.alive) : living(state);
+  // The Medium and the Gravedigger call on the dead; every other power picks among the living.
+  const candidates = ability.targetsDead ? state.players.filter((p) => !p.alive) : living(state);
+  // A grave already dug has nothing more to give.
+  const dug = ability.targetsDead && ability.kind === "inspect"
+    ? new Set(state.inspects.filter((r) => r.seerId === actorId).map((r) => r.targetId))
+    : null;
   const targets = candidates.filter((t) => {
     if (t.id === actorId && !ability.canTargetSelf) return false;
+    if (dug?.has(t.id)) return false;
     // The wolf team never targets its own: no eating or infecting the pack.
     if (onWolfTeam(roleId) && packmatesOf(state, actorId).includes(t.id)) return false;
     return true;
@@ -366,7 +371,6 @@ function startGame(state: GameState, config: GameConfig): GameState {
 /** Build the ordered night steps from the living players' roles. */
 function beginNight(state: GameState): GameState {
   const round = state.round + 1;
-  const deadExist = state.players.some((p) => !p.alive);
   // Group by EFFECTIVE role, so a Drunk wakes with (and alongside) the role it
   // impersonates. Its action comes to nothing (see isPowerless). A group (the
   // pack) never sees a Drunk among it, though: it hunts in a step of its own.
@@ -380,7 +384,7 @@ function beginNight(state: GameState): GameState {
     if ((ability.kind === "kill" || ability.kind === "witch") && round === 1 && state.config.peacefulFirstNight) continue;
     // A spent one-time power sleeps through; so does one with nothing to work on.
     if (ability.once && state.used[p.id]) continue;
-    if (ability.kind === "raise" && !deadExist) continue;
+    if (ability.targetsDead && validNightTargets(state, p.id).length === 0) continue;
     if (ability.kind === "convert" && !living(state).some((t) => t.roleId && !onWolfTeam(t.roleId))) continue;
     const key = ability.group && p.roleId === "drunk" ? p.id : roleId;
     const entry = byRole.get(key) ?? { roleId, actorIds: [] };
@@ -555,7 +559,8 @@ function pluralityTarget(step: NightStep, rng: () => number): PlayerId | null {
 // engine record) and independent of the truth (so they leak nothing). A fake
 // exact-role read is villager-heavy so it looks like a real Seer's result.
 const FAKE_ROLES = ["villager", "villager", "villager", "villager", "werewolf", "seer", "doctor"];
-function drunkHash(seed: number, round: number, s: string): number {
+/** A seed for one deterministic draw, keyed by the game, the round and a label. */
+function seedFor(seed: number, round: number, s: string): number {
   let h = 0;
   for (const ch of s) h = (h * 31 + ch.charCodeAt(0)) | 0;
   return seed + round * 131 + h;
@@ -568,14 +573,14 @@ export function fabricatedInspect(
   targetId: PlayerId,
   format: "exactRole" | "isWerewolf"
 ): string {
-  const rng = makeRng(drunkHash(seed, round, targetId));
+  const rng = makeRng(seedFor(seed, round, targetId));
   if (format === "isWerewolf") return rng() < 0.5 ? "werewolf" : "not-werewolf";
   return FAKE_ROLES[Math.floor(rng() * FAKE_ROLES.length)];
 }
 
 /** A stable fake "same team?" verdict for a Drunk mimicking the Detective. */
 export function fabricatedSameTeam(seed: number, round: number, aId: PlayerId, bId: PlayerId): boolean {
-  return makeRng(drunkHash(seed, round, `${aId}|${bId}`))() < 0.5;
+  return makeRng(seedFor(seed, round, `${aId}|${bId}`))() < 0.5;
 }
 
 /** Mark players dead (only those currently alive); collect any who owe a dying shot. */
@@ -619,6 +624,34 @@ function fireDyingShots(
     queue.push(...r.deadShooters);
   }
   return next;
+}
+
+/**
+ * Each Witness who died since `before` vouches for one living player on the
+ * village's side, out loud — never a wolf, a Henchman, or a solo role. The
+ * engine picks at random among those not already vouched for, so it can't be
+ * steered — and it's true as of the announcement: a later bite or swap can
+ * still turn them. Real roles only: a Drunk posing as the Witness dies with
+ * nothing to say.
+ */
+function witnessClears(
+  before: GameState,
+  players: Player[],
+  events: AnnouncementEvent[],
+  log: GameState["log"],
+  round: number
+): void {
+  const vouched = new Set(log.flatMap((e) => (e.type === "cleared" ? [e.playerId] : [])));
+  for (const w of players) {
+    if (w.alive || !w.roleId || !getRole(w.roleId).onDeathClears) continue;
+    if (!playerById(before, w.id)?.alive) continue; // died before now
+    const pool = players.filter((p) => p.alive && p.roleId && getRole(p.roleId).team === "village" && !vouched.has(p.id));
+    if (!pool.length) continue;
+    const playerId = pick(pool, makeRng(seedFor(before.seed, round, `witness|${w.id}`))).id;
+    vouched.add(playerId);
+    events.push({ t: "cleared", witnessId: w.id, playerId });
+    log.push({ type: "cleared", round, playerId });
+  }
 }
 
 /**
@@ -783,6 +816,8 @@ function endNight(state: GameState): GameState {
   // An apprentice whose master died (or was infected, or swapped away) takes over.
   const promotion = promoteSuccessors(players);
   players = promotion.players;
+  // Last of all, so a Witness's word holds for everything that happened tonight.
+  witnessClears(state, players, events, log, state.round);
 
   const next: GameState = {
     ...state,
@@ -1066,6 +1101,7 @@ function resolveVote(state: GameState): GameState {
   // Lost the Seer to the vote? Their apprentice takes over, and is told so
   // privately (this morning's news is old by now).
   const promotion = promoteSuccessors(afterShots);
+  witnessClears(state, promotion.players, events, log, state.round);
   const notices: GameState["notices"] = {};
   for (const id of promotion.promoted)
     notices[id] = { roleId: promotion.players.find((p) => p.id === id)!.roleId!, promoted: true };

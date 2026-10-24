@@ -234,7 +234,33 @@ export const ROLES: Record<string, RoleDef> = {
     emoji: "👻",
     blurb:
       "You've got exactly one séance in you. Once per game, on a night you choose, yank a dead player back to the land of the living.",
-    night: { kind: "raise", order: 5, once: true },
+    night: { kind: "raise", order: 5, once: true, targetsDead: true },
+  },
+  gravedigger: {
+    id: "gravedigger",
+    drunkMimicable: true,
+    needsHiddenDeaths: true,
+    weight: 3,
+    autoFrom: 7,
+    name: "Gravedigger",
+    team: "village",
+    emoji: "⚰️",
+    blurb:
+      "The town buries its secrets; you dig them back up. Each night, pick a grave and learn who its owner really was.",
+    // An exact-role read of the dead. No grave left unopened? You sleep.
+    night: { kind: "inspect", order: 22, targetsDead: true, reveal: "exactRole" },
+  },
+  witness: {
+    id: "witness",
+    drunkMimicable: true,
+    weight: 2,
+    autoFrom: 6,
+    name: "Witness",
+    team: "village",
+    emoji: "🕯️",
+    onDeathClears: true,
+    blurb:
+      "You've seen more than you let on. If you die — fangs or pitchforks — your last words vouch for someone: the whole town learns one living player is truly on the village's side.",
   },
 };
 

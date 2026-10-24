@@ -36,6 +36,8 @@ export class HeuristicStrategy implements Strategy {
       if (r.reveal === "not-werewolf" || (ROLES[r.reveal] && ROLES[r.reveal].team !== "werewolf"))
         clear.add(r.targetId);
     }
+    // A dying Witness's word is public: everyone may count it.
+    for (const e of view.log) if (e.type === "cleared") clear.add(e.playerId);
     return clear;
   }
 

@@ -67,6 +67,8 @@ export function validateConfig(config: GameConfig, playerCount: number): ConfigP
       if (count < 0) problems.push({ message: "A role can't be in the game fewer than zero times." });
       if (roleId === VILLAGER_ROLE_ID)
         problems.push({ message: "Villagers fill the empty seats on their own — no need to add them." });
+      else if (count > 0 && config.revealRoleOnDeath && getRole(roleId).needsHiddenDeaths)
+        problems.push({ message: `The ${getRole(roleId).name} has nothing to learn when the dead are revealed.` });
       else getRole(roleId); // throws on unknown role id
     }
     const assigned = exactDeck(sel, 0);
@@ -115,9 +117,18 @@ function balanceTarget(sel: RoleSelection): number {
   return BALANCE_TARGETS[(sel.mode === "pool" && sel.balance) || "even"];
 }
 
-/** The roles a pool deal may use at this table size: the host's overrides, else each role's autoFrom. */
-export function rolePool(sel: Extract<RoleSelection, { mode: "pool" }>, playerCount: number): string[] {
+/**
+ * The roles a pool deal may use at this table size: the host's overrides, else
+ * each role's autoFrom. With roles revealed on death, a role that only reads
+ * the dead (RoleDef.needsHiddenDeaths) is out whatever the host picked.
+ */
+export function rolePool(
+  sel: Extract<RoleSelection, { mode: "pool" }>,
+  playerCount: number,
+  revealRoleOnDeath = false
+): string[] {
   return poolEligibleRoles()
+    .filter((r) => !(revealRoleOnDeath && r.needsHiddenDeaths))
     .filter((r) => sel.overrides[r.id] ?? playerCount >= r.autoFrom)
     .map((r) => r.id);
 }
@@ -146,7 +157,7 @@ function splitPool(pool: readonly string[]) {
 function balancedDecks(config: GameConfig, playerCount: number, rng: () => number): string[][] {
   const sel = config.selection;
   if (sel.mode !== "pool") return [];
-  const pool = rolePool(sel, playerCount);
+  const pool = rolePool(sel, playerCount, config.revealRoleOnDeath);
   const { wolfSpecials, restPool } = splitPool(pool);
   const wolves = werewolfRange(sel, playerCount);
   const target = balanceTarget(sel);
@@ -224,7 +235,7 @@ export function possibleRoles(config: GameConfig, playerCount: number): string[]
     }
     if (total < playerCount) ids.add(VILLAGER_ROLE_ID);
   } else {
-    const pool = rolePool(sel, playerCount);
+    const pool = rolePool(sel, playerCount, config.revealRoleOnDeath);
     ids.add("werewolf");
     for (const id of pool) ids.add(id);
     // Seats the pool's specials can't fill go to Villagers (roles never repeat),

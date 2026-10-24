@@ -49,6 +49,8 @@ export interface NightAbility {
   group?: boolean;
   /** May the actor target themselves? */
   canTargetSelf?: boolean;
+  /** Picks among the dead instead of the living (the Medium, the Gravedigger). */
+  targetsDead?: boolean;
   /**
    * For `inspect` roles: how much the vision reveals.
    *  - "exactRole": the target's precise role (classic Seer).
@@ -80,6 +82,13 @@ export interface RoleDef {
   autoFrom: number;
   /** On death (night or vote), this player takes someone down with them. */
   onDeathShoot?: boolean;
+  /** On death (night or vote), the table learns one living player is on the village's side (the Witness). */
+  onDeathClears?: boolean;
+  /**
+   * Useless when dead players' roles are public (revealRoleOnDeath): a pool
+   * deal leaves it out, and an exact setup with it won't start (the Gravedigger).
+   */
+  needsHiddenDeaths?: boolean;
   /** The first time the town votes this player out, they're revealed and spared (Prince). */
   sparedOnFirstVote?: boolean;
   /** Bitten by the wolves, this player turns into a Werewolf instead of dying (the Cursed). */
@@ -234,7 +243,8 @@ export type AnnouncementEvent =
   | { t: "noVotes" }
   | { t: "shot"; shooterId: PlayerId; playerId: PlayerId } // a dying Hunter's shot
   | { t: "spared"; playerId: PlayerId; roleId: string } // voted out, but revealed and spared (Prince)
-  | { t: "died"; playerId: PlayerId }; // died in the night of no attack (the Infector, passing on the curse)
+  | { t: "died"; playerId: PlayerId } // died in the night of no attack (the Infector, passing on the curse)
+  | { t: "cleared"; witnessId: PlayerId; playerId: PlayerId }; // a dying Witness: playerId is on the village's side
 
 /**
  * What just happened, shown to everyone before play moves on: the dawn after
@@ -293,6 +303,7 @@ export type LogEntry =
   | { type: "voteTie"; round: number }
   | { type: "spared"; round: number; playerId: PlayerId }
   | { type: "died"; round: number; playerId: PlayerId }
+  | { type: "cleared"; round: number; playerId: PlayerId }
   | { type: "gameOver"; round: number; winner: Team };
 
 export interface GameState {

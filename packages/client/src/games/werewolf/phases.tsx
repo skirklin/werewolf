@@ -90,7 +90,7 @@ function TargetNightAction({ view, send }: { view: PlayerView; send: Send }) {
       <div className="phase-banner">
         <div className="big">{role.emoji}</div>
         <h2>{role.name}</h2>
-        <p className="muted">{NIGHT_PROMPT[prompt.kind]}</p>
+        <p className="muted">{role.night?.targetsDead ? "Choose a grave to dig up" : NIGHT_PROMPT[prompt.kind]}</p>
       </div>
       <NoticeCard view={view} />
       {pack.length > 0 && (
@@ -107,7 +107,9 @@ function TargetNightAction({ view, send }: { view: PlayerView; send: Send }) {
         disabled={!picked}
         onClick={() => picked && send({ type: "nightChoice", targetId: picked })}
       >
-        {picked ? `${NIGHT_VERB[prompt.kind] ?? "Choose"} ${nameOf(view.players, picked)}` : "Pick someone"}
+        {picked
+          ? `${role.night?.targetsDead ? "Dig up" : (NIGHT_VERB[prompt.kind] ?? "Choose")} ${nameOf(view.players, picked)}`
+          : "Pick someone"}
       </button>
       {prompt.canSkip && (
         <button className="ghost full" onClick={() => send({ type: "nightSkip" })}>
@@ -267,7 +269,11 @@ function InspectResultCard({ view }: { view: PlayerView }) {
       <div className="emoji">{isWolf ? "🐺" : "✅"}</div>
       <div className="rname">{target?.name}</div>
       <div className="blurb">
-        {isWolf ? "is a Werewolf." : last.reveal === "not-werewolf" ? "is not a werewolf." : `is the ${ROLES[last.reveal]?.name ?? last.reveal}.`}
+        {isWolf
+          ? "is a Werewolf."
+          : last.reveal === "not-werewolf"
+            ? "is not a werewolf."
+            : `${target?.alive === false ? "was" : "is"} the ${ROLES[last.reveal]?.name ?? last.reveal}.`}
       </div>
     </div>
   );
@@ -305,7 +311,7 @@ export function InspectHistory({ view }: { view: PlayerView }) {
   if (view.myInspects.length === 0) return null;
   return (
     <div className="card tight stack">
-      <b>🔮 Your visions</b>
+      <b>{ROLES[view.you.roleId ?? ""]?.night?.targetsDead ? "⚰️ What you've dug up" : "🔮 Your visions"}</b>
       {view.myInspects.map((r, i) => {
         const label =
           r.reveal === "werewolf"
@@ -435,6 +441,8 @@ export function AnnouncementScreen({
         return `👑 The town voted ${name(e.playerId)} out — but ${e.playerId === you ? "you're" : "they're"} the ${ROLES[e.roleId]?.name ?? "Prince"}! The town thinks better of it. Nobody goes.`;
       case "died":
         return `💀 ${Name(e.playerId)} ${e.playerId === you ? "were" : "was"} found dead — no wounds, no poison, just gone.${was(e.playerId)}`;
+      case "cleared":
+        return `🕯️ With their last words, ${name(e.witnessId)} vouched for ${name(e.playerId)}: ${e.playerId === you ? "you're" : "they're"} on the village's side.`;
     }
   };
   const next =

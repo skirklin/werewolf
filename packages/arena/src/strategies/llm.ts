@@ -508,6 +508,8 @@ function summarize(entry: PlayerView["log"][number], view: PlayerView): string {
       return `${who} died in the night`;
     case "spared":
       return `the town voted out ${who} on day ${entry.round}, but they were the Prince and were spared`;
+    case "cleared":
+      return `a dying Witness vouched for ${who}: truly on the village's side (as of then)`;
     default:
       return "";
   }
