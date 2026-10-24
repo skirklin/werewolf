@@ -222,6 +222,7 @@ export const ROLES: Record<string, RoleDef> = {
   },
   medium: {
     id: "medium",
+    drunkMimicable: true,
     canBreakTie: (state, id) => !state.used[id], // a raise puts the village ahead
     weight: 2,
     autoFrom: 8,

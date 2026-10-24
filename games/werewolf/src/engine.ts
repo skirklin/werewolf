@@ -42,14 +42,16 @@ export function isPowerless(state: GameState, id: PlayerId): boolean {
  * Night-action kinds the Drunk can fake without being found out while it
  * still matters. Effect kinds are nullified automatically (a Drunk's
  * submissions are stripped in endNight) and info kinds are fabricated (see
- * nightChoice / detectAction); either way the failure must be invisible. A
- * Gossip's silence or a Medium's raise would visibly not happen at dawn, so
- * those kinds are out. A `drunkMimicable` role must have no night power or
- * one of these kinds (a test enforces it); passive powers (the Hunter's shot,
- * the Prince's reprieve, the Cursed's turn) check the real role, so a Drunk
- * never triggers them — and is only found out once it's dead.
+ * nightChoice / detectAction); either way the failure should be invisible.
+ * A Gossip's silence would visibly not happen, so it's out. The Medium is
+ * the one exception, kept on purpose: a séance that fails at dawn is a good
+ * reveal, and the table can't tell who held it. A `drunkMimicable` role must
+ * have no night power or one of these kinds (a test enforces it); passive
+ * powers (the Hunter's shot, the Prince's reprieve, the Cursed's turn) check
+ * the real role, so a Drunk never triggers them — and is only found out once
+ * it's dead.
  */
-export const DRUNK_MIMIC_KINDS: NightActionKind[] = ["inspect", "protect", "swap", "detect", "mark"];
+export const DRUNK_MIMIC_KINDS: NightActionKind[] = ["inspect", "protect", "swap", "detect", "mark", "raise"];
 
 /** The role a player ACTS AS: their Drunk disguise if any, else their real role. */
 export function effectiveRoleId(state: GameState, id: PlayerId): string | null {
