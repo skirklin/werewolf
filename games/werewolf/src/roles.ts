@@ -44,7 +44,7 @@ export const ROLES: Record<string, RoleDef> = {
   infector: {
     id: "infector",
     weight: -7,
-    autoFrom: 9,
+    autoFrom: 8,
     name: "Infector",
     team: "werewolf",
     emoji: "🧛",
