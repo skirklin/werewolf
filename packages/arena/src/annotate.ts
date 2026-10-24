@@ -1,6 +1,6 @@
-import { readFile } from "node:fs/promises";
-import { ROLES, parseGameRecord, type GameRecord } from "@party/werewolf";
+import { ROLES, type GameRecord } from "@party/werewolf";
 import { SEAT_NAMES } from "./match.js";
+import { readRecords, readTranscript } from "./saved.js";
 import { ACCUSE, CLAIM } from "./speech.js";
 
 /**
@@ -24,13 +24,6 @@ import { ACCUSE, CLAIM } from "./speech.js";
  */
 const CONFESSION = /\b(my packmate|fellow (?:wolf|werewolf)|i(?:'m| am) (?:a|the) (?:wolf|werewolf)|we killed)\b/i;
 
-interface Line {
-  game: number;
-  day: number;
-  speaker: string;
-  text: string;
-}
-
 async function main() {
   const args = process.argv.slice(2);
   const files = args.filter((a) => !a.startsWith("--"));
@@ -45,8 +38,8 @@ async function main() {
   const claimsOnly = args.includes("--claims");
   const onlyGame = args.includes("--game") ? Number(args[args.indexOf("--game") + 1]) : null;
 
-  const records = await loadRecords(recordsFile);
-  const lines = await loadTranscript(transcriptFile);
+  const { records } = await readRecords(recordsFile);
+  const lines = await readTranscript(transcriptFile);
 
   let wolfLines = 0;
   let villageLines = 0;
@@ -122,31 +115,6 @@ function diedBefore(record: GameRecord, seat: number, day: number): boolean {
     if (e.type === "lynch" || e.type === "hunterShot") return e.round < day;
     return false;
   });
-}
-
-async function loadRecords(file: string): Promise<GameRecord[]> {
-  const text = await readFile(file, "utf8");
-  const out: GameRecord[] = [];
-  for (const line of text.split("\n")) {
-    if (!line.trim()) continue;
-    try {
-      const rec = parseGameRecord(JSON.parse(line));
-      if (rec) out.push(rec);
-    } catch {
-      /* skip a torn line */
-    }
-  }
-  return out;
-}
-
-async function loadTranscript(file: string): Promise<Line[]> {
-  const text = await readFile(file, "utf8");
-  const out: Line[] = [];
-  for (const raw of text.split("\n")) {
-    const m = raw.match(/^\[game (\d+) day (\d+)\] (\S+) \([^)]*\): (.*)$/);
-    if (m) out.push({ game: Number(m[1]), day: Number(m[2]), speaker: m[3], text: m[4] });
-  }
-  return out;
 }
 
 const pct = (part: number, whole: number) =>

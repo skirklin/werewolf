@@ -33,7 +33,7 @@ describe("passDeviceTurn", () => {
     const kinds: string[] = [];
     // Walk the whole night in seat order, acking each seat as we go.
     for (let guard = 0; guard < 20; guard++) {
-      const turn = passDeviceTurn(s, empty, acks);
+      const turn = passDeviceTurn(s, acks);
       if (turn.kind === "public") break;
       kinds.push(`${seatIds(turn)}:${turn.kind}`);
       acks.add(nightAckKey(s.round, seatIds(turn)));
@@ -46,7 +46,7 @@ describe("passDeviceTurn", () => {
       "p4:nightPass", // villager
     ]);
     // Everyone acked -> public (night ready to resolve).
-    expect(passDeviceTurn(s, empty, acks).kind).toBe("public");
+    expect(passDeviceTurn(s, acks).kind).toBe("public");
   });
 
   it("skips dead players at night", () => {
@@ -56,7 +56,7 @@ describe("passDeviceTurn", () => {
     const acks = new Set<string>();
     const seats: string[] = [];
     for (let g = 0; g < 20; g++) {
-      const turn = passDeviceTurn(s, empty, acks);
+      const turn = passDeviceTurn(s, acks);
       if (turn.kind === "public") break;
       seats.push(seatIds(turn));
       acks.add(nightAckKey(s.round, seatIds(turn)));
@@ -80,7 +80,7 @@ describe("passDeviceTurn", () => {
       },
     };
     // p0 not yet acked but has chosen -> gets a pass screen, not another action.
-    expect(passDeviceTurn(withChoice, empty, new Set()).kind).toBe("nightPass");
+    expect(passDeviceTurn(withChoice, new Set()).kind).toBe("nightPass");
   });
 
   it("during the day vote, prompts each living player who hasn't voted", () => {
@@ -89,11 +89,11 @@ describe("passDeviceTurn", () => {
     s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p1" });
     s = settleNight(s);
     s = reduce(s, { type: "startVote" });
-    const first = passDeviceTurn(s, empty, empty);
+    const first = passDeviceTurn(s, empty);
     expect(first.kind).toBe("vote");
     // After p0 votes, the next living non-voter is prompted.
     const voted = reduce(s, { type: "castVote", voterId: (first as any).seatId, targetId: "p2" });
-    const second = passDeviceTurn(voted, empty, empty);
+    const second = passDeviceTurn(voted, empty);
     expect(second.kind).toBe("vote");
     expect((second as any).seatId).not.toBe((first as any).seatId);
   });
@@ -102,7 +102,7 @@ describe("passDeviceTurn", () => {
     let s = nightGame(["werewolf", "villager", "villager"]);
     s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p1" });
     s = settleNight(s); // -> dayDiscussion
-    expect(passDeviceTurn(s, empty, empty).kind).toBe("public");
-    expect(passDeviceTurn(null, empty, empty).kind).toBe("public");
+    expect(passDeviceTurn(s, empty).kind).toBe("public");
+    expect(passDeviceTurn(null, empty).kind).toBe("public");
   });
 });

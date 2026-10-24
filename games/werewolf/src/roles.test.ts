@@ -1,12 +1,12 @@
 import { describe, it, expect } from "vitest";
 import { castVotes, voteAll, settleVote, settleNight } from "./testutil.js";
 import type { GameState, Player, GameConfig } from "./types.js";
-import { reduce, createGame, checkWinner, living, allVotesIn, validNightTargets, fabricatedReveal, fabricatedInspect, fabricatedSameTeam, DRUNK_MIMIC_KINDS } from "./engine.js";
+import { reduce, createGame, checkWinner, wonGame, living, allVotesIn, validNightTargets, fabricatedInspect, fabricatedSameTeam, DRUNK_MIMIC_KINDS } from "./engine.js";
 import { getRole } from "./roles.js";
 import { projectView } from "./views.js";
-import { dealRoles, validateConfig } from "./setup.js";
+import { dealRoles, validateConfig, onlyRoles } from "./setup.js";
 import { mimicableRoleIds } from "./roles.js";
-import { makeRng } from "./rng.js";
+import { makeRng } from "@party/core";
 
 function countRoles(players: Player[]): Record<string, number> {
   return players.reduce<Record<string, number>>((acc, p) => {
@@ -143,10 +143,21 @@ describe("Cursed", () => {
 });
 
 describe("Poisoner", () => {
-  it("knows the pack, and wins with it", () => {
+  it("is on its own: doesn't know the wolves, they don't know it, and it can spike anyone", () => {
+    let s = gameWith(["werewolf", "poisoner", "villager", "villager", "villager"]);
+    expect(projectView(s, "p1").packmates).toEqual([]);
+    expect(projectView(s, "p0").packmates).toEqual([]);
+    s = reduce(s, { type: "startNight" });
+    expect(projectView(s, "p1").nightPrompt!.targetIds).toContain("p0");
+  });
+
+  it("wins alongside whoever wins, if still alive", () => {
     const s = gameWith(["werewolf", "poisoner", "villager", "villager", "villager"]);
-    expect(projectView(s, "p1").packmates).toEqual(["p0"]);
-    expect(getRole("poisoner").team).toBe("werewolf");
+    const poisoner = s.players[1];
+    expect(wonGame(poisoner, "village", null)).toBe(true);
+    expect(wonGame(poisoner, "werewolf", null)).toBe(true);
+    expect(wonGame({ ...poisoner, alive: false }, "village", null)).toBe(false);
+    expect(wonGame(s.players[0], "village", null)).toBe(false);
   });
 
   it("spikes someone tonight; their power fails the NEXT night, and they can't tell", () => {
@@ -919,6 +930,21 @@ describe("Infector", () => {
   const infectorGame = () =>
     gameWith(["werewolf", "infector", "villager", "villager", "villager", "villager", "villager", "villager"]);
 
+  it("dies passing the curse on: the pack keeps its size, announced at dawn", () => {
+    let s = infectorGame();
+    s = reduce(s, { type: "startNight" });
+    s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p2" });
+    s = reduce(s, { type: "nightChoice", actorId: "p1", targetId: "p3" });
+    s = reduce(s, { type: "endNight" });
+    expect(alive(s, "p1")).toBe(false);
+    expect(s.players.find((p) => p.id === "p3")!.roleId).toBe("werewolf");
+    expect(s.announcement!.events).toEqual([
+      { t: "killed", playerId: "p2" },
+      { t: "died", playerId: "p1" },
+    ]);
+    expect(living(s).filter((p) => getRole(p.roleId!).team === "werewolf")).toHaveLength(2);
+  });
+
   it("turns a living non-wolf into a werewolf, once", () => {
     let s = infectorGame();
     s = reduce(s, { type: "startNight" });
@@ -962,27 +988,13 @@ describe("Infector", () => {
     expect(s.winner).toBe("werewolf");
   });
 
-  it("its spent flag follows the role through a Troublemaker swap", () => {
-    // p0 wolf, p1 infector, p2 troublemaker, p3-p7 villagers
-    let s = gameWith(["werewolf", "infector", "troublemaker", "villager", "villager", "villager", "villager", "villager"]);
-    s = reduce(s, { type: "startNight" });
-    s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p3" });
-    s = reduce(s, { type: "nightChoice", actorId: "p1", targetId: "p4" }); // infector converts p4
-    s = reduce(s, { type: "swapAction", actorId: "p2", aId: "p1", bId: "p5" }); // swap infector p1 <-> p5
-    s = settleNight(s);
-    // Conversion happened; the spent flag moved to whoever holds the infector role.
-    expect(s.players.find((p) => p.id === "p4")!.roleId).toBe("werewolf");
-    expect(s.players.find((p) => p.id === "p5")!.roleId).toBe("infector");
-    expect(s.convertUsed["p5"]).toBe(true);
-    expect(s.convertUsed["p1"]).toBeUndefined();
-  });
 });
 
 describe("wolf-team roles in the pool", () => {
   const players = (n: number): Player[] =>
     Array.from({ length: n }, (_, i) => ({ id: `p${i}`, name: `P${i}`, roleId: null, alive: true, connected: true, isHost: false }));
   const poolConfig = (pool: string[]): GameConfig => ({
-    selection: { mode: "pool", pool, werewolfRatio: 0.26 },
+    selection: { mode: "pool", overrides: onlyRoles(pool) },
     revealRoleOnDeath: false,
     nightSummary: "discreet", peacefulFirstNight: false,
   });
@@ -990,9 +1002,9 @@ describe("wolf-team roles in the pool", () => {
   it("can draw the Infector into a wolf slot, always keeping a base Werewolf", () => {
     let infected = 0;
     for (let seed = 0; seed < 40; seed++) {
-      const counts = countRoles(dealRoles(players(8), poolConfig(["villager", "infector", "seer", "doctor", "witch"]), makeRng(seed)));
+      const counts = countRoles(dealRoles(players(10), poolConfig(["villager", "infector", "seer", "doctor", "witch", "auraSeer", "hunter", "detective", "prince", "tanner"]), makeRng(seed)));
       expect(counts.werewolf).toBeGreaterThanOrEqual(1);
-      expect((counts.werewolf ?? 0) + (counts.infector ?? 0)).toBe(2); // 2 wolf seats at 8 players
+      expect([2, 3, 4]).toContain((counts.werewolf ?? 0) + (counts.infector ?? 0)); // 2-4 wolf seats at 10 players
       infected += counts.infector ?? 0;
     }
     expect(infected).toBeGreaterThan(0);
@@ -1007,24 +1019,25 @@ describe("wolf-team roles in the pool", () => {
     }
   });
 
-  it("deals the Henchman into a non-wolf seat (wolves still come from the ratio)", () => {
+  it("deals the Henchman into a non-wolf seat (wolves still come from the band)", () => {
     let seen = 0;
     for (let seed = 0; seed < 40; seed++) {
-      const counts = countRoles(dealRoles(players(8), poolConfig(["villager", "henchman", "seer", "doctor", "witch"]), makeRng(seed)));
-      expect(counts.werewolf).toBe(2);
+      const counts = countRoles(dealRoles(players(10), poolConfig(["villager", "henchman", "seer", "doctor", "witch"]), makeRng(seed)));
+      expect([2, 3]).toContain(counts.werewolf);
       seen += counts.henchman ?? 0;
     }
     expect(seen).toBeGreaterThan(0);
   });
 
-  it("rejects pooling the base Werewolf (it comes from the ratio)", () => {
-    expect(validateConfig(poolConfig(["werewolf", "villager"]), 6).length).toBeGreaterThan(0);
+  it("rejects pooling the base Werewolf (the dealer adds those)", () => {
+    const config = { ...poolConfig(["villager"]), selection: { mode: "pool" as const, overrides: { werewolf: true } } };
+    expect(validateConfig(config, 6).length).toBeGreaterThan(0);
   });
 });
 
-describe("fabricatedReveal", () => {
+describe("fabricatedInspect", () => {
   it("is deterministic and yields a plausible exact role", () => {
-    expect(fabricatedReveal(5, 2, "abc")).toBe(fabricatedReveal(5, 2, "abc"));
-    expect(["villager", "werewolf", "seer", "doctor"]).toContain(fabricatedReveal(5, 2, "abc"));
+    expect(fabricatedInspect(5, 2, "abc", "exactRole")).toBe(fabricatedInspect(5, 2, "abc", "exactRole"));
+    expect(["villager", "werewolf", "seer", "doctor"]).toContain(fabricatedInspect(5, 2, "abc", "exactRole"));
   });
 });

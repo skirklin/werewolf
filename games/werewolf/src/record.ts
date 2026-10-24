@@ -1,5 +1,6 @@
 import type { GameState, LogEntry, PlayerId, Team } from "./types.js";
-import { ROLES, getRole } from "./roles.js";
+import { ROLES } from "./roles.js";
+import { wonGame } from "./engine.js";
 
 /**
  * The anonymous record of a finished game, kept so we can answer questions like
@@ -99,10 +100,7 @@ export function toGameRecord(state: GameState, mode: GameMode): GameRecord | nul
       final,
       disguise: state.drunkDisguise[p.id] ?? null,
       survived: p.alive,
-      won:
-        winner === "solo"
-          ? p.id === state.soloWinnerId
-          : getRole(final).team === winner,
+      won: wonGame(p, winner, state.soloWinnerId),
       agent: null, // the arena labels its own seats after the fact
       said: said.get(p.id) ?? 0,
     };

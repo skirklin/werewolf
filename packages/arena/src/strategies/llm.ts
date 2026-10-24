@@ -1,7 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import {
   MAX_CHAT_TEXT,
-  previewComposition,
   ROLES,
   type WerewolfAction,
   type PlayerId,
@@ -65,10 +64,21 @@ export function totalSpend(strategies: readonly LlmStrategy[]): Spend {
   return spend;
 }
 
+/** The end-of-run API summary, with a per-game cost when `games` is given. */
+export function spendLine(spend: Spend, games = 0): string {
+  const cost = spend.dollars === null ? "unpriced model" : `~$${spend.dollars.toFixed(2)}`;
+  const perGame = spend.dollars !== null && games ? ` · $${(spend.dollars / games).toFixed(3)}/game` : "";
+  return (
+    `API: ${spend.calls} calls · ${kilo(spend.inputTokens)} in / ${kilo(spend.outputTokens)} out · ${cost}${perGame}` +
+    (spend.failures ? `\n${spend.failures} calls fell back to a random move.` : "") +
+    (spend.leaks ? `\n${spend.leaks} replies read as notes; ${spend.silences} of those cost a seat its turn.` : "")
+  );
+}
+
+const kilo = (n: number) => (n >= 1000 ? `${Math.round(n / 1000)}k` : String(n));
+
 export interface LlmOptions {
   model?: string;
-  /** Label used in the results table. Defaults to `llm:<model>`. */
-  name?: string;
   client?: Anthropic;
   /**
    * Which prompt variant this seat plays. Either a fixed playbook, or a choice
@@ -120,9 +130,8 @@ export class LlmStrategy implements Strategy {
   /** The model this seat is running, exposed so a run can price itself. */
   readonly modelId: string;
   private readonly client: Anthropic;
-  private readonly choose_playbook: Playbook | PlaybookChoice;
+  private readonly playbookChoice: Playbook | PlaybookChoice;
   private resolved: Playbook | null = null;
-  private readonly label: string | undefined;
   private readonly pinnedModel: boolean;
   private readonly fallback = new RandomStrategy();
   /** Rough running totals, reported at the end of a run. */
@@ -141,9 +150,8 @@ export class LlmStrategy implements Strategy {
 
   constructor(opts: LlmOptions = {}) {
     this.modelId = opts.model ?? DEFAULT_MODEL;
-    this.choose_playbook = opts.playbook ?? BASELINE;
+    this.playbookChoice = opts.playbook ?? BASELINE;
     this.client = opts.client ?? new Anthropic();
-    this.label = opts.name;
     this.pinnedModel = !!opts.model;
   }
 
@@ -154,7 +162,7 @@ export class LlmStrategy implements Strategy {
    */
   get playbook(): Playbook {
     if (this.resolved) return this.resolved;
-    return typeof this.choose_playbook === "function" ? BASELINE : this.choose_playbook;
+    return typeof this.playbookChoice === "function" ? BASELINE : this.playbookChoice;
   }
 
   /**
@@ -162,7 +170,7 @@ export class LlmStrategy implements Strategy {
    * testing; the model only appears when it was pinned explicitly.
    */
   get name(): string {
-    return this.label ?? `llm:${this.playbook.name}${this.pinnedModel ? `@${this.modelId}` : ""}`;
+    return `llm:${this.playbook.name}${this.pinnedModel ? `@${this.modelId}` : ""}`;
   }
 
   // -- prompt building ------------------------------------------------------
@@ -176,9 +184,9 @@ export class LlmStrategy implements Strategy {
     if (this.resolved) return;
     const team = view.you.roleId ? (ROLES[view.you.roleId]?.team ?? "village") : "village";
     this.resolved =
-      typeof this.choose_playbook === "function"
-        ? this.choose_playbook(team, view.you.roleId)
-        : this.choose_playbook;
+      typeof this.playbookChoice === "function"
+        ? this.playbookChoice(team, view.you.roleId)
+        : this.playbookChoice;
   }
 
   private system(view: PlayerView): string {
@@ -414,29 +422,17 @@ export class LlmStrategy implements Strategy {
 }
 
 /**
- * What every player knows before a word is said: the size of the table, how
- * many wolves are in it, which roles can appear, and the house rules. Public
- * knowledge at a real table — and without it an agent cannot count the wolves
- * down, or tell a quiet night caused by a house rule from one caused by a
- * doctor. It goes in the system prompt because it never changes during a game.
+ * What every player knows before a word is said: the size of the table,
+ * which roles can appear, and the house rules — without it an agent can't
+ * tell a quiet night caused by a house rule from one caused by a doctor. It
+ * goes in the system prompt because it never changes during a game.
  */
 function setup(view: PlayerView): string {
-  const total = view.players.length;
-  // Never let a prompt garnish break a turn: if the setup can't be described,
-  // the agent should still get its rules, role and situation.
-  let comp;
-  try {
-    comp = previewComposition(view.config, total);
-  } catch {
-    return "";
-  }
-  const parts = [
-    `The game: ${total} players, ${comp.werewolves} of them werewolves.`,
-  ];
+  const parts = [`The game: ${view.players.length} players. How many are werewolves isn't announced.`];
 
   const sel = view.config.selection;
   if (sel.mode === "pool") {
-    const names = sel.pool.map((id) => ROLES[id]?.name ?? id).join(", ");
+    const names = view.possibleRoles.filter((id) => id !== "werewolf").map((id) => ROLES[id]?.name ?? id).join(", ");
     parts.push(`Everyone else is drawn from: ${names}.`);
   } else {
     const named = Object.entries(sel.roleCounts)
@@ -508,6 +504,8 @@ function summarize(entry: PlayerView["log"][number], view: PlayerView): string {
       return `night ${entry.round} passed with nobody killed`;
     case "voteTie":
       return `the vote on day ${entry.round} was a tie, so nobody went`;
+    case "died":
+      return `${who} died in the night`;
     case "spared":
       return `the town voted out ${who} on day ${entry.round}, but they were the Prince and were spared`;
     default:

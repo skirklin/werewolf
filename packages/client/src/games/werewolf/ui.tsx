@@ -1,8 +1,18 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState } from "react";
 import { ROLES, type Phase, type PlayerView, type PublicPlayer, type LogEntry, type VoteRecord } from "@party/werewolf";
 
+type Named = { id: string; name: string };
+
+/** A player's name by id ("someone" if they're not in the list). */
+export const nameOf = (players: readonly Named[], id: string) => players.find((p) => p.id === id)?.name ?? "someone";
+
+export const hostName = (players: readonly PublicPlayer[]) => players.find((p) => p.isHost)?.name ?? "The host";
+
+/** The viewer's fellow wolves, by name (empty for everyone else). */
+export const packNames = (view: PlayerView) => view.players.filter((p) => view.packmates.includes(p.id)).map((p) => p.name);
+
 /** Whether the table should be quiet (night) or talking (day) in a phase. */
-export function timeOfDay(phase: Phase): "day" | "night" | null {
+function timeOfDay(phase: Phase): "day" | "night" | null {
   if (phase === "roleReveal" || phase === "night") return "night";
   if (phase === "dayDiscussion" || phase === "dayVote" || phase === "announce") return "day";
   return null;
@@ -20,16 +30,16 @@ export function useTimeTheme(phase: Phase | null) {
   }, [time]);
 }
 
-/**
- * The screen's header line: which night or day it is, and whether the table
- * may talk. One line instead of a badge plus a separate title.
- */
+/** Which night or day it is, and whether the table may talk. */
+export function timeLabel(time: "day" | "night", round: number): string {
+  if (time === "night") return `🌙 ${round > 0 ? `Night ${round}` : "Before nightfall"} · no talking`;
+  return `☀️ Day ${round} · talk it over`;
+}
+
+/** The screen's header line. One line instead of a badge plus a separate title. */
 export function TimeBadge({ phase, round }: { phase: Phase; round: number }) {
   const time = timeOfDay(phase);
-  if (!time) return null;
-  if (time === "night")
-    return <div className="time-badge">🌙 {round > 0 ? `Night ${round}` : "Before nightfall"} · no talking</div>;
-  return <div className="time-badge">☀️ Day {round} · talk it over</div>;
+  return time ? <div className="time-badge">{timeLabel(time, round)}</div> : null;
 }
 
 /** Log entries that belong to a day's vote (as opposed to a night). */
@@ -59,7 +69,7 @@ export function TownNews({
   return (
     <div className="stack" style={{ gap: 8 }}>
       <LogFeed log={shownLog} players={players} limit={all ? 50 : 8} />
-      <VoteHistory history={shownVotes} players={players} limit={shownVotes.length} />
+      <VoteHistory history={shownVotes} players={players} />
       {hasEarlier && (
         <button className="ghost small" style={{ alignSelf: "center" }} onClick={() => setAll((v) => !v)}>
           {all ? "Show just the latest" : "Show earlier days"}
@@ -75,16 +85,7 @@ export function TownNews({
  * to hand without crowding the screen. Tap a role to read what it does, so
  * players can answer "wait, what does the Witch do?" themselves.
  */
-export function RolesInPlay({
-  roleIds,
-  wolves,
-  open = false,
-}: {
-  roleIds: string[];
-  /** How many werewolves the setup could deal. */
-  wolves?: { min: number; max: number };
-  open?: boolean;
-}) {
+export function RolesInPlay({ roleIds, open = false }: { roleIds: string[]; open?: boolean }) {
   const [expanded, setExpanded] = useState(open);
   const [shown, setShown] = useState<string | null>(null);
   if (roleIds.length === 0) return null;
@@ -107,18 +108,6 @@ export function RolesInPlay({
           </button>
         )}
       </div>
-      {wolves && (
-        <div className="small">
-          🐺{" "}
-          {wolves.min === wolves.max ? (
-            <b>{wolves.min} {wolves.min === 1 ? "werewolf" : "werewolves"}</b>
-          ) : (
-            <>
-              <b>{wolves.min} or {wolves.max} werewolves</b> — the village can't be sure which
-            </>
-          )}
-        </div>
-      )}
       <div className="roles-list">
         {roleIds.map((id) => (
           <button
@@ -145,20 +134,15 @@ export function RolesInPlay({
 }
 
 /** Who voted for whom, day by day (votes are public). Most recent first. */
-export function VoteHistory({ history, players, limit = 1 }: { history: VoteRecord[]; players: PublicPlayer[]; limit?: number }) {
-  if (history.length === 0) return null;
-  const name = (id: string) => players.find((p) => p.id === id)?.name ?? "someone";
+function VoteHistory({ history, players }: { history: VoteRecord[]; players: PublicPlayer[] }) {
   return (
     <>
-      {history
-        .slice(-limit)
-        .reverse()
-        .map((rec) => (
-          <div key={rec.round} className="card tight stack">
-            <b className="small">🗳️ Day {rec.round} vote</b>
-            <BallotLines votes={rec.votes} name={name} />
-          </div>
-        ))}
+      {[...history].reverse().map((rec) => (
+        <div key={rec.round} className="card tight stack">
+          <b className="small">🗳️ Day {rec.round} vote</b>
+          <BallotLines votes={rec.votes} name={(id) => nameOf(players, id)} />
+        </div>
+      ))}
     </>
   );
 }
@@ -185,10 +169,6 @@ export function BallotLines({ votes, name }: { votes: Record<string, string | nu
   );
 }
 
-export function Screen({ children, className = "" }: { children: ReactNode; className?: string }) {
-  return <div className={`app ${className}`}>{children}</div>;
-}
-
 export function roleEmoji(roleId: string | null): string {
   return roleId ? ROLES[roleId]?.emoji ?? "❔" : "❔";
 }
@@ -201,12 +181,10 @@ export function roleEmoji(roleId: string | null): string {
 export function PlayerChip({
   player,
   you,
-  tag,
   showPresence = false,
 }: {
   player: PublicPlayer;
   you?: boolean;
-  tag?: ReactNode;
   showPresence?: boolean;
 }) {
   // Never your own role on a shared board: the person beside you can see your screen.
@@ -223,7 +201,6 @@ export function PlayerChip({
         </span>
         {(role || offline) && <span className="muted sub">{[role?.name, offline ? "offline" : ""].filter(Boolean).join(" · ")}</span>}
       </span>
-      {tag}
     </div>
   );
 }
@@ -239,47 +216,16 @@ export function RoleCard({ view }: { view: PlayerView }) {
       <div className="blurb">{role.blurb}</div>
       {view.packmates.length > 0 && (
         <div className="small" style={{ marginTop: 14 }}>
-          🐺 Your pack:{" "}
-          <b>
-            {view.players
-              .filter((p) => view.packmates.includes(p.id))
-              .map((p) => p.name)
-              .join(", ")}
-          </b>
+          🐺 Your pack: <b>{packNames(view).join(", ")}</b>
         </div>
       )}
     </div>
   );
 }
 
-export function InspectHistory({ view }: { view: PlayerView }) {
-  if (view.myInspects.length === 0) return null;
-  return (
-    <div className="card tight stack">
-      <b>🔮 Your visions</b>
-      {view.myInspects.map((r, i) => {
-        const target = view.players.find((p) => p.id === r.targetId);
-        const label =
-          r.reveal === "werewolf"
-            ? "🐺 Werewolf"
-            : r.reveal === "not-werewolf"
-              ? "✅ Not a werewolf"
-              : ROLES[r.reveal]?.name ?? r.reveal;
-        return (
-          <div key={i} className="spread small">
-            <span>Night {r.round}: {target?.name}</span>
-            <b>{label}</b>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
 export function LogFeed({ log, players, limit = 8 }: { log: LogEntry[]; players: PublicPlayer[]; limit?: number }) {
-  const name = (id: string) => players.find((p) => p.id === id)?.name ?? "someone";
   const lines = log
-    .map((e) => describe(e, name))
+    .map((e) => describe(e, (id) => nameOf(players, id)))
     .filter((x): x is string => x !== null)
     .slice(-limit);
   if (lines.length === 0) return null;
@@ -312,6 +258,8 @@ function describe(e: LogEntry, name: (id: string) => string): string | null {
       return `👻 the Medium's séance worked — ${name(e.playerId)} is back among the living.`;
     case "voteTie":
       return `🗳️ Day ${e.round}: the vote tied — nobody eliminated.`;
+    case "died":
+      return `💀 ${name(e.playerId)} died in the night.`;
     case "spared":
       return `👑 Day ${e.round}: the town voted out ${name(e.playerId)}, who turned out to be the Prince — and was spared.`;
     default:

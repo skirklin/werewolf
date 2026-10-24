@@ -1,24 +1,23 @@
-import { appendFile, mkdir } from "node:fs/promises";
-import { dirname } from "node:path";
+import { appendFile } from "node:fs/promises";
 import {
   aggregate,
   recommendedConfig,
-  werewolfCountFor,
-  DEFAULT_WEREWOLF_RATIO,
+  werewolfRange,
   type GameConfig,
   type GameRecord,
 } from "@party/werewolf";
+import { ensureDir, parseArgs, pct, type Args } from "./args.js";
 import { Arena } from "./match.js";
 import { makeStrategy } from "./lineup.js";
-import { LlmStrategy, totalSpend } from "./strategies/llm.js";
+import { LlmStrategy, spendLine, totalSpend } from "./strategies/llm.js";
+import { parseRoles } from "./table.js";
 
 /**
  * Sweep table size against wolf count and report how the odds move.
  *
- * The ratio in the game config is a means, not the thing itself: it is rounded
- * to a whole number of wolves and clamped so the wolves cannot start at parity,
- * so several ratios collapse to the same game. This sweeps the wolf count
- * directly and reports which ratios would land on it.
+ * Each cell is a fixed deck (exact counts: that many wolves, one of each pool
+ * special, Villagers for the rest), so it measures the wolf count itself
+ * rather than whatever the balanced dealer would pair with it.
  *
  * Read the result with the difference between floor and ceiling in mind. A
  * `random` sweep measures what a table with no information wins, which is the
@@ -112,23 +111,18 @@ async function main() {
   }
 
   console.log(`\n${grid(cells)}`);
-  if (seats.length) {
-    const spend = totalSpend(seats);
-    console.log(`\nAPI: ${spend.calls} calls · ~$${(spend.dollars ?? 0).toFixed(2)}`);
-  }
+  if (seats.length) console.log(`\n${spendLine(totalSpend(seats))}`);
   if (outFile) console.log(`Records appended to ${outFile}`);
 }
 
 function configFor(players: number, wolves: number, args: Args): GameConfig {
   const base = recommendedConfig(players);
-  const pool =
-    typeof args.roles === "string"
-      ? args.roles.split(",").map((r) => r.trim()).filter(Boolean)
-      : ["villager", "seer", "doctor"];
-  // A ratio of wolves/players rounds to exactly that many wolves.
+  const pool = parseRoles(args) ?? ["villager", "seer", "doctor"];
+  const roleCounts: Record<string, number> = { werewolf: wolves };
+  for (const id of pool) if (id !== "villager") roleCounts[id] = 1;
   return {
     ...base,
-    selection: { mode: "pool", pool, werewolfRatio: wolves / players },
+    selection: { mode: "exact", roleCounts },
     peacefulFirstNight: !args.lethal,
   };
 }
@@ -148,15 +142,10 @@ function grid(cells: Cell[]): string {
   }
 
   lines.push("");
-  lines.push("Wolf share of the table, and what the shipped default picks");
+  lines.push("Wolf counts the shipped dealer may pick from");
   for (const p of players) {
-    const shipped = werewolfCountFor(p, DEFAULT_WEREWOLF_RATIO);
-    const cell = cells.find((c) => c.players === p && c.wolves === shipped);
-    lines.push(
-      `  ${String(p).padEnd(3)} players → default deals ${shipped} wolves ` +
-        `(${pct(shipped / p)} of the table)` +
-        (cell ? `, village wins ${pct(cell.villageWins / cell.games)}` : "")
-    );
+    const { min, max } = werewolfRange(recommendedConfig(p).selection, p);
+    lines.push(`  ${String(p).padEnd(3)} players → ${min === max ? min : `${min}-${max}`} wolves`);
   }
 
   lines.push("");
@@ -175,8 +164,6 @@ function grid(cells: Cell[]): string {
   return lines.join("\n");
 }
 
-type Args = Record<string, string | boolean>;
-
 function numbers(value: string | boolean | undefined, fallback: number[]): number[] {
   if (typeof value !== "string") return fallback;
   const out = value
@@ -185,29 +172,6 @@ function numbers(value: string | boolean | undefined, fallback: number[]): numbe
     .filter((n) => Number.isInteger(n) && n > 0);
   return out.length ? out : fallback;
 }
-
-async function ensureDir(file: string) {
-  const dir = dirname(file);
-  if (dir && dir !== ".") await mkdir(dir, { recursive: true });
-}
-
-function parseArgs(argv: string[]): Args {
-  const out: Args = {};
-  for (let i = 0; i < argv.length; i++) {
-    const arg = argv[i];
-    if (!arg.startsWith("--")) continue;
-    const key = arg.slice(2);
-    const next = argv[i + 1];
-    if (next && !next.startsWith("--")) {
-      out[key] = next;
-      i++;
-    } else out[key] = true;
-  }
-  if ("help" in out || "h" in out) out.help = true;
-  return out;
-}
-
-const pct = (n: number) => `${Math.round(n * 100)}%`;
 
 main().catch((err) => {
   console.error(`\n${err instanceof Error ? err.message : String(err)}`);

@@ -17,7 +17,7 @@ export class ArenaClient {
   private room: RoomInfo | null = null;
   private waiters: (() => void)[] = [];
   /** Server-side complaints (illegal move, wrong phase). Handy when debugging a strategy. */
-  readonly errors: string[] = [];
+  private readonly errors: string[] = [];
   playerId = "";
   code = "";
 
@@ -52,10 +52,9 @@ export class ArenaClient {
     this.raw({ type: "act", action });
   }
 
-  /** Deal the game (host only), and wait for this seat's first view of it. */
-  async startGame(config: GameConfig): Promise<PlayerView> {
+  /** Deal the game (host only). */
+  startGame(config: GameConfig) {
     this.raw({ type: "startGame", config });
-    return this.waitFor(() => true, "the deal");
   }
 
   /** The last view the server sent, or null before the first one arrives. */
@@ -75,8 +74,8 @@ export class ArenaClient {
   }
 
   /** Wait until the room has this many players in it. */
-  waitForPlayers(n: number): Promise<RoomInfo> {
-    return this.until(() => (this.room && this.room.players.length === n ? this.room : undefined), "a full lobby");
+  async waitForPlayers(n: number): Promise<void> {
+    await this.until(() => (this.room?.players.length === n ? true : undefined), "a full lobby");
   }
 
   /** Wait for a view that satisfies `pred`. Throws rather than hang forever. */

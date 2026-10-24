@@ -78,7 +78,7 @@ export const werewolfModule: GameModule<GameConfig, GameState, PlayerView> & {
 };
 
 /** Translate a move off the wire into an engine action, checking who may make it. */
-function toEngineAction(actorId: string, msg: WerewolfAction, isHost: boolean): Action {
+export function toEngineAction(actorId: string, msg: WerewolfAction, isHost: boolean): Action {
   const hostOnly = () => {
     if (!isHost) throw new GameError("Only the host can do that.");
   };

@@ -34,8 +34,8 @@ HOMELAB_VPS=user@host
 
 - **`../Dockerfile`** — builds the client and runs the server on :3000.
 - **`werewolf.yaml`** — k8s Deployment, Service and a 1Gi PersistentVolumeClaim
-  (namespace `homelab`). The volume holds the anonymous finished-game records,
-  so the stats survive a redeploy.
+  (namespace `homelab`). The volume holds the anonymous finished-game records
+  and the saved live rooms, so the stats and games in progress survive a redeploy.
 - **`deploy.sh`** — build → push → apply → restart.
 - **`caddy-block.txt`** — the site block to add to your Caddyfile. It names a
   host; change it to your own domain.

@@ -75,7 +75,7 @@ export class Arena {
 
     const clients: ArenaClient[] = [];
     try {
-      for (const [i] of strategies.entries()) {
+      for (let i = 0; i < strategies.length; i++) {
         const client = await ArenaClient.connect(this.url);
         const name = seatName(i);
         if (i === 0) await client.createRoom(name);
@@ -132,7 +132,7 @@ export class Arena {
       return view?.you.alive ? view : null;
     };
 
-    await host.startGame(config);
+    host.startGame(config);
     for (let step = 0; step < MAX_STEPS; step++) {
       const view = await host.waitFor(() => true, "the first view");
       if (view.phase === "gameOver") {

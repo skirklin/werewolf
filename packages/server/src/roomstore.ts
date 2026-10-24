@@ -34,13 +34,12 @@ export class RoomStore {
 
   /** Write the rooms if anything changed since the last write. Never throws. */
   save(rooms: RoomSnapshot[]): void {
-    const text = JSON.stringify({ savedAt: new Date().toISOString(), rooms });
     // Compare without the timestamp, so an idle server doesn't rewrite forever.
     const body = JSON.stringify(rooms);
     if (body === this.last) return;
     try {
       const tmp = `${this.file}.tmp`;
-      writeFileSync(tmp, text);
+      writeFileSync(tmp, `{"savedAt":${JSON.stringify(new Date().toISOString())},"rooms":${body}}`);
       renameSync(tmp, this.file);
       this.last = body;
       this.failed = false;

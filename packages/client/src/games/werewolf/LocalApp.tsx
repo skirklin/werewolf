@@ -2,22 +2,15 @@ import { useState } from "react";
 import {
   recommendedConfig,
   validateConfig,
-  getRole,
-  fabricatedInspect,
-  fabricatedSameTeam,
-  isWolfForWin,
-  isPowerless,
   publicPlayers,
   publicLog,
   type GameConfig,
-  type GameState,
   type PlayerView,
-  type Turn,
 } from "@party/werewolf";
 import { useLocalGame } from "./local.js";
 import { RoleConfigEditor } from "./config.js";
-import { RoleCard, LogFeed, RolesInPlay, TownNews, BallotLines, useTimeTheme } from "./ui.js";
-import { TargetGrid, WitchPanel, SwapPanel, RaisePanel, SilencedNote, GameOver, PlayerList, AnnouncementScreen, NoticeCard } from "./phases.js";
+import { RoleCard, LogFeed, RolesInPlay, TownNews, BallotLines, useTimeTheme, timeLabel, nameOf } from "./ui.js";
+import { TargetGrid, NightAction, NightResult, ColdShoulderNote, GameOver, PlayerList, AnnouncementScreen, NoticeCard } from "./phases.js";
 
 export function LocalApp({ onExit }: { onExit: () => void }) {
   const game = useLocalGame();
@@ -29,11 +22,13 @@ export function LocalApp({ onExit }: { onExit: () => void }) {
 // Setup
 // ---------------------------------------------------------------------------
 
+const NAMES_KEY = "werewolf.localNames";
+
 /** Last game's roster (so families don't retype names every time), min 4 rows. */
 function loadNames(): string[] {
   let saved: string[] = [];
   try {
-    const raw = localStorage.getItem("werewolf.localNames");
+    const raw = localStorage.getItem(NAMES_KEY);
     if (raw) saved = (JSON.parse(raw) as string[]).filter((n) => typeof n === "string");
   } catch {
     /* ignore */
@@ -56,7 +51,7 @@ function Setup({
 
   const start = () => {
     try {
-      localStorage.setItem("werewolf.localNames", JSON.stringify(filled));
+      localStorage.setItem(NAMES_KEY, JSON.stringify(filled));
     } catch {
       /* ignore storage errors */
     }
@@ -105,11 +100,6 @@ function Setup({
 // Play
 // ---------------------------------------------------------------------------
 
-function turnId(turn: Turn, round: number): string {
-  const seat = "seatId" in turn ? turn.seatId : "-";
-  return `${turn.kind}:${seat}:${round}`;
-}
-
 function LocalPlay({
   game,
   onExit,
@@ -117,34 +107,12 @@ function LocalPlay({
   game: ReturnType<typeof useLocalGame>;
   onExit: () => void;
 }) {
-  const { state, turn, view } = game;
+  const { state, turn, seatId, view } = game;
   const [openedTurn, setOpenedTurn] = useState<string>("");
   const [nightIntroRound, setNightIntroRound] = useState<number>(-1);
   const [seenRole, setSeenRole] = useState<Set<string>>(new Set());
   useTimeTheme(state?.phase ?? null);
   if (!state || !view) return null;
-
-  // The inspector's own vision, matching exactly what the engine will record.
-  // Seer = exact role, Aura Seer = werewolf-or-not, and a Drunk mimicking either
-  // gets a deterministic fake in the same format.
-  const resolveInspect = (targetId: string) => {
-    const t = state.players.find((p) => p.id === targetId)!;
-    const seatId = "seatId" in turn ? turn.seatId : "";
-    const seat = state.players.find((p) => p.id === seatId)!;
-    const drunk = isPowerless(state, seatId); // the Drunk, or poisoned last night
-    const effRole = state.drunkDisguise[seatId] ?? seat.roleId!;
-    const format = getRole(effRole).night?.reveal ?? "exactRole";
-    const reveal = drunk
-      ? fabricatedInspect(state.seed, state.round, targetId, format)
-      : format === "exactRole"
-        ? t.roleId!
-        : isWolfForWin(t.roleId!)
-          ? "werewolf"
-          : "not-werewolf";
-    if (reveal === "werewolf") return { name: t.name, isWolf: true, label: "is a Werewolf." };
-    if (reveal === "not-werewolf") return { name: t.name, isWolf: false, label: "is not a werewolf." };
-    return { name: t.name, isWolf: false, label: `is the ${getRole(reveal).name}` };
-  };
 
   if (state.phase === "gameOver") {
     return (
@@ -158,7 +126,7 @@ function LocalPlay({
   // Public: night intro — a beat to recap the day and tell everyone eyes closed.
   if (state.phase === "night" && nightIntroRound !== state.round) {
     return (
-      <Public title={`🌙 Night ${state.round} · no talking`} onExit={onExit}>
+      <Public title={timeLabel("night", state.round)} onExit={onExit}>
         <LogFeed log={publicLog(state).filter((e) => e.round >= state.round - 1)} players={publicPlayers(state)} />
         <p className="muted center">Everyone, close your eyes. Pass the phone around as prompted.</p>
         <button className="primary full lg" onClick={() => setNightIntroRound(state.round)}>
@@ -171,11 +139,11 @@ function LocalPlay({
   // Public: day board.
   if (state.phase === "dayDiscussion") {
     return (
-      <Public title={`☀️ Day ${state.round} · talk it over`} onExit={onExit}>
+      <Public title={timeLabel("day", state.round)} onExit={onExit}>
         <TownNews log={publicLog(state)} voteHistory={view.voteHistory} round={state.round} players={publicPlayers(state)} />
-        <SilencedNote view={view} />
+        <ColdShoulderNote view={view} />
         <PlayerList players={publicPlayers(state)} youId="-" />
-        <RolesInPlay roleIds={view.possibleRoles} wolves={view.wolfCount} />
+        <RolesInPlay roleIds={view.possibleRoles} />
         <p className="muted center small">Talk it out. When you're ready, put it to a vote.</p>
         <button className="primary full lg" onClick={game.callVote}>Call a vote</button>
       </Public>
@@ -193,19 +161,18 @@ function LocalPlay({
     );
   }
 
-  // Private turns behind a handoff gate.
-  const tid = turnId(turn, state.round);
-  const seatId = "seatId" in turn ? turn.seatId : "";
-  const seatName = state.players.find((p) => p.id === seatId)?.name ?? "";
-  if (openedTurn !== tid) return <Handoff name={seatName} onOpen={() => setOpenedTurn(tid)} />;
+  // Private turns behind a handoff gate, one per seat per phase.
+  if (!seatId) return null;
+  const tid = `${state.phase}:${seatId}:${state.round}`;
+  if (openedTurn !== tid) return <Handoff name={nameOf(state.players, seatId)} onOpen={() => setOpenedTurn(tid)} />;
 
-  // First time this player holds the device: show their secret role (folds the
-  // old separate role-reveal pass into the night, so the device circles once).
-  if ((turn.kind === "night" || turn.kind === "nightPass") && !seenRole.has(seatId)) {
+  // First time this player holds the device: show their secret role, so the
+  // device only has to circle once.
+  if (state.phase === "night" && !seenRole.has(seatId)) {
     return (
       <div className="app">
         <RoleCard view={view} />
-        <div style={{ marginTop: 12 }}><RolesInPlay roleIds={view.possibleRoles} wolves={view.wolfCount} open /></div>
+        <div style={{ marginTop: 12 }}><RolesInPlay roleIds={view.possibleRoles} open /></div>
         <div className="spacer" />
         <p className="muted center small">Memorize it! You'll act on it now, then pass the phone along.</p>
         <button className="primary full lg" onClick={() => setSeenRole((s) => new Set(s).add(seatId))}>
@@ -217,16 +184,10 @@ function LocalPlay({
 
   switch (turn.kind) {
     case "night":
-      if (view.nightPrompt?.kind === "witch")
-        return <div className="app"><WitchPanel view={view} onSubmit={game.submitWitch} /></div>;
-      if (view.nightPrompt?.kind === "swap")
-        return <div className="app"><SwapPanel view={view} onSubmit={game.submitSwap} onSkip={game.submitSkip} /></div>;
-      if (view.nightPrompt?.kind === "detect")
-        return <DetectTurn state={state} view={view} onSubmit={game.submitDetect} />;
-      if (view.nightPrompt?.kind === "raise")
-        return <div className="app"><RaisePanel view={view} onSubmit={game.submitRaise} /></div>;
-      return <NightTurn view={view} resolveInspect={resolveInspect} onSubmit={game.submitNight} onSkip={game.submitSkip} />;
+      return <div className="app"><NightAction view={view} send={game.act} /></div>;
     case "nightPass":
+      // A Seer or Detective reads their result before passing the phone on.
+      if (view.nightAwaitingAck) return <div className="app"><NightResult view={view} send={game.act} /></div>;
       return (
         <div className="app">
           <div className="spacer" />
@@ -242,118 +203,6 @@ function LocalPlay({
   }
 }
 
-/** Detective in pass-device: pick two, see the same-team result, then pass on. */
-function DetectTurn({
-  state,
-  view,
-  onSubmit,
-}: {
-  state: GameState;
-  view: PlayerView;
-  onSubmit: (aId: string, bId: string) => void;
-}) {
-  const [picked, setPicked] = useState<string[]>([]);
-  const [result, setResult] = useState<[string, string] | null>(null);
-  const toggle = (id: string) =>
-    setPicked((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : cur.length < 2 ? [...cur, id] : [cur[1], id]));
-
-  if (result) {
-    const [a, b] = result;
-    const name = (id: string) => state.players.find((p) => p.id === id)!.name;
-    const team = (id: string) => getRole(state.players.find((p) => p.id === id)!.roleId!).team;
-    // A Drunk mimicking the Detective gets a deterministic fake verdict.
-    const same = isPowerless(state, view.you.id)
-      ? fabricatedSameTeam(state.seed, state.round, a, b)
-      : team(a) === team(b);
-    return (
-      <div className="app">
-        <div className="rolecard">
-          <div className="emoji">{same ? "🤝" : "🎭"}</div>
-          <div className="rname">{name(a)} & {name(b)}</div>
-          <div className="blurb">{same ? "are on the same team." : "are on different teams."}</div>
-        </div>
-        <div className="spacer" />
-        <button className="primary full lg" onClick={() => onSubmit(a, b)}>Seen it — hide & pass on</button>
-      </div>
-    );
-  }
-
-  return (
-    <div className="app">
-      <div className="phase-banner"><div className="big">🕵️</div><h2>Detective</h2><p className="muted">Investigate two players. Pick {2 - picked.length} more.</p></div>
-      <TargetGrid view={view} ids={view.nightPrompt!.targetIds} selected={null} onPick={toggle} multi={picked} />
-      <div className="spacer" />
-      <button className="primary full lg" disabled={picked.length !== 2} onClick={() => setResult([picked[0], picked[1]])}>Investigate</button>
-    </div>
-  );
-}
-
-function NightTurn({
-  view,
-  resolveInspect,
-  onSubmit,
-  onSkip,
-}: {
-  view: PlayerView;
-  resolveInspect: (targetId: string) => { name: string; isWolf: boolean; label: string };
-  onSubmit: (targetId: string) => void;
-  onSkip: () => void;
-}) {
-  const prompt = view.nightPrompt!;
-  const role = getRole(prompt.roleId);
-  const [picked, setPicked] = useState<string | null>(null);
-  const [showResult, setShowResult] = useState(false);
-  const packmates = view.players.filter((p) => view.packmates.includes(p.id));
-
-  if (showResult && picked) {
-    const r = resolveInspect(picked);
-    return (
-      <div className="app">
-        <div className="rolecard">
-          <div className="emoji">{r.isWolf ? "🐺" : "✅"}</div>
-          <div className="rname">{r.name}</div>
-          <div className="blurb">{r.label}</div>
-        </div>
-        <div className="spacer" />
-        <button className="primary full lg" onClick={() => onSubmit(picked)}>Seen it — hide & pass on</button>
-      </div>
-    );
-  }
-
-  const promptText =
-    prompt.kind === "kill" ? "Choose tonight's victim"
-    : prompt.kind === "protect" ? "Choose someone to protect — never the same patient twice running"
-    : prompt.kind === "silence" ? "Who gets the cold shoulder tomorrow? Not the same person two nights running"
-    : prompt.kind === "mark" ? "If you die before tomorrow night, who do you take down with you?"
-    : prompt.kind === "convert" ? "Choose someone to turn into a werewolf"
-    : prompt.kind === "block" ? "Whose supper do you spike? Their power fails tomorrow night. Not the same person two nights running"
-    : "Choose someone to inspect";
-
-  return (
-    <div className="app">
-      <div className="phase-banner"><div className="big">{role.emoji}</div><h2>{role.name}</h2><p className="muted">{promptText}</p></div>
-      <NoticeCard view={view} />
-      {packmates.length > 0 && (
-        <p className="center small">🐺 Your pack: <b>{packmates.map((p) => p.name).join(", ")}</b></p>
-      )}
-      <TargetGrid view={view} ids={prompt.targetIds} selected={picked} onPick={setPicked} />
-      <div className="spacer" />
-      <button
-        className="primary full lg"
-        disabled={!picked}
-        onClick={() => (prompt.kind === "inspect" ? setShowResult(true) : onSubmit(picked!))}
-      >
-        Confirm
-      </button>
-      {prompt.canSkip && (
-        <button className="ghost full" onClick={onSkip}>
-          Not tonight — save it for later
-        </button>
-      )}
-    </div>
-  );
-}
-
 function VoteTurn({ view, onSubmit }: { view: PlayerView; onSubmit: (id: string | null) => void }) {
   const others = view.players.filter((p) => p.alive && p.id !== view.you.id);
   return (
@@ -367,20 +216,21 @@ function VoteTurn({ view, onSubmit }: { view: PlayerView; onSubmit: (id: string 
       {Object.keys(view.votes).length > 0 && (
         <div className="card tight stack" style={{ marginTop: 12 }}>
           <b>Votes so far (they're public)</b>
-          <BallotLines votes={view.votes} name={(id) => view.players.find((p) => p.id === id)?.name ?? "someone"} />
+          <BallotLines votes={view.votes} name={(id) => nameOf(view.players, id)} />
         </div>
       )}
     </div>
   );
 }
 
+/** The whole screen is the tap target; the button is there to be obvious. */
 function Handoff({ name, onOpen }: { name: string; onOpen: () => void }) {
   return (
     <div className="handoff" onClick={onOpen}>
       <div className="big" style={{ fontSize: "3rem" }}>📱➡️</div>
       <div className="to">Pass to {name}</div>
       <div className="sub">Eyes on the phone, {name} — and only you. Tap when you're holding it.</div>
-      <button className="primary lg" onClick={onOpen}>I'm {name} — show me 👀</button>
+      <button className="primary lg">I'm {name} — show me 👀</button>
     </div>
   );
 }

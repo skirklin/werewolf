@@ -8,7 +8,7 @@ export type Team = "village" | "werewolf" | "solo";
  * The kind of night action a role performs. The engine has explicit
  * resolution logic for each kind, so adding a role that reuses an existing
  * kind is data-only; a genuinely new mechanic is the one place you touch
- * engine code (see resolveNight).
+ * engine code (see endNight).
  */
 export type NightActionKind =
   | "kill"
@@ -28,7 +28,7 @@ export type NightActionKind =
  * target; the Witch, Troublemaker and Detective submit richer shapes.
  */
 export type NightSubmission =
-  | { t: "target"; target: PlayerId } // kill / protect / inspect / silence
+  | { t: "target"; target: PlayerId } // every one-pick kind
   | { t: "witch"; heal: boolean; poison: PlayerId | null }
   | { t: "skip" } // an optional power held back for another night (Troublemaker, Infector)
   | { t: "swap"; a: PlayerId; b: PlayerId }
@@ -66,6 +66,12 @@ export interface RoleDef {
   /** Emoji used as the role's avatar in the UI. */
   emoji: string;
   night?: NightAbility;
+  /**
+   * The table size from which this role is in the pool by default (the host
+   * can still force it on or off). Some roles swing a small game too hard: an
+   * Infector's bite at 7 players can end it overnight.
+   */
+  autoFrom: number;
   /** On death (night or vote), this player takes someone down with them. */
   onDeathShoot?: boolean;
   /** The first time the town votes this player out, they're revealed and spared (Prince). */
@@ -74,6 +80,8 @@ export interface RoleDef {
   turnsWhenBitten?: boolean;
   /** Becomes this role once nobody alive holds it (the Apprentice Seer takes over as Seer). */
   succeeds?: string;
+  /** Wins alongside whoever wins, as long as they're alive at the end (Poisoner). */
+  winsBySurviving?: boolean;
   /** A solo role that wins immediately if the town votes to eliminate them (Tanner). */
   winsIfLynched?: boolean;
   /** This role can be secretly impersonated by the Drunk (its power does nothing). */
@@ -112,24 +120,20 @@ export interface Player {
  * How roles are chosen for a game. Two modes:
  *  - exact: enumerate how many of each special role; villagers fill the rest
  *    so the deck always matches the player count.
- *  - pool: list the roles you're willing to include (the pool may hold more
- *    roles than players). The werewolf count is derived from a team ratio so
- *    it always scales with the table — never "1 wolf for 7 players".
+ *  - pool: the roles that may be dealt — each role on by default once the
+ *    table reaches its size (RoleDef.autoFrom), unless the host forces it on
+ *    or off. The dealer picks the wolf count (from a band that scales with
+ *    the table) and the specials together, by balance points.
  */
 export type RoleSelection =
   | { mode: "exact"; roleCounts: Record<string, number> }
   | {
       mode: "pool";
-      pool: string[];
-      werewolfRatio: number;
+      /** The host's picks: true = always in the pool, false = never. Unlisted roles are automatic. */
+      overrides: Record<string, boolean>;
       /**
-       * Keep the pack's size a secret: deal the ratio's count or one more, at
-       * even odds (e.g. 2 or 3), so nobody can be sure when the last wolf is gone.
-       */
-      wolfCountVaries?: boolean;
-      /**
-       * Which side the deal should favor; the dealer picks specials so the
-       * deck's balance points land near this target. Absent means "even".
+       * Which side the deal should favor; the dealer picks wolves and specials
+       * so the deck's balance points land near this target. Absent means "even".
        */
       balance?: Balance;
     };
@@ -155,7 +159,7 @@ export interface GameConfig {
   peacefulFirstNight: boolean;
   /**
    * The in-app town square. Off suits a table playing in person, where people
-   * just talk out loud. Absent means on (configs saved before it existed).
+   * just talk out loud. Absent means on.
    */
   chat?: boolean;
 }
@@ -217,7 +221,8 @@ export type AnnouncementEvent =
   | { t: "tie" }
   | { t: "noVotes" }
   | { t: "shot"; shooterId: PlayerId; playerId: PlayerId } // a dying Hunter's shot
-  | { t: "spared"; playerId: PlayerId; roleId: string }; // voted out, but revealed and spared (Prince)
+  | { t: "spared"; playerId: PlayerId; roleId: string } // voted out, but revealed and spared (Prince)
+  | { t: "died"; playerId: PlayerId }; // died in the night of no attack (the Infector, passing on the curse)
 
 /**
  * What just happened, shown to everyone before play moves on: the dawn after
@@ -275,6 +280,7 @@ export type LogEntry =
   | { type: "raised"; round: number; playerId: PlayerId }
   | { type: "voteTie"; round: number }
   | { type: "spared"; round: number; playerId: PlayerId }
+  | { type: "died"; round: number; playerId: PlayerId }
   | { type: "gameOver"; round: number; winner: Team };
 
 export interface GameState {
@@ -288,7 +294,7 @@ export interface GameState {
   inspects: InspectResult[];
   /** Every detective reading (each detective sees only their own). */
   detections: DetectionResult[];
-  /** Players who may not vote in the upcoming day (set by the Silencer). */
+  /** Players getting the cold shoulder today: no talking, no vote (set by the Gossip). */
   silenced: PlayerId[];
   /** Per-Medium: whether their one-time raise has been spent. */
   mediumUsed: Record<PlayerId, boolean>;
