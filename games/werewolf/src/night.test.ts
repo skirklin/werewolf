@@ -424,7 +424,11 @@ describe("private dawn notices", () => {
     expect(projectView(s, "p4").myNotice).toEqual({ roleId: "werewolf", infected: true });
     expect(projectView(s, "p0").myNotice).toEqual({ packChanged: true });
     expect(projectView(s, "p2").myNotice).toBeNull(); // nothing for anyone else...
-    expect(projectView(s, "p2").announcement!.events).toEqual([{ t: "killed", playerId: "p6" }]); // ...nor in public
+    // ...and in public only the deaths, not who turned (the Infector dies passing the curse on).
+    expect(projectView(s, "p2").announcement!.events).toEqual([
+      { t: "killed", playerId: "p6" },
+      { t: "died", playerId: "p1" },
+    ]);
     s = act(s, "p0", { type: "proceed" });
     expect(projectView(s, "p4").myNotice).not.toBeNull(); // still there to re-read all day
     s = act(s, "p0", { type: "startVote" });

@@ -43,13 +43,13 @@ export const ROLES: Record<string, RoleDef> = {
   },
   infector: {
     id: "infector",
-    weight: -8,
-    autoFrom: 11,
+    weight: -7,
+    autoFrom: 9,
     name: "Infector",
     team: "werewolf",
     emoji: "🧛",
     blurb:
-      "A wolf with a nasty bite. Once per game, on a night of your choosing, infect a neighbor — at dawn they wake up furry and secretly join the pack.",
+      "A wolf with a deadly gift. Once per game, on a night of your choosing, pass your curse to a neighbor — at dawn they wake up furry and secretly join the pack, and you're found dead.",
     night: { kind: "convert", order: 12, canTargetSelf: false },
   },
   seer: {

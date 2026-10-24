@@ -219,7 +219,8 @@ export type AnnouncementEvent =
   | { t: "tie" }
   | { t: "noVotes" }
   | { t: "shot"; shooterId: PlayerId; playerId: PlayerId } // a dying Hunter's shot
-  | { t: "spared"; playerId: PlayerId; roleId: string }; // voted out, but revealed and spared (Prince)
+  | { t: "spared"; playerId: PlayerId; roleId: string } // voted out, but revealed and spared (Prince)
+  | { t: "died"; playerId: PlayerId }; // died in the night of no attack (the Infector, passing on the curse)
 
 /**
  * What just happened, shown to everyone before play moves on: the dawn after
@@ -277,6 +278,7 @@ export type LogEntry =
   | { type: "raised"; round: number; playerId: PlayerId }
   | { type: "voteTie"; round: number }
   | { type: "spared"; round: number; playerId: PlayerId }
+  | { type: "died"; round: number; playerId: PlayerId }
   | { type: "gameOver"; round: number; winner: Team };
 
 export interface GameState {

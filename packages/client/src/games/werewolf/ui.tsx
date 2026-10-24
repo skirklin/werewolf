@@ -258,6 +258,8 @@ function describe(e: LogEntry, name: (id: string) => string): string | null {
       return `👻 the Medium's séance worked — ${name(e.playerId)} is back among the living.`;
     case "voteTie":
       return `🗳️ Day ${e.round}: the vote tied — nobody eliminated.`;
+    case "died":
+      return `💀 ${name(e.playerId)} died in the night.`;
     case "spared":
       return `👑 Day ${e.round}: the town voted out ${name(e.playerId)}, who turned out to be the Prince — and was spared.`;
     default:

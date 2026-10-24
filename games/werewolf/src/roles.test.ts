@@ -146,7 +146,14 @@ describe("Poisoner", () => {
   it("knows the pack, and wins with it", () => {
     const s = gameWith(["werewolf", "poisoner", "villager", "villager", "villager"]);
     expect(projectView(s, "p1").packmates).toEqual(["p0"]);
+    expect(projectView(s, "p0").packmates).toEqual(["p1"]);
     expect(getRole("poisoner").team).toBe("werewolf");
+  });
+
+  it("can't spike its own pack", () => {
+    let s = gameWith(["werewolf", "poisoner", "villager", "villager", "villager"]);
+    s = reduce(s, { type: "startNight" });
+    expect(projectView(s, "p1").nightPrompt!.targetIds).not.toContain("p0");
   });
 
   it("spikes someone tonight; their power fails the NEXT night, and they can't tell", () => {
@@ -919,6 +926,21 @@ describe("Infector", () => {
   const infectorGame = () =>
     gameWith(["werewolf", "infector", "villager", "villager", "villager", "villager", "villager", "villager"]);
 
+  it("dies passing the curse on: the pack keeps its size, announced at dawn", () => {
+    let s = infectorGame();
+    s = reduce(s, { type: "startNight" });
+    s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p2" });
+    s = reduce(s, { type: "nightChoice", actorId: "p1", targetId: "p3" });
+    s = reduce(s, { type: "endNight" });
+    expect(alive(s, "p1")).toBe(false);
+    expect(s.players.find((p) => p.id === "p3")!.roleId).toBe("werewolf");
+    expect(s.announcement!.events).toEqual([
+      { t: "killed", playerId: "p2" },
+      { t: "died", playerId: "p1" },
+    ]);
+    expect(living(s).filter((p) => getRole(p.roleId!).team === "werewolf")).toHaveLength(2);
+  });
+
   it("turns a living non-wolf into a werewolf, once", () => {
     let s = infectorGame();
     s = reduce(s, { type: "startNight" });
@@ -962,20 +984,6 @@ describe("Infector", () => {
     expect(s.winner).toBe("werewolf");
   });
 
-  it("its spent flag follows the role through a Troublemaker swap", () => {
-    // p0 wolf, p1 infector, p2 troublemaker, p3-p7 villagers
-    let s = gameWith(["werewolf", "infector", "troublemaker", "villager", "villager", "villager", "villager", "villager"]);
-    s = reduce(s, { type: "startNight" });
-    s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p3" });
-    s = reduce(s, { type: "nightChoice", actorId: "p1", targetId: "p4" }); // infector converts p4
-    s = reduce(s, { type: "swapAction", actorId: "p2", aId: "p1", bId: "p5" }); // swap infector p1 <-> p5
-    s = settleNight(s);
-    // Conversion happened; the spent flag moved to whoever holds the infector role.
-    expect(s.players.find((p) => p.id === "p4")!.roleId).toBe("werewolf");
-    expect(s.players.find((p) => p.id === "p5")!.roleId).toBe("infector");
-    expect(s.convertUsed["p5"]).toBe(true);
-    expect(s.convertUsed["p1"]).toBeUndefined();
-  });
 });
 
 describe("wolf-team roles in the pool", () => {

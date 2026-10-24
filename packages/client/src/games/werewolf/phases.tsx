@@ -433,6 +433,8 @@ export function AnnouncementScreen({
         return `🏹 With a last breath, ${name(e.shooterId)} took ${name(e.playerId)} down too.${was(e.playerId)}`;
       case "spared":
         return `👑 The town voted ${name(e.playerId)} out — but ${e.playerId === you ? "you're" : "they're"} the ${ROLES[e.roleId]?.name ?? "Prince"}! The town thinks better of it. Nobody goes.`;
+      case "died":
+        return `💀 ${Name(e.playerId)} ${e.playerId === you ? "were" : "was"} found dead — no wounds, no poison, just gone.${was(e.playerId)}`;
     }
   };
   const next =

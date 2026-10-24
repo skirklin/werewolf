@@ -125,9 +125,9 @@ export function validNightTargets(state: GameState, actorId: PlayerId): Player[]
   if (!ability) return [];
   const targets = living(state).filter((t) => {
     if (t.id === actorId && !ability.canTargetSelf) return false;
-    // Wolves never eat their own pack; the Infector only turns non-wolves.
+    // The wolf team never targets its own: no eating, infecting or spiking the pack.
     if (
-      (ability.kind === "kill" || ability.kind === "convert") &&
+      (ability.kind === "kill" || ability.kind === "convert" || ability.kind === "block") &&
       t.roleId &&
       onWolfTeam(t.roleId)
     )
@@ -748,7 +748,7 @@ function endNight(state: GameState): GameState {
   // spent flag is written under the current id and then travels with the role...
   let players = applyRaises(afterShots, mediumUsed, liveSteps, log, events, state.round);
   const infected: PlayerId[] = [];
-  players = applyConverts(players, roleState.convertUsed, roleState.drunkDisguise, liveSteps, infected);
+  players = applyConverts(players, roleState.convertUsed, roleState.drunkDisguise, liveSteps, infected, events, log, state.round);
   if (turned) {
     players = players.map((p) => (p.id === turned ? { ...p, roleId: "werewolf" } : p));
     infected.push(turned);
@@ -887,14 +887,20 @@ function applyRaises(
   return next;
 }
 
-/** Apply Infector conversions: turn a living non-wolf into a werewolf. */
+/**
+ * Apply Infector conversions: a living non-wolf becomes a Werewolf, and the
+ * Infector dies passing the curse on — the pack stays the same size.
+ */
 function applyConverts(
   players: Player[],
   convertUsed: GameState["convertUsed"],
   drunkDisguise: GameState["drunkDisguise"],
   steps: NightStep[],
   /** Collects who was infected, so they can be told at dawn. */
-  infected: PlayerId[]
+  infected: PlayerId[],
+  events: AnnouncementEvent[],
+  log: GameState["log"],
+  round: number
 ): Player[] {
   let next = players;
   for (const step of steps) {
@@ -909,6 +915,11 @@ function applyConverts(
       delete drunkDisguise[sub.target];
       convertUsed[actorId] = true;
       infected.push(sub.target);
+      if (next.find((p) => p.id === actorId)?.alive) {
+        next = markDead(next, [actorId]).players;
+        events.push({ t: "died", playerId: actorId });
+        log.push({ type: "died", round, playerId: actorId });
+      }
     }
   }
   return next;
