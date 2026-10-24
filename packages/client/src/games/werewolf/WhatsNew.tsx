@@ -5,7 +5,7 @@ const CHANGELOG: { date: string; changes: string[] }[] = [
   {
     date: "2026-10-24",
     changes: [
-      "🔄 Card seen, or a question gave a role away? Until the first dawn, the host can redeal everyone's roles.",
+      "🔄 Card seen, or a question gave a role away? The host can start over with a fresh deal at any point.",
       "🍺 The Drunk can now believe they're the Hunter, Prince, Cursed, Tanner, Poisoner — or a Werewolf, hunting with a pack it imagines. The real pack never knows.",
       "🍄 The Poisoner plays for themself now: they win if they're alive at the end, whoever wins.",
       "🦠 The Infector's curse costs them: they die passing it on.",

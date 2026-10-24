@@ -28,7 +28,7 @@ function renderPhase(view: PlayerView, send: Send, playAgain: () => void, onExit
       const waiting = view.players.filter((p) => !view.ready.includes(p.id)).map((p) => p.name);
       return (
         <div className="stack">
-          {view.redeals > 0 && <p className="center small">🔄 The host redealt — this is your new role.</p>}
+          {view.redeals > 0 && <p className="center small">🔄 The host started over with a fresh deal — this is your new role.</p>}
           <RoleCard view={view} />
           <RolesInPlay roleIds={view.possibleRoles} open />
           {imReady ? (
@@ -124,19 +124,18 @@ function HostRecovery({ view, send }: { view: PlayerView; send: Send }) {
 }
 
 /**
- * The host's way out of a spoiled deal (a card seen, a question that gave a
- * role away): reshuffle everyone, any time before the first dawn.
+ * The host's way out of a spoiled game (a card seen, a question that gave a
+ * role away): start over with a fresh deal, any time.
  */
 function Redeal({ view, send }: { view: PlayerView; send: Send }) {
-  const early = view.phase === "roleReveal" || (view.phase === "night" && view.round === 1);
-  if (!view.you.isHost || !early) return null;
+  if (!view.you.isHost || view.phase === "gameOver") return null;
   const redeal = () => {
-    if (confirm("Redeal every role? Everyone gets a new card and the night starts over.")) send({ type: "redeal" });
+    if (confirm("Start over with a fresh deal? This game ends and everyone gets a new role.")) send({ type: "redeal" });
   };
   return (
     <div className="host-tools">
       <span className="muted small">Host · if a role got out</span>
-      <button className="ghost small" onClick={redeal}>Redeal roles</button>
+      <button className="ghost small" onClick={redeal}>Start over, new roles</button>
     </div>
   );
 }

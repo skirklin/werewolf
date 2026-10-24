@@ -677,29 +677,38 @@ describe("rematch", () => {
 });
 
 describe("redeal", () => {
-  const roles = ["werewolf", "seer", "doctor", "villager", "villager", "villager"];
-  const roleOf = (s: GameState) => s.players.map((p) => p.roleId).join();
+  /** A pooled game for 8, freshly dealt. */
+  function dealt(): GameState {
+    const players: Player[] = Array.from({ length: 8 }, (_, i) => ({
+      id: `p${i}`, name: `P${i}`, roleId: null, alive: true, connected: true, isHost: i === 0,
+    }));
+    return reduce({ ...createGame("TEST", 7), players }, { type: "startGame", config: recommendedConfig(8) });
+  }
+  const deck = (s: GameState) => s.players.map((p) => p.roleId!).sort().join();
 
-  it("reshuffles from the same setup and goes back to the role cards", () => {
-    let s = reduce(gameWith(roles, exact({ werewolf: 1, seer: 1, doctor: 1 })), { type: "ready", actorId: "p1" });
-    const deals = new Set<string>();
-    for (let i = 0; i < 5; i++) {
+  it("starts over with a whole new draw, back at the role cards", () => {
+    let s = reduce(dealt(), { type: "ready", actorId: "p1" });
+    const decks = new Set([deck(s)]);
+    for (let i = 0; i < 8; i++) {
       s = reduce(s, { type: "redeal" });
-      deals.add(roleOf(s));
+      decks.add(deck(s));
       expect(s.phase).toBe("roleReveal");
       expect(s.ready).toEqual([]);
-      expect([...s.players.map((p) => p.roleId!)].sort()).toEqual([...roles].sort());
     }
-    expect(deals.size).toBeGreaterThan(1); // a new shuffle, not the same cards
-    expect(s.redeals).toBe(5);
-    expect(projectView(s, "p3").redeals).toBe(5);
+    expect(decks.size).toBeGreaterThan(2); // different roles, not just a reshuffle
+    expect(s.redeals).toBe(8);
+    expect(projectView(s, "p3").redeals).toBe(8);
   });
 
-  it("works on the first night, but not once dawn has come", () => {
-    let s = reduce(gameWith(roles, exact({ werewolf: 1, seer: 1, doctor: 1 })), { type: "startNight" });
-    expect(reduce(s, { type: "redeal" }).phase).toBe("roleReveal");
-    s = settleNight(s);
-    expect(() => reduce(s, { type: "redeal" })).toThrow("Too late");
+  it("works at any point in the game, and brings everyone back", () => {
+    let s = settleNight(reduce(gameWith(["werewolf", "seer", "villager", "villager", "villager"]), { type: "startNight" }));
+    s = settleVote(voteAll(reduce(s, { type: "startVote" }), (v) => (v === "p2" ? "p3" : "p2")));
+    expect(s.players.some((p) => !p.alive)).toBe(true);
+    s = reduce(s, { type: "redeal" });
+    expect(s.phase).toBe("roleReveal");
+    expect(s.round).toBe(0);
+    expect(s.players.every((p) => p.alive)).toBe(true);
+    expect(s.log).toEqual([{ type: "gameStart", round: 0 }]);
   });
 
   it("is the host's call", () => {

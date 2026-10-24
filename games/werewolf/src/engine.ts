@@ -307,12 +307,13 @@ function playAgain(state: GameState): GameState {
 }
 
 /**
- * Shuffle again from the same setup and go back to the role cards: the way out
- * when someone's card got seen, or a question gave a role away, before it
- * mattered. Only until the first dawn, so no death is ever undone.
+ * Start over with a fresh draw from the same setup (a pool deal picks a whole
+ * new deck) and go back to the role cards: the way out when a card got seen
+ * or a question gave a role away. Any time mid-game; the abandoned game is
+ * never recorded.
  */
 function redeal(state: GameState): GameState {
-  assert(state.phase === "roleReveal" || (state.phase === "night" && state.round === 1), "Too late to redeal.");
+  assert(state.phase !== "lobby" && state.phase !== "gameOver", "No game to start over.");
   const players = state.players.map((p) => ({ ...p, roleId: null, alive: true }));
   const fresh = { ...createGame(state.code, nextSeed(state.seed)), players, redeals: state.redeals + 1 };
   return startGame(fresh, state.config);

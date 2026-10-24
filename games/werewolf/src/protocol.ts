@@ -27,5 +27,5 @@ export type WerewolfAction =
   | { type: "resolveVote" }
   /** Host: move the table on from an announcement (dawn, or a vote's result). */
   | { type: "proceed" }
-  | { type: "redeal" } // host: reshuffle every role, before the first dawn
+  | { type: "redeal" } // host: start over with a fresh deal
   | { type: "say"; text: string };
