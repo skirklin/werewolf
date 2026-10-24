@@ -147,14 +147,14 @@ function PoolEditor({
   const [shown, setShown] = useState<string | null>(null);
   const shownRole = poolEligibleRoles().find((r) => r.id === shown);
   const inPool = new Set(rolePool(sel, playerCount));
-  // Each tap moves a role along: automatic -> always -> never -> automatic.
+  // Each tap moves a role along: automatic -> on -> off -> automatic.
   const cycle = (roleId: string) => {
     const { [roleId]: current, ...rest } = sel.overrides;
     const next = current === undefined ? true : current ? false : undefined;
     onChange({ ...sel, overrides: next === undefined ? rest : { ...rest, [roleId]: next } });
   };
   const setting = (role: RoleDef) =>
-    sel.overrides[role.id] === true ? "Always" : sel.overrides[role.id] === false ? "Never" : role.autoFrom > 3 ? `Auto · ${role.autoFrom}+` : "Auto";
+    sel.overrides[role.id] === true ? "On" : sel.overrides[role.id] === false ? "Off" : role.autoFrom > 3 ? `Auto · ${role.autoFrom}+` : "Auto";
 
   return (
     <div className="stack">
@@ -180,7 +180,7 @@ function PoolEditor({
 
       <div className="spread">
         <div className="muted small">
-          Roles join the pool automatically as your group grows. Tap one to set it to always or never.
+          Roles join the pool automatically as your group grows. Tap one to switch it on or off yourself.
         </div>
         {Object.keys(sel.overrides).length > 0 && (
           <button className="ghost small" onClick={() => onChange({ ...sel, overrides: {} })}>
