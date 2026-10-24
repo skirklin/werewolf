@@ -7,7 +7,7 @@ import fastifyStatic from "@fastify/static";
 import { GameError, type ClientMessage, type ServerMessage } from "@party/core";
 import { aggregate, parseGameRecord, werewolfModule, type GameRecord } from "@party/werewolf";
 import { foulplayModule } from "@party/foulplay";
-import { RoomManager, type Client } from "./rooms.js";
+import { RoomManager, type Client, type Room } from "./rooms.js";
 import { GameStore } from "./store.js";
 import { RoomStore } from "./roomstore.js";
 
@@ -47,9 +47,8 @@ const SUBMIT_WINDOW_MS = 60 * 60_000;
 
 /** Build the Fastify app (not yet listening). Exported so tests can drive it. */
 export async function createApp(opts: AppOptions = {}): Promise<FastifyInstance> {
-  const store = await GameStore.open(
-    opts.dataDir === undefined ? process.env.WEREWOLF_DATA_DIR : opts.dataDir
-  );
+  const dataDir = opts.dataDir === undefined ? process.env.WEREWOLF_DATA_DIR : opts.dataDir;
+  const store = await GameStore.open(dataDir);
   // Only Werewolf keeps stats so far; the store and the stats API are its.
   const manager = new RoomManager(GAMES, (game, record, playerIds) => {
     if (game.id !== werewolfModule.id || !record) return;
@@ -62,7 +61,6 @@ export async function createApp(opts: AppOptions = {}): Promise<FastifyInstance>
 
   // Live rooms outlive a restart when there's somewhere to keep them: load what
   // the previous server saved, save every so often, and save on the way out.
-  const dataDir = opts.dataDir === undefined ? process.env.WEREWOLF_DATA_DIR : opts.dataDir;
   const roomStore = dataDir ? new RoomStore(dataDir) : null;
   let roomSaver: NodeJS.Timeout | null = null;
   if (roomStore) {
@@ -146,6 +144,16 @@ export async function createApp(opts: AppOptions = {}): Promise<FastifyInstance>
         },
       };
       const fail = (message: string) => client.send({ type: "error", message });
+      /** This socket now speaks for `pid` in `room`; tell the page so. */
+      const joined = (room: Room, pid: string, token: string) => {
+        roomCode = room.code;
+        playerId = pid;
+        client.send({ type: "joined", playerId: pid, token, code: room.code, game: room.game.id });
+      };
+      const enter = (room: Room, who: { name: string; deviceId?: string; alias?: string }) => {
+        const added = room.addPlayer(who.name, client, who.deviceId, who.alias);
+        joined(room, added.playerId, added.token);
+      };
 
       // Enforce the current client. A page from an older deploy speaks an older
       // protocol, and its moves can fail in ways that look like a frozen game,
@@ -170,36 +178,20 @@ export async function createApp(opts: AppOptions = {}): Promise<FastifyInstance>
         if (!msg || typeof msg !== "object") return fail("Malformed message.");
         try {
           switch (msg.type) {
-            case "createRoom": {
-              const room = manager.create(msg.game);
-              const { playerId: pid, token } = room.addPlayer(msg.name, client, msg.deviceId, msg.alias);
-              roomCode = room.code;
-              playerId = pid;
-              client.send({ type: "joined", playerId: pid, token, code: room.code, game: room.game.id });
+            case "createRoom":
+              enter(manager.create(msg.game), msg);
               break;
-            }
             case "joinRoom": {
               const room = manager.get(msg.code);
               if (!room) return fail("No room with that code.");
-              const { playerId: pid, token } = room.addPlayer(msg.name, client, msg.deviceId, msg.alias);
-              roomCode = room.code;
-              playerId = pid;
-              client.send({ type: "joined", playerId: pid, token, code: room.code, game: room.game.id });
+              enter(room, msg);
               break;
             }
             case "rejoin": {
               const room = manager.get(msg.code);
               if (!room || !room.rejoin(msg.playerId, msg.token, client))
                 return fail("Could not rejoin — game may have ended.");
-              roomCode = room.code;
-              playerId = msg.playerId;
-              client.send({
-                type: "joined",
-                playerId: msg.playerId,
-                token: msg.token,
-                code: room.code,
-                game: room.game.id,
-              });
+              joined(room, msg.playerId, msg.token);
               break;
             }
             default: {

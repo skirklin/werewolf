@@ -1,4 +1,5 @@
 import { aggregate, type GameRecord, type Stats } from "@party/werewolf";
+import { pct } from "./args.js";
 
 /**
  * Turn a run's records into something readable in a terminal. The numbers all
@@ -76,7 +77,6 @@ export function confidenceNote(stats: Stats): string {
   )}pp are ordinary noise here. Run more before believing a difference.`;
 }
 
-const pct = (n: number) => `${Math.round(n * 100)}%`;
 const round = (n: number, places: number) => (Math.round(n * 10 ** places) / 10 ** places).toString();
 const pad = (s: string, n: number) => s.padEnd(n);
 const padLeft = (s: string, n: number) => s.padStart(n);

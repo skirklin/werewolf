@@ -1,19 +1,18 @@
 import type { RoleDef } from "./types.js";
 
 /**
- * The role registry. To add a role, add an entry here. If it reuses an
- * existing night `kind` (kill/protect/inspect) no engine changes are needed;
- * a brand-new mechanic is the one place you extend resolveNight in engine.ts.
- */
-/*
- * Weights follow Ultimate Werewolf's published scale as a starting point, then
- * adjusted for how these roles work here (e.g. the Witch's heal is blind, the
- * Infector adds a wolf). They're a prior, meant to be tuned from real games.
+ * The role registry. To add a role, add an entry here: one that reuses a
+ * night `kind`, or a RoleDef flag (sparedOnFirstVote, succeeds, ...), needs no
+ * engine change; a brand-new mechanic is resolved in endNight (engine.ts).
+ *
+ * Weights start from Ultimate Werewolf's published scale, adjusted for how the
+ * roles work here. They're a prior, meant to be tuned from real games.
  */
 export const ROLES: Record<string, RoleDef> = {
   villager: {
     id: "villager",
     weight: 1,
+    autoFrom: 0,
     name: "Villager",
     team: "village",
     emoji: "🧑‍🌾",
@@ -23,6 +22,7 @@ export const ROLES: Record<string, RoleDef> = {
   werewolf: {
     id: "werewolf",
     weight: -6,
+    autoFrom: 0,
     name: "Werewolf",
     team: "werewolf",
     emoji: "🐺",
@@ -33,6 +33,7 @@ export const ROLES: Record<string, RoleDef> = {
   henchman: {
     id: "henchman",
     weight: -4,
+    autoFrom: 9,
     name: "Henchman",
     team: "werewolf",
     emoji: "🦹",
@@ -42,17 +43,19 @@ export const ROLES: Record<string, RoleDef> = {
   },
   infector: {
     id: "infector",
-    weight: -8,
+    weight: -7,
+    autoFrom: 8,
     name: "Infector",
     team: "werewolf",
     emoji: "🧛",
     blurb:
-      "A wolf with a nasty bite. Once per game, on a night of your choosing, infect a neighbor — at dawn they wake up furry and secretly join the pack.",
+      "A wolf with a deadly gift. Once per game, on a night of your choosing, pass your curse to a neighbor — at dawn they wake up furry and secretly join the pack, and you're found dead.",
     night: { kind: "convert", order: 12, canTargetSelf: false },
   },
   seer: {
     id: "seer",
-    weight: 7,
+    weight: 6,
+    autoFrom: 0,
     name: "Seer",
     team: "village",
     emoji: "🔮",
@@ -63,6 +66,7 @@ export const ROLES: Record<string, RoleDef> = {
   auraSeer: {
     id: "auraSeer",
     weight: 4,
+    autoFrom: 7,
     name: "Aura Seer",
     team: "village",
     emoji: "👁️",
@@ -73,6 +77,7 @@ export const ROLES: Record<string, RoleDef> = {
   doctor: {
     id: "doctor",
     weight: 4,
+    autoFrom: 0,
     name: "Doctor",
     team: "village",
     emoji: "💉",
@@ -84,6 +89,7 @@ export const ROLES: Record<string, RoleDef> = {
   hunter: {
     id: "hunter",
     weight: 3,
+    autoFrom: 0,
     name: "Hunter",
     team: "village",
     emoji: "🏹",
@@ -96,6 +102,7 @@ export const ROLES: Record<string, RoleDef> = {
   drunk: {
     id: "drunk",
     weight: -1,
+    autoFrom: 5,
     name: "Village Drunk",
     team: "village",
     emoji: "🍺",
@@ -108,6 +115,7 @@ export const ROLES: Record<string, RoleDef> = {
   tanner: {
     id: "tanner",
     weight: -2,
+    autoFrom: 5,
     name: "Tanner",
     team: "solo",
     emoji: "🃏",
@@ -117,6 +125,7 @@ export const ROLES: Record<string, RoleDef> = {
   prince: {
     id: "prince",
     weight: 3,
+    autoFrom: 6,
     name: "Prince",
     team: "village",
     emoji: "👑",
@@ -127,6 +136,7 @@ export const ROLES: Record<string, RoleDef> = {
   apprenticeSeer: {
     id: "apprenticeSeer",
     weight: 4,
+    autoFrom: 7,
     name: "Apprentice Seer",
     team: "village",
     emoji: "🔭",
@@ -137,6 +147,7 @@ export const ROLES: Record<string, RoleDef> = {
   cursed: {
     id: "cursed",
     weight: -3,
+    autoFrom: 5,
     name: "Cursed",
     team: "village",
     emoji: "😈",
@@ -146,18 +157,20 @@ export const ROLES: Record<string, RoleDef> = {
   },
   poisoner: {
     id: "poisoner",
-    weight: -5,
+    weight: -3,
+    autoFrom: 7,
     name: "Poisoner",
-    team: "werewolf",
+    team: "solo",
     emoji: "🍄",
-    countsAsWolf: false, // on the pack's side, but no fangs
+    winsBySurviving: true,
     blurb:
-      "You brew for the pack. Each night, spike someone's supper: the following night their power quietly fails, and they never know. Never the same person two nights running.",
+      "You're on nobody's side but your own. Each night, spike someone's supper: the following night their power quietly fails, and they never know. Never the same person two nights running. Whoever wins, you win too — if you're still alive.",
     night: { kind: "block", order: 8, canTargetSelf: false },
   },
   witch: {
     id: "witch",
     weight: 4,
+    autoFrom: 7,
     name: "Witch",
     team: "village",
     emoji: "🧪",
@@ -168,6 +181,7 @@ export const ROLES: Record<string, RoleDef> = {
   troublemaker: {
     id: "troublemaker",
     weight: -1,
+    autoFrom: 7,
     name: "Troublemaker",
     team: "village",
     emoji: "🎭",
@@ -180,6 +194,7 @@ export const ROLES: Record<string, RoleDef> = {
   silencer: {
     id: "silencer",
     weight: 1,
+    autoFrom: 8,
     name: "Gossip",
     team: "village",
     emoji: "🗣️",
@@ -191,6 +206,7 @@ export const ROLES: Record<string, RoleDef> = {
   detective: {
     id: "detective",
     weight: 4,
+    autoFrom: 7,
     name: "Detective",
     team: "village",
     emoji: "🕵️",
@@ -202,6 +218,7 @@ export const ROLES: Record<string, RoleDef> = {
   medium: {
     id: "medium",
     weight: 2,
+    autoFrom: 8,
     name: "Medium",
     team: "village",
     emoji: "👻",
@@ -213,7 +230,6 @@ export const ROLES: Record<string, RoleDef> = {
 };
 
 export const VILLAGER_ROLE_ID = "villager";
-export const DRUNK_ROLE_ID = "drunk";
 
 export function getRole(id: string): RoleDef {
   const role = ROLES[id];
@@ -233,16 +249,21 @@ export function assignableSpecialRoles(): RoleDef[] {
   return Object.values(ROLES).filter((r) => r.id !== VILLAGER_ROLE_ID);
 }
 
-/** Whether a role counts as a real werewolf for win math (default: wolf team). */
-export function roleCountsAsWolf(role: RoleDef): boolean {
+/** On the wolves' side: wins with them and knows them (the Henchman and Poisoner included). */
+export function onWolfTeam(roleId: string): boolean {
+  return getRole(roleId).team === "werewolf";
+}
+
+/** A real werewolf, for the win check, the Aura Seer and the wolf count (not the Henchman). */
+export function isWolf(roleId: string): boolean {
+  const role = getRole(roleId);
   return role.countsAsWolf ?? role.team === "werewolf";
 }
 
 /**
- * Roles eligible for a pool: everything except the base Werewolf (whose count
- * comes from the team ratio). Wolf-team specials (Henchman, Infector) ARE
- * included, as are the Villager and every village/solo role.
+ * The roles a pool can offer: every special. Werewolves come from the wolf
+ * band, and Villagers only fill seats the specials can't.
  */
 export function poolEligibleRoles(): RoleDef[] {
-  return Object.values(ROLES).filter((r) => r.id !== "werewolf");
+  return Object.values(ROLES).filter((r) => r.id !== "werewolf" && r.id !== VILLAGER_ROLE_ID);
 }

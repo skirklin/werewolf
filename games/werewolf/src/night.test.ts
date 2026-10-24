@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { onlyRoles } from "./setup.js";
 import type { GameState, Player, GameConfig } from "./types.js";
 import { createGame, reduce, nightIdlers } from "./engine.js";
 import { projectView } from "./views.js";
@@ -165,10 +166,12 @@ describe("open votes", () => {
     s = act(s, "p0", { type: "nightChoice", targetId: "p1" });
     s = dawn(idleRest(s));
     s = act(s, "p0", { type: "startVote" });
-    expect(s.voteOrder).toEqual(["p0", "p2", "p3", "p4"]); // day 1 starts at seat 0
-    s = act(s, "p0", { type: "castVote", targetId: "p2" });
-    expect(projectView(s, "p3").votes).toEqual({ p0: "p2" });
-    s = voteInOrder(s, { p2: "p0", p3: "p0", p4: null });
+    expect([...s.voteOrder].sort()).toEqual(["p0", "p2", "p3", "p4"]); // every living player, in shuffled order
+    const ballot: Record<string, string | null> = { p0: "p2", p2: "p0", p3: "p0", p4: null };
+    const first = s.voteOrder[0];
+    s = act(s, first, { type: "castVote", targetId: ballot[first] });
+    expect(projectView(s, "p3").votes).toEqual({ [first]: ballot[first] });
+    s = voteInOrder(s, ballot);
     // The result is announced first; the host moves everyone on from there.
     expect(s.phase).toBe("announce");
     expect(projectView(s, "p3").announcement).toMatchObject({
@@ -210,8 +213,8 @@ describe("possible roles", () => {
   });
 
   it("lists the whole pool in pool mode, even roles that may not be dealt", () => {
-    const c = config({ selection: { mode: "pool", pool: ["villager", "seer", "doctor", "tanner"], werewolfRatio: 0.26 } });
-    expect(possibleRoles(c, 4)).toEqual(["werewolf", "villager", "seer", "doctor", "tanner"]);
+    const c = config({ selection: { mode: "pool", overrides: onlyRoles(["villager", "seer", "doctor", "tanner"]) } });
+    expect(possibleRoles(c, 6)).toEqual(["werewolf", "seer", "doctor", "villager", "tanner"]);
   });
 
   it("is in every player's view", () => {
@@ -258,29 +261,41 @@ describe("sequential votes", () => {
 
   it("votes go one at a time, in order, and out-of-turn votes are refused", () => {
     let s = toDay(gameWith(["werewolf", "villager", "villager", "villager", "villager", "villager"]));
-    expect(projectView(s, "p3").voteTurn).toBe("p0");
-    expect(() => act(s, "p3", { type: "castVote", targetId: "p0" })).toThrow(/turn/);
-    s = act(s, "p0", { type: "castVote", targetId: "p3" });
-    expect(projectView(s, "p4").voteTurn).toBe("p1");
-    expect(() => act(s, "p0", { type: "castVote", targetId: "p4" })).toThrow(/already voted/);
+    const [first, second, third] = s.voteOrder;
+    expect(projectView(s, third).voteTurn).toBe(first);
+    expect(() => act(s, third, { type: "castVote", targetId: first })).toThrow(/turn/);
+    s = act(s, first, { type: "castVote", targetId: third });
+    expect(projectView(s, third).voteTurn).toBe(second);
+    expect(() => act(s, first, { type: "castVote", targetId: third })).toThrow(/already voted/);
   });
 
-  it("the first voter moves one seat round the table each day", () => {
+  it("shuffles the order once a game, so joining last doesn't mean voting last", () => {
+    const orders = new Set<string>();
+    for (let seed = 1; seed <= 20; seed++) {
+      const s = { ...gameWith(["werewolf", "villager", "villager", "villager", "villager", "villager"]), seed };
+      orders.add(voteOrderOn({ ...s, round: 1 }).join());
+    }
+    expect(orders.size).toBeGreaterThan(5);
+  });
+
+  it("then starts one place further round that order each day", () => {
     const s = gameWith(["werewolf", "villager", "villager", "villager", "villager", "villager"]);
-    expect(voteOrderOn({ ...s, round: 1 })[0]).toBe("p0");
-    expect(voteOrderOn({ ...s, round: 2 })[0]).toBe("p1");
-    expect(voteOrderOn({ ...s, round: 7 })[0]).toBe("p0");
+    const day1 = voteOrderOn({ ...s, round: 1 });
+    expect(voteOrderOn({ ...s, round: 2 })).toEqual([...day1.slice(1), day1[0]]);
+    expect(voteOrderOn({ ...s, round: 7 })).toEqual(day1); // six seats: back round to the start
     // Dead and silenced players are left out, without breaking the rotation.
-    const fewer = { ...s, round: 2, silenced: ["p1"], players: s.players.map((p) => (p.id === "p2" ? { ...p, alive: false } : p)) };
-    expect(voteOrderOn(fewer)).toEqual(["p3", "p4", "p5", "p0"]);
+    const gone = [day1[2], day1[4]];
+    const fewer = { ...s, round: 2, silenced: [gone[0]], players: s.players.map((p) => (p.id === gone[1] ? { ...p, alive: false } : p)) };
+    expect(voteOrderOn(fewer)).toEqual([...day1.slice(1), day1[0]].filter((id) => !gone.includes(id)));
   });
 
   it("the host can skip a voter who has wandered off (counts as an abstain)", () => {
     let s = toDay(gameWith(["werewolf", "villager", "villager", "villager", "villager", "villager"]));
     expect(() => act(s, "p1", { type: "skipVoter" })).toThrow(/host/i);
+    const [first, second] = s.voteOrder;
     s = act(s, "p0", { type: "skipVoter" });
-    expect(s.votes).toEqual({ p0: null });
-    expect(projectView(s, "p2").voteTurn).toBe("p1");
+    expect(s.votes).toEqual({ [first]: null });
+    expect(projectView(s, "p2").voteTurn).toBe(second);
   });
 });
 
@@ -423,7 +438,11 @@ describe("private dawn notices", () => {
     expect(projectView(s, "p4").myNotice).toEqual({ roleId: "werewolf", infected: true });
     expect(projectView(s, "p0").myNotice).toEqual({ packChanged: true });
     expect(projectView(s, "p2").myNotice).toBeNull(); // nothing for anyone else...
-    expect(projectView(s, "p2").announcement!.events).toEqual([{ t: "killed", playerId: "p6" }]); // ...nor in public
+    // ...and in public only the deaths, not who turned (the Infector dies passing the curse on).
+    expect(projectView(s, "p2").announcement!.events).toEqual([
+      { t: "killed", playerId: "p6" },
+      { t: "died", playerId: "p1" },
+    ]);
     s = act(s, "p0", { type: "proceed" });
     expect(projectView(s, "p4").myNotice).not.toBeNull(); // still there to re-read all day
     s = act(s, "p0", { type: "startVote" });

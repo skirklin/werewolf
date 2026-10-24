@@ -11,7 +11,22 @@ import type {
   VoteRecord,
   Announcement,
   Notice,
+  NightActionKind,
 } from "./types.js";
+import { getRole } from "./roles.js";
+import { possibleRoles } from "./setup.js";
+import {
+  living,
+  eligibleVoters,
+  validNightTargets,
+  effectiveRoleId,
+  playerById,
+  unackedNightResults,
+  SKIPPABLE_KINDS,
+  nightIdlers,
+  currentVoter,
+  packmatesOf,
+} from "./engine.js";
 
 /**
  * How much of the transcript rides along in every view. The whole thing is
@@ -30,20 +45,6 @@ export function publicLog(state: GameState): LogEntry[] {
     e.type === "saved" ? { type: "noDeath", round: e.round, cause: "wolves" } : e
   );
 }
-import { getRole } from "./roles.js";
-import { possibleRoles, werewolfRange } from "./setup.js";
-import {
-  living,
-  eligibleVoters,
-  validNightTargets,
-  effectiveRoleId,
-  playerById,
-  unackedNightResults,
-  SKIPPABLE_KINDS,
-  nightIdlers,
-  currentVoter,
-} from "./engine.js";
-import type { NightActionKind } from "./types.js";
 
 /** A player as visible to someone else — role hidden unless it should be shown. */
 export interface PublicPlayer {
@@ -158,11 +159,6 @@ export interface PlayerView {
   config: GameConfig;
   /** Every role that could be in this game (no counts, no owners). Public. */
   possibleRoles: string[];
-  /**
-   * How many werewolves this game could have dealt (public, from the setup):
-   * equal ends for a fixed count, or e.g. 2–3 when the count is kept secret.
-   */
-  wolfCount: { min: number; max: number };
 }
 
 /**
@@ -191,7 +187,7 @@ export function publicPlayers(state: GameState): PublicPlayer[] {
  * save reads as a quiet night — at the data level, so nothing leaves the
  * server that would reveal a doctor (the same rule as publicLog).
  */
-export function publicAnnouncement(state: GameState): Announcement | null {
+function publicAnnouncement(state: GameState): Announcement | null {
   const a = state.announcement;
   if (!a || state.config.nightSummary === "detailed") return a;
   return { ...a, events: a.events.map((e) => (e.t === "saved" ? { t: "quiet" as const } : e)) };
@@ -205,14 +201,8 @@ function roleVisibleTo(state: GameState, targetId: PlayerId, viewerId: PlayerId)
   if (!target?.roleId || !viewer) return false;
   // Dead players' roles are shown to all if configured.
   if (!target.alive && state.config.revealRoleOnDeath) return true;
-  // Werewolves recognise each other.
-  if (
-    viewer.roleId &&
-    getRole(viewer.roleId).team === "werewolf" &&
-    getRole(target.roleId).team === "werewolf"
-  )
-    return true;
-  return false;
+  // The wolf team knows each other.
+  return packmatesOf(state, viewerId).includes(targetId);
 }
 
 export function projectView(state: GameState, viewerId: PlayerId): PlayerView {
@@ -223,30 +213,14 @@ export function projectView(state: GameState, viewerId: PlayerId): PlayerView {
   const displayRoleId =
     state.phase !== "gameOver" ? effectiveRoleId(state, viewerId) : you.roleId;
 
-  const dealt = dealtAtEnd(state);
-  const players: PublicPlayer[] = state.players.map((p) => ({
-    dealtRoleId: dealt(p.id),
-    id: p.id,
-    name: p.name,
-    alive: p.alive,
-    isHost: p.isHost,
-    connected: p.connected,
-    roleId: !roleVisibleTo(state, p.id, viewerId)
+  const players: PublicPlayer[] = publicPlayers(state).map((pub, i) => ({
+    ...pub,
+    roleId: !roleVisibleTo(state, pub.id, viewerId)
       ? null
-      : p.id === viewerId
+      : pub.id === viewerId
         ? displayRoleId // keep the disguise consistent with the role card
-        : p.roleId,
+        : state.players[i].roleId,
   }));
-
-  const packmates =
-    you.roleId && getRole(you.roleId).team === "werewolf"
-      ? state.players
-          .filter(
-            (p) =>
-              p.id !== viewerId && p.roleId && getRole(p.roleId).team === "werewolf"
-          )
-          .map((p) => p.id)
-      : [];
 
   // Night prompt. Built ONLY from the viewer's own step and public state: no
   // other actor's choice, progress or timing ever reaches it, so nobody can
@@ -311,7 +285,7 @@ export function projectView(state: GameState, viewerId: PlayerId): PlayerView {
       isHost: you.isHost,
     },
     players,
-    packmates,
+    packmates: packmatesOf(state, viewerId),
     nightPrompt,
     nightAwaitingAck,
     idlePrompt,
@@ -337,6 +311,5 @@ export function projectView(state: GameState, viewerId: PlayerId): PlayerView {
     soloWinnerId: state.soloWinnerId,
     config: state.config,
     possibleRoles: possibleRoles(state.config, state.players.length),
-    wolfCount: werewolfRange(state.config.selection, state.players.length),
   };
 }

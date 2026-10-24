@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import { ROLES, MAX_CHAT_TEXT, type PlayerView, type WerewolfAction, type PublicPlayer } from "@party/werewolf";
-import { PlayerChip, roleEmoji, InspectHistory, RolesInPlay, TownNews } from "./ui.js";
+import { ROLES, MAX_CHAT_TEXT, wonGame, type PlayerView, type WerewolfAction, type PublicPlayer } from "@party/werewolf";
+import { PlayerChip, roleEmoji, RolesInPlay, TownNews, nameOf, hostName, packNames } from "./ui.js";
 
-type Send = (msg: WerewolfAction) => void;
+export type Send = (msg: WerewolfAction) => void;
 
-const nameOf = (view: PlayerView, id: string) => view.players.find((p) => p.id === id)?.name ?? "someone";
+const SAVE_FOR_LATER = "Not tonight — save it for later";
 
 export function TargetGrid({
   view,
@@ -20,20 +20,18 @@ export function TargetGrid({
   /** Ids to mark selected when more than one can be chosen (e.g. the swap). */
   multi?: string[];
 }) {
-  const byId = (id: string) => view.players.find((p) => p.id === id)!;
   return (
     <div className="targets">
+      {/* Names only — a target picker must never reveal roles. */}
       {ids.map((id) => {
-        const p = byId(id);
         const isSel = selected === id || (multi?.includes(id) ?? false);
-        // Always a neutral avatar — a target picker must never reveal roles.
         return (
           <button
             key={id}
             className={`target ${isSel ? "selected" : ""}`}
             onClick={() => onPick(id)}
           >
-            <span>{p.name}</span>
+            <span>{nameOf(view.players, id)}</span>
           </button>
         );
       })}
@@ -62,7 +60,7 @@ const NIGHT_PROMPT: Record<string, string> = {
   block: "Whose supper do you spike? Their power fails tomorrow night. Not the same person two nights running",
 };
 
-/** The acting player's night UI. Assumes view.nightPrompt is present. */
+/** The acting player's night UI, online and pass-the-device. Assumes view.nightPrompt is present. */
 export function NightAction({ view, send }: { view: PlayerView; send: Send }) {
   const prompt = view.nightPrompt!;
   if (prompt.kind === "witch")
@@ -86,6 +84,7 @@ function TargetNightAction({ view, send }: { view: PlayerView; send: Send }) {
   const prompt = view.nightPrompt!;
   const [picked, setPicked] = useState<string | null>(null);
   const role = ROLES[prompt.roleId];
+  const pack = packNames(view);
   return (
     <div className="stack">
       <div className="phase-banner">
@@ -94,6 +93,9 @@ function TargetNightAction({ view, send }: { view: PlayerView; send: Send }) {
         <p className="muted">{NIGHT_PROMPT[prompt.kind]}</p>
       </div>
       <NoticeCard view={view} />
+      {pack.length > 0 && (
+        <p className="center small">🐺 Your pack: <b>{pack.join(", ")}</b></p>
+      )}
       <TargetGrid
         view={view}
         ids={prompt.targetIds}
@@ -105,11 +107,11 @@ function TargetNightAction({ view, send }: { view: PlayerView; send: Send }) {
         disabled={!picked}
         onClick={() => picked && send({ type: "nightChoice", targetId: picked })}
       >
-        {picked ? `${NIGHT_VERB[prompt.kind] ?? "Choose"} ${nameOf(view, picked)}` : "Pick someone"}
+        {picked ? `${NIGHT_VERB[prompt.kind] ?? "Choose"} ${nameOf(view.players, picked)}` : "Pick someone"}
       </button>
       {prompt.canSkip && (
         <button className="ghost full" onClick={() => send({ type: "nightSkip" })}>
-          Not tonight — save it for later
+          {SAVE_FOR_LATER}
         </button>
       )}
     </div>
@@ -121,7 +123,7 @@ function TargetNightAction({ view, send }: { view: PlayerView; send: Send }) {
  * wolves picked — so the heal is simply "save whoever they attack tonight".
  * It's spent either way.
  */
-export function WitchPanel({
+function WitchPanel({
   view,
   onSubmit,
 }: {
@@ -160,14 +162,22 @@ export function WitchPanel({
       {!w.healAvailable && !w.poisonAvailable && <p className="center muted">Your shelf is bare — both potions are spent.</p>}
 
       <button className="primary full lg" onClick={() => onSubmit(heal, poison)}>
-        {heal && poison ? `Heal tonight and poison ${nameOf(view, poison)}` : heal ? "Heal tonight's victim" : poison ? `Poison ${nameOf(view, poison)}` : "Do nothing tonight"}
+        {heal && poison ? `Heal tonight and poison ${nameOf(view.players, poison)}` : heal ? "Heal tonight's victim" : poison ? `Poison ${nameOf(view.players, poison)}` : "Do nothing tonight"}
       </button>
     </div>
   );
 }
 
+/** Two players picked from a grid; a third tap drops the oldest pick. */
+function usePair() {
+  const [picked, setPicked] = useState<string[]>([]);
+  const toggle = (id: string) =>
+    setPicked((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : cur.length < 2 ? [...cur, id] : [cur[1], id]));
+  return [picked, toggle] as const;
+}
+
 /** The Troublemaker's night action: swap two players' roles. */
-export function SwapPanel({
+function SwapPanel({
   view,
   onSubmit,
   onSkip,
@@ -177,9 +187,7 @@ export function SwapPanel({
   /** Keep the one swap for another night. */
   onSkip: () => void;
 }) {
-  const [picked, setPicked] = useState<string[]>([]);
-  const toggle = (id: string) =>
-    setPicked((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : cur.length < 2 ? [...cur, id] : [cur[1], id]));
+  const [picked, toggle] = usePair();
   return (
     <div className="stack">
       <div className="phase-banner">
@@ -189,26 +197,24 @@ export function SwapPanel({
       </div>
       <TargetGrid view={view} ids={view.nightPrompt!.targetIds} selected={null} onPick={toggle} multi={picked} />
       <button className="primary full lg" disabled={picked.length !== 2} onClick={() => onSubmit(picked[0], picked[1])}>
-        {picked.length === 2 ? `Swap ${nameOf(view, picked[0])} and ${nameOf(view, picked[1])}` : `Pick ${2 - picked.length} more`}
+        {picked.length === 2 ? `Swap ${nameOf(view.players, picked[0])} and ${nameOf(view.players, picked[1])}` : `Pick ${2 - picked.length} more`}
       </button>
       <button className="ghost full" onClick={onSkip}>
-        Not tonight — save it for later
+        {SAVE_FOR_LATER}
       </button>
     </div>
   );
 }
 
 /** The Detective's night action: investigate two players for a same-team read. */
-export function DetectPanel({
+function DetectPanel({
   view,
   onSubmit,
 }: {
   view: PlayerView;
   onSubmit: (aId: string, bId: string) => void;
 }) {
-  const [picked, setPicked] = useState<string[]>([]);
-  const toggle = (id: string) =>
-    setPicked((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : cur.length < 2 ? [...cur, id] : [cur[1], id]));
+  const [picked, toggle] = usePair();
   return (
     <div className="stack">
       <div className="phase-banner">
@@ -224,24 +230,8 @@ export function DetectPanel({
   );
 }
 
-export function DetectionHistory({ view }: { view: PlayerView }) {
-  if (view.myDetections.length === 0) return null;
-  const name = (id: string) => view.players.find((p) => p.id === id)?.name ?? "someone";
-  return (
-    <div className="card tight stack">
-      <b>🕵️ Case file</b>
-      {view.myDetections.map((d, i) => (
-        <div key={i} className="spread small">
-          <span>Night {d.round}: {name(d.aId)} &amp; {name(d.bId)}</span>
-          <b>{d.sameTeam ? "🤝 Same team" : "🎭 Different teams"}</b>
-        </div>
-      ))}
-    </div>
-  );
-}
-
 /** The Medium's night action: raise a dead player, or hold the power. */
-export function RaisePanel({
+function RaisePanel({
   view,
   onSubmit,
 }: {
@@ -266,8 +256,8 @@ export function RaisePanel({
   );
 }
 
-/** Result shown to the seer right after inspecting (pass-device convenience). */
-export function InspectResultCard({ view }: { view: PlayerView }) {
+/** Result shown to the seer right after inspecting. */
+function InspectResultCard({ view }: { view: PlayerView }) {
   const last = view.myInspects.at(-1);
   if (!last) return null;
   const target = view.players.find((p) => p.id === last.targetId);
@@ -291,7 +281,7 @@ export function InspectResultCard({ view }: { view: PlayerView }) {
 export function NightResult({ view, send }: { view: PlayerView; send: Send }) {
   const inspect = view.myInspects.find((r) => r.round === view.round);
   const detect = view.myDetections.find((r) => r.round === view.round);
-  const name = (id: string) => view.players.find((p) => p.id === id)?.name ?? "someone";
+  const name = (id: string) => nameOf(view.players, id);
   return (
     <div className="stack">
       {inspect && <InspectResultCard view={view} />}
@@ -306,6 +296,47 @@ export function NightResult({ view, send }: { view: PlayerView; send: Send }) {
       <button className="primary full lg" onClick={() => send({ type: "nightAck" })}>
         Got it ✓
       </button>
+    </div>
+  );
+}
+
+/** Every vision this player has had, night by night. */
+export function InspectHistory({ view }: { view: PlayerView }) {
+  if (view.myInspects.length === 0) return null;
+  return (
+    <div className="card tight stack">
+      <b>🔮 Your visions</b>
+      {view.myInspects.map((r, i) => {
+        const label =
+          r.reveal === "werewolf"
+            ? "🐺 Werewolf"
+            : r.reveal === "not-werewolf"
+              ? "✅ Not a werewolf"
+              : ROLES[r.reveal]?.name ?? r.reveal;
+        return (
+          <div key={i} className="spread small">
+            <span>Night {r.round}: {nameOf(view.players, r.targetId)}</span>
+            <b>{label}</b>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/** Every pair this Detective has investigated. */
+export function DetectionHistory({ view }: { view: PlayerView }) {
+  if (view.myDetections.length === 0) return null;
+  const name = (id: string) => nameOf(view.players, id);
+  return (
+    <div className="card tight stack">
+      <b>🕵️ Case file</b>
+      {view.myDetections.map((d, i) => (
+        <div key={i} className="spread small">
+          <span>Night {d.round}: {name(d.aId)} &amp; {name(d.bId)}</span>
+          <b>{d.sameTeam ? "🤝 Same team" : "🎭 Different teams"}</b>
+        </div>
+      ))}
     </div>
   );
 }
@@ -326,7 +357,7 @@ export function IdleNight({ view, send }: { view: PlayerView; send: Send }) {
       </div>
       <TargetGrid view={view} ids={view.idlePrompt!.targetIds} selected={picked} onPick={setPicked} />
       <button className="primary full lg" disabled={!picked} onClick={() => picked && send({ type: "nightIdle", targetId: picked })}>
-        {picked ? `Suspect ${nameOf(view, picked)}` : "Pick someone"}
+        {picked ? `Suspect ${nameOf(view.players, picked)}` : "Pick someone"}
       </button>
     </div>
   );
@@ -373,8 +404,8 @@ export function AnnouncementScreen({
 }) {
   const a = view.announcement!;
   const you = view.you.id;
-  const name = (id: string) => (id === you ? "you" : nameOf(view, id));
-  const Name = (id: string) => (id === you ? "You" : nameOf(view, id));
+  const name = (id: string) => (id === you ? "you" : nameOf(view.players, id));
+  const Name = (id: string) => (id === you ? "You" : nameOf(view.players, id));
   const was = (id: string) => {
     const roleId = view.config.revealRoleOnDeath ? view.players.find((p) => p.id === id)?.roleId : null;
     const role = roleId ? ROLES[roleId] : null;
@@ -393,7 +424,7 @@ export function AnnouncementScreen({
       case "raised":
         return `👻 ${Name(e.playerId)} ${e.playerId === you ? "are" : "is"} back from the dead!`;
       case "votedOut":
-        return `⚖️ The town voted out ${name(e.playerId)}.${was(e.playerId)}`;
+        return `⚖️ The town voted ${name(e.playerId)} out.${was(e.playerId)}`;
       case "tie":
         return "🤝 A tie — nobody goes. Everyone lives another night.";
       case "noVotes":
@@ -401,22 +432,17 @@ export function AnnouncementScreen({
       case "shot":
         return `🏹 With a last breath, ${name(e.shooterId)} took ${name(e.playerId)} down too.${was(e.playerId)}`;
       case "spared":
-        return `👑 The town voted out ${name(e.playerId)} — but ${e.playerId === you ? "you're" : "they're"} the ${ROLES[e.roleId]?.name ?? "Prince"}! The town thinks better of it. Nobody goes.`;
+        return `👑 The town voted ${name(e.playerId)} out — but ${e.playerId === you ? "you're" : "they're"} the ${ROLES[e.roleId]?.name ?? "Prince"}! The town thinks better of it. Nobody goes.`;
+      case "died":
+        return `💀 ${Name(e.playerId)} ${e.playerId === you ? "were" : "was"} found dead — no wounds, no poison, just gone.${was(e.playerId)}`;
     }
   };
-  const winnerLine =
-    a.winner === "solo"
-      ? `${a.soloWinnerId ? nameOf(view, a.soloWinnerId) : "The Tanner"} wins alone!`
-      : a.winner === "village"
-        ? "The Village wins!"
-        : "The Werewolves win!";
   const next =
     a.next === "gameOver"
-      ? { line: `Game over — ${winnerLine}`, button: "See the final reveal" }
+      ? { line: `Game over — ${winnerHeadline(view, a.winner, a.soloWinnerId)}`, button: "See the final reveal" }
       : a.next === "day"
         ? { line: "The game continues. Time to talk.", button: "Start the day" }
         : { line: "The game continues. Night falls.", button: "Start the night" };
-  const host = view.players.find((p) => p.isHost)?.name ?? "The host";
   return (
     <div className="stack">
       <div className="phase-banner">
@@ -431,7 +457,7 @@ export function AnnouncementScreen({
       {/* Everyone alive gets a private line at dawn, news or not, so nobody's
           screen is visibly different from their neighbour's. */}
       {privateNews && view.you.alive && <NoticeCard view={view} always={a.kind === "dawn"} />}
-      <div className={`card tight center verdict-next ${a.next === "gameOver" ? "over" : ""}`}>
+      <div className={`card tight center announce-next ${a.next === "gameOver" ? "over" : ""}`}>
         <b>{next.line}</b>
       </div>
       {onContinue ? (
@@ -439,7 +465,7 @@ export function AnnouncementScreen({
           {next.button}
         </button>
       ) : (
-        <p className="center muted small">{host} will move everyone on.</p>
+        <p className="center muted small">{hostName(view.players)} will move everyone on.</p>
       )}
     </div>
   );
@@ -453,7 +479,7 @@ export function NoticeCard({ view, always = false }: { view: PlayerView; always?
   const n = view.myNotice;
   if (!n) return always ? <div className="card tight small muted center">🔒 For you only: nothing changed for you overnight.</div> : null;
   const role = n.roleId ? ROLES[n.roleId] : null;
-  const pack = view.players.filter((p) => view.packmates.includes(p.id)).map((p) => p.name);
+  const pack = packNames(view);
   return (
     <div className="card tight stack notice" style={{ gap: 6 }}>
       <b className="small">🔒 For you only</b>
@@ -495,12 +521,12 @@ export function DayBoard({
     <div className="stack">
       <TownNews log={view.log} voteHistory={view.voteHistory} round={view.round} players={view.players} />
       <NoticeCard view={view} />
-      <SilencedNote view={view} />
+      <ColdShoulderNote view={view} />
       <InspectHistory view={view} />
       <DetectionHistory view={view} />
       {view.config.chat !== false && <ChatPanel view={view} send={send} />}
       <PlayerList players={view.players} youId={view.you.id} showPresence={isHost} />
-      <RolesInPlay roleIds={view.possibleRoles} wolves={view.wolfCount} />
+      <RolesInPlay roleIds={view.possibleRoles} />
       {isHost && (
         <button className="primary full lg" onClick={() => send({ type: "startVote" })}>
           Call a vote
@@ -508,7 +534,7 @@ export function DayBoard({
       )}
       {!isHost && (
         <p className="muted center small">
-          {view.players.find((p) => p.isHost)?.name ?? "The host"} calls the vote when the talking's done.
+          {hostName(view.players)} calls the vote when the talking's done.
         </p>
       )}
     </div>
@@ -524,7 +550,6 @@ export function ChatPanel({ view, send }: { view: PlayerView; send: Send }) {
   const [draft, setDraft] = useState("");
   const silentAndDead = !view.you.alive && view.chat.length === 0;
   const feed = useRef<HTMLDivElement>(null);
-  const nameOf = (id: string) => view.players.find((p) => p.id === id)?.name ?? "someone";
 
   // Stick to the newest message as talk comes in.
   useEffect(() => {
@@ -550,7 +575,7 @@ export function ChatPanel({ view, send }: { view: PlayerView; send: Send }) {
         ) : (
           view.chat.map((m, i) => (
             <div key={i} className="said">
-              <b>{nameOf(m.playerId)}{m.playerId === view.you.id ? " (you)" : ""}</b> {m.text}
+              <b>{nameOf(view.players, m.playerId)}{m.playerId === view.you.id ? " (you)" : ""}</b> {m.text}
             </div>
           ))
         )}
@@ -579,7 +604,7 @@ export function ChatPanel({ view, send }: { view: PlayerView; send: Send }) {
  */
 export function VoteAction({ view, send }: { view: PlayerView; send: Send }) {
   const alive = view.players.filter((p) => p.alive && p.id !== view.you.id);
-  const name = (id: string) => view.players.find((p) => p.id === id)?.name ?? "someone";
+  const name = (id: string) => nameOf(view.players, id);
   const myTurn = view.voteTurn === view.you.id;
   return (
     <div className="stack">
@@ -643,9 +668,9 @@ function VoteOrder({ view, name }: { view: PlayerView; name: (id: string) => str
 }
 
 /** Public banner: who's getting the cold shoulder today (the Gossip's mark). */
-export function SilencedNote({ view }: { view: PlayerView }) {
+export function ColdShoulderNote({ view }: { view: PlayerView }) {
   if (view.silencedIds.length === 0) return null;
-  const names = view.silencedIds.map((id) => view.players.find((p) => p.id === id)?.name ?? "someone");
+  const names = view.silencedIds.map((id) => nameOf(view.players, id));
   return (
     <div className="card tight small">
       🗣️ The rumor mill has been busy. Getting the cold shoulder today — no talking, no vote: <b>{names.join(", ")}</b>
@@ -681,26 +706,15 @@ export function GameOver({
   onPlayAgain: (() => void) | null;
   onExit: () => void;
 }) {
-  const soloWinner = view.soloWinnerId
-    ? view.players.find((p) => p.id === view.soloWinnerId)
-    : undefined;
-  const { emoji, headline } =
-    view.winner === "solo"
-      ? {
-          emoji: soloWinner?.roleId ? roleEmoji(soloWinner.roleId) : "🃏",
-          headline: `${soloWinner?.name ?? "The Tanner"} wins alone!`,
-        }
-      : view.winner === "village"
-        ? { emoji: "🎉", headline: "The Village wins!" }
-        : { emoji: "🐺", headline: "The Werewolves win!" };
+  const soloRoleId = view.players.find((p) => p.id === view.soloWinnerId)?.roleId;
+  const emoji = view.winner === "solo" ? (soloRoleId ? roleEmoji(soloRoleId) : "🃏") : view.winner === "village" ? "🎉" : "🐺";
   // Roles can move mid-game (swaps, infections); a player's final role decides their side.
-  const won = (p: PublicPlayer) =>
-    view.winner === "solo" ? p.id === view.soloWinnerId : !!p.roleId && ROLES[p.roleId]?.team === view.winner;
+  const won = (p: PublicPlayer) => wonGame(p, view.winner, view.soloWinnerId);
   return (
     <div className="stack">
       <div className="phase-banner">
         <div className="big">{emoji}</div>
-        <h1>{headline}</h1>
+        <h1>{winnerHeadline(view, view.winner, view.soloWinnerId)}</h1>
       </div>
       <RevealGroup title="🏆 Won" players={view.players.filter(won)} />
       <RevealGroup title="Lost" players={view.players.filter((p) => !won(p))} />
@@ -709,11 +723,17 @@ export function GameOver({
           Deal another game
         </button>
       ) : (
-        <p className="center muted">{view.players.find((p) => p.isHost)?.name ?? "The host"} can deal another game.</p>
+        <p className="center muted">{hostName(view.players)} can deal another game.</p>
       )}
       <button className="ghost full" onClick={onExit}>
         Leave
       </button>
     </div>
   );
+}
+
+/** "The Village wins!", "The Werewolves win!" or "Sam wins alone!". */
+function winnerHeadline(view: PlayerView, winner: PlayerView["winner"], soloWinnerId?: string | null): string {
+  if (winner === "solo") return `${view.players.find((p) => p.id === soloWinnerId)?.name ?? "The Tanner"} wins alone!`;
+  return winner === "village" ? "The Village wins!" : "The Werewolves win!";
 }

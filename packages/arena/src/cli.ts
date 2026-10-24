@@ -1,10 +1,11 @@
-import { appendFile, mkdir } from "node:fs/promises";
-import { dirname } from "node:path";
+import { appendFile } from "node:fs/promises";
 import { aggregate, type GameRecord } from "@party/werewolf";
+import { ensureDir, parseArgs } from "./args.js";
 import { Arena } from "./match.js";
 import { report, confidenceNote } from "./report.js";
 import { makeStrategy, parseLineup, STRATEGY_HELP } from "./lineup.js";
-import { LlmStrategy, totalSpend } from "./strategies/llm.js";
+import { transcriptLine } from "./saved.js";
+import { LlmStrategy, spendLine, totalSpend } from "./strategies/llm.js";
 import { tableConfig, describeTable } from "./table.js";
 
 const USAGE = `
@@ -20,7 +21,7 @@ Options
   --discussion N       times round the table before each vote (default 2)
   --peaceful           no werewolf kill on the first night
   --roles a,b,c        role pool to draw from (default villager,seer,doctor)
-  --ratio N            share of the table that is werewolf (default 0.26)
+  --balance B          wolves | even | village: which side the deal favors (default even)
   --out FILE           append the anonymous game records here as JSONL
   --transcript FILE    write everything that was said here
   --quiet              only print the final table
@@ -76,9 +77,7 @@ async function main() {
         onEvent: quiet ? undefined : (line) => console.log(line),
       });
       records.push(result.record);
-      const lines = result.transcript.map(
-        (said) => `[game ${i + 1} day ${said.round}] ${said.speaker} (${said.strategy}): ${said.text}`
-      );
+      const lines = result.transcript.map((said) => transcriptLine(i + 1, said));
       transcripts.push(...lines);
       if (outFile) await appendFile(outFile, JSON.stringify(result.record) + "\n");
       if (transcriptFile && lines.length) await appendFile(transcriptFile, lines.join("\n") + "\n");
@@ -92,46 +91,10 @@ async function main() {
 
   console.log(`\n\n${report(records)}${confidenceNote(aggregate(records))}`);
 
-  if (llmSeats.length) {
-    const spend = totalSpend(llmSeats);
-    const cost = spend.dollars === null ? "unpriced model" : `~$${spend.dollars.toFixed(2)}`;
-    const perGame =
-      spend.dollars !== null && records.length
-        ? ` · $${(spend.dollars / records.length).toFixed(3)}/game`
-        : "";
-    console.log(
-      `\nAPI: ${spend.calls} calls · ${fmt(spend.inputTokens)} in / ${fmt(spend.outputTokens)} out · ${cost}${perGame}` +
-        (spend.failures ? `\n${spend.failures} calls fell back to a random move.` : "") +
-        (spend.leaks ? `\n${spend.leaks} replies read as notes; ${spend.silences} of those cost a seat its turn.` : "")
-    );
-  }
+  if (llmSeats.length) console.log(`\n${spendLine(totalSpend(llmSeats), records.length)}`);
 
   if (outFile) console.log(`\n${records.length} records appended to ${outFile}`);
   if (transcriptFile) console.log(`${transcripts.length} lines of talk in ${transcriptFile}`);
-}
-
-const fmt = (n: number) => (n >= 1000 ? `${Math.round(n / 1000)}k` : String(n));
-
-async function ensureDir(file: string) {
-  const dir = dirname(file);
-  if (dir && dir !== ".") await mkdir(dir, { recursive: true });
-}
-
-/** Bare-bones `--flag value` / `--flag` parsing; no dependency needed for this. */
-function parseArgs(argv: string[]): Record<string, string | boolean> {
-  const out: Record<string, string | boolean> = {};
-  for (let i = 0; i < argv.length; i++) {
-    const arg = argv[i];
-    if (!arg.startsWith("--")) continue;
-    const key = arg.slice(2);
-    const next = argv[i + 1];
-    if (next && !next.startsWith("--")) {
-      out[key] = next;
-      i++;
-    } else out[key] = true;
-  }
-  if ("help" in out || "h" in out) out.help = true;
-  return out;
 }
 
 main().catch((err) => {
