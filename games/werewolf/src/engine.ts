@@ -79,25 +79,11 @@ export function checkWinner(state: GameState): Team | null {
 
 /**
  * At a tie the wolves hold half the votes, so the town can't vote them out —
- * unless someone alive still holds a power that changes the count or the
- * vote: the Witch's unused poison, the Medium's unused raise, a Hunter's
- * dying shot, or a Gossip silencing a wolf. Real roles only (a Drunk has no
- * power to use).
+ * unless someone alive still holds a power that could change that (see
+ * RoleDef.canBreakTie). Real roles only: a Drunk has no power to use.
  */
 function canBreakTie(state: GameState): boolean {
-  return living(state).some((p) => {
-    switch (p.roleId) {
-      case "witch":
-        return !!state.witchPotions[p.id]?.poison;
-      case "medium":
-        return !state.mediumUsed[p.id];
-      case "hunter":
-      case "silencer":
-        return true;
-      default:
-        return false;
-    }
-  });
+  return living(state).some((p) => !!p.roleId && !!getRole(p.roleId).canBreakTie?.(state, p.id));
 }
 
 /**
