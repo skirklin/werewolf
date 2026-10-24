@@ -119,10 +119,26 @@ describe("game records", () => {
   });
 
   it("notes what a Drunk thought they were", () => {
-    const s = { ...villageWin(), drunkDisguise: { "uuid-secret-2": "seer" } };
+    const s = { ...villageWin(), dealtDisguises: { "uuid-secret-2": "seer" } };
     const rec = toGameRecord(s, "online")!;
     expect(rec.seats[2].disguise).toBe("seer");
     expect(rec.seats[0].disguise).toBeNull();
+  });
+
+  it("keeps the Drunk's disguise on the seat it was dealt to, even after a swap", () => {
+    const disguise = { "uuid-secret-1": "doctor" };
+    let s: GameState = {
+      ...gameWith(["werewolf", "drunk", "troublemaker", "villager", "villager"]),
+      drunkDisguise: disguise,
+      dealtDisguises: disguise,
+    };
+    s = reduce(s, { type: "startNight" });
+    s = reduce(s, { type: "swapAction", actorId: "uuid-secret-2", aId: "uuid-secret-1", bId: "uuid-secret-3" });
+    s = settleNight(s);
+    expect(s.drunkDisguise).toEqual({ "uuid-secret-3": "doctor" }); // the disguise went with the role
+    const rec = toGameRecord({ ...s, phase: "gameOver", winner: "village" }, "online")!;
+    expect(rec.seats[1].disguise).toBe("doctor");
+    expect(rec.seats[3].disguise).toBeNull();
   });
 });
 
