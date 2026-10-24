@@ -12,10 +12,10 @@ import type { Balance, GameConfig, Player } from "./types.js";
 const DEALS = 150;
 const MIN_SHARE = 0.03; // dealt in at least 3% of games
 /**
- * Known and accepted: at 6 players a wolf-favored deck can't afford the
- * Seer (+7). Anything else that goes missing fails the test.
+ * Roles known and accepted to be undealable, by balance and table size, as
+ * "seer at 6". None at present; anything that goes missing fails the test.
  */
-const UNREACHABLE: Partial<Record<Balance, string[]>> = { wolves: ["seer at 6"] };
+const UNREACHABLE: Partial<Record<Balance, string[]>> = {};
 
 const seats = (n: number): Player[] =>
   Array.from({ length: n }, (_, i) => ({ id: `p${i}`, name: `P${i}`, roleId: null, alive: true, connected: true, isHost: false }));

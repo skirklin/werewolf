@@ -43,7 +43,7 @@ export function TimeBadge({ phase, round }: { phase: Phase; round: number }) {
 }
 
 /** Log entries that belong to a day's vote (as opposed to a night). */
-const DAY_EVENTS = new Set<LogEntry["type"]>(["lynch", "voteTie", "hunterShot", "spared"]);
+const DAY_EVENTS = new Set<LogEntry["type"]>(["lynch", "voteTie", "hunterShot", "spared", "cleared"]);
 
 /**
  * What the town wakes up to: last night's outcome and yesterday's vote, with
@@ -260,6 +260,8 @@ function describe(e: LogEntry, name: (id: string) => string): string | null {
       return `🗳️ Day ${e.round}: the vote tied — nobody eliminated.`;
     case "died":
       return `💀 ${name(e.playerId)} died in the night.`;
+    case "cleared":
+      return `🕯️ A dying Witness vouched for ${name(e.playerId)} — on the village's side.`;
     case "spared":
       return `👑 Day ${e.round}: the town voted out ${name(e.playerId)}, who turned out to be the Prince — and was spared.`;
     default:

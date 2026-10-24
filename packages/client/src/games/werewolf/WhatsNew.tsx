@@ -8,6 +8,8 @@ const CHANGELOG: { date: string; changes: string[] }[] = [
   {
     date: "2026-10-24",
     changes: [
+      "⚰️ New: the Gravedigger. Each night they dig up a grave and learn who was buried there. Sits out games that reveal the dead's roles.",
+      "🕯️ New: the Witness. When they die, their last words vouch for one living player: the whole town learns that player is truly on the village's side.",
       "🔄 Someone let their role slip? The host can start the game over, with new roles for everyone, at any point.",
       "🍺 The Village Drunk has wilder dreams: they may believe they're the Hunter, the Prince, the Cursed, the Tanner, the Poisoner — or a Werewolf, prowling with a pack only they can see. The real wolves never know.",
       "🍄 The Poisoner answers to no one now. Stay alive to the end and you win, whoever else does.",
