@@ -1284,11 +1284,19 @@ describe("Witness", () => {
     expect(t.announcement!.events).toEqual([{ t: "votedOut", playerId: "p1" }]);
   });
 
-  it("a Drunk posing as the Witness dies with nothing to say", () => {
-    let s: GameState = { ...gameWith(["werewolf", "drunk", "villager", "villager", "villager", "villager"]), drunkDisguise: { p1: "witness" } };
-    s = reduce(s, { type: "startNight" });
-    s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p1" });
-    s = reduce(s, { type: "endNight" });
-    expect(s.announcement!.events).toEqual([{ t: "killed", playerId: "p1" }]);
+  it("a Drunk posing as the Witness still names someone — anyone, wolves included", () => {
+    const named = new Set<string>();
+    for (let seed = 0; seed < 40; seed++) {
+      let s: GameState = { ...gameWith(["werewolf", "drunk", "werewolf", "villager", "villager", "villager", "villager"]), drunkDisguise: { p1: "witness" }, seed };
+      s = reduce(s, { type: "startNight" });
+      s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p1" });
+      s = reduce(s, { type: "nightChoice", actorId: "p2", targetId: "p1" });
+      s = reduce(s, { type: "endNight" });
+      const [killed, cleared] = s.announcement!.events;
+      expect(killed).toEqual({ t: "killed", playerId: "p1" });
+      expect(cleared).toMatchObject({ t: "cleared", witnessId: "p1" }); // looks just like the real thing
+      named.add((cleared as { playerId: string }).playerId);
+    }
+    expect(named.has("p0") || named.has("p2")).toBe(true); // sometimes a wolf
   });
 });

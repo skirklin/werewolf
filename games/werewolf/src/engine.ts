@@ -50,6 +50,8 @@ export function isPowerless(state: GameState, id: PlayerId): boolean {
  * powers (the Hunter's shot, the Prince's reprieve, the Cursed's turn) and
  * solo wins (the Tanner's, the Poisoner's) check the real role, so a Drunk
  * never triggers them — and is only found out once it's dead. A Drunk
+ * Witness is the exception: it does speak up as it dies, but names anyone at
+ * all (see witnessClears) — the town can't tell the word is worthless. A Drunk
  * Werewolf hunts alone with a pack it imagines (see drunkPack), which takes
  * the blame for every kill it didn't pick, so it can go all game.
  */
@@ -631,8 +633,9 @@ function fireDyingShots(
  * village's side, out loud — never a wolf, a Henchman, or a solo role. The
  * engine picks at random among those not already vouched for, so it can't be
  * steered — and it's true as of the announcement: a later bite or swap can
- * still turn them. Real roles only: a Drunk posing as the Witness dies with
- * nothing to say.
+ * still turn them. A Drunk posing as the Witness says a name just the same,
+ * picked from every living player, wolves included: worthless, and nobody
+ * can tell.
  */
 function witnessClears(
   before: GameState,
@@ -643,9 +646,13 @@ function witnessClears(
 ): void {
   const vouched = new Set(log.flatMap((e) => (e.type === "cleared" ? [e.playerId] : [])));
   for (const w of players) {
-    if (w.alive || !w.roleId || !getRole(w.roleId).onDeathClears) continue;
+    const roleId = effectiveRoleId(before, w.id);
+    if (w.alive || !roleId || !getRole(roleId).onDeathClears) continue;
     if (!playerById(before, w.id)?.alive) continue; // died before now
-    const pool = players.filter((p) => p.alive && p.roleId && getRole(p.roleId).team === "village" && !vouched.has(p.id));
+    const fake = w.roleId === "drunk"; // not a spiked Witness: like a Hunter's shot, last words aren't a night power
+    const pool = players.filter(
+      (p) => p.alive && p.roleId && (fake || getRole(p.roleId).team === "village") && !vouched.has(p.id)
+    );
     if (!pool.length) continue;
     const playerId = pick(pool, makeRng(seedFor(before.seed, round, `witness|${w.id}`))).id;
     vouched.add(playerId);
