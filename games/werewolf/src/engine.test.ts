@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { onlyRoles } from "./setup.js";
 import { castVotes, voteAll, settleVote, settleNight } from "./testutil.js";
 import type { GameState, Player, GameConfig } from "./types.js";
 import {
@@ -82,7 +83,7 @@ describe("role selection", () => {
       id: `p${i}`, name: `P${i}`, roleId: null, alive: true, connected: true, isHost: false,
     }));
   const pool = (ids: string[], balance?: "wolves" | "even" | "village"): GameConfig => ({
-    selection: { mode: "pool", pool: ids, balance },
+    selection: { mode: "pool", overrides: onlyRoles(ids), balance },
     revealRoleOnDeath: false, nightSummary: "discreet", peacefulFirstNight: false,
   });
   const RICH = ["villager", "seer", "auraSeer", "doctor", "hunter", "witch", "detective", "tanner", "henchman"];
@@ -186,13 +187,23 @@ describe("role selection", () => {
       expect(countRoles(dealRoles(seats(8), pool(RICH), makeRng(seed))).villager ?? 0).toBeLessThanOrEqual(2);
   });
 
-  it("tells the table the exact wolf count, or only the range when it's secret", () => {
-    let s = gameWith(["werewolf", "werewolf", "villager", "villager", "villager", "villager", "villager", "villager"]);
-    s = { ...s, dealtRoles: s.players.map((p) => p.roleId!), config: { ...s.config, ...pool(["villager"]) } };
-    expect(projectView(s, "p2").wolfCount).toEqual({ min: 2, max: 2 });
-    s = { ...s, config: { ...s.config, selection: { mode: "pool", pool: ["villager"], secretWolfCount: true } } };
-    expect(projectView(s, "p2").wolfCount).toEqual({ min: 2, max: 3 });
+  it("never tells the table how many wolves there are", () => {
+    const s = gameWith(["werewolf", "werewolf", "villager", "villager", "villager", "villager", "villager", "villager"]);
+    expect(JSON.stringify(projectView(s, "p2"))).not.toMatch(/wolfCount/);
   });
+
+  it("adds roles automatically as the table grows, unless the host says always or never", () => {
+    const auto = { ...pool([]), selection: { mode: "pool" as const, overrides: {} } };
+    expect(possibleRoles(auto, 7)).not.toContain("infector"); // automatic from 11
+    expect(possibleRoles(auto, 11)).toContain("infector");
+    const always = { ...auto, selection: { mode: "pool" as const, overrides: { infector: true } } };
+    expect(possibleRoles(always, 7)).toContain("infector");
+    const never = { ...auto, selection: { mode: "pool" as const, overrides: { seer: false } } };
+    expect(possibleRoles(never, 7)).not.toContain("seer");
+    for (let seed = 1; seed <= 30; seed++) expect(countRoles(dealRoles(seats(7), auto, makeRng(seed))).infector ?? 0).toBe(0);
+  });
+
+
 
   it("never previews negative counts (e.g. before any players are added)", () => {
     const c = dealPreview(recommendedConfig(0), 0);
@@ -211,7 +222,7 @@ describe("role selection", () => {
   it("rejects a pool with no village side (and an empty pool)", () => {
     const pool = (ids: string[]) =>
       validateConfig(
-        { selection: { mode: "pool", pool: ids }, revealRoleOnDeath: false, nightSummary: "discreet", peacefulFirstNight: false },
+        { selection: { mode: "pool", overrides: onlyRoles(ids) }, revealRoleOnDeath: false, nightSummary: "discreet", peacefulFirstNight: false },
         6
       );
     expect(pool([]).length).toBeGreaterThan(0); // empty

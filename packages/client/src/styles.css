@@ -373,6 +373,8 @@ body[data-time="day"] button.primary { color: #2a1700; }
 .role-toggle .avatar { font-size: 1.3rem; }
 .role-toggle.on { border-color: var(--accent-2); background: var(--panel-2); font-weight: 600; }
 .role-toggle .check { margin-left: auto; color: var(--accent-2); font-weight: 800; }
+.role-toggle-text { display: flex; flex-direction: column; min-width: 0; line-height: 1.2; }
+.role-toggle-text .small { font-weight: 400; }
 .role-detail { font-size: 0.88rem; color: var(--muted); line-height: 1.45; }
 .role-detail b { color: var(--text); }
 

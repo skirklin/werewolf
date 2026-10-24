@@ -136,9 +136,9 @@ describe("assigning playbooks by team", () => {
       winner: null,
       soloWinnerId: null,
       code: "T",
-      wolfCount: { min: 1, max: 1 },
-      config: {
-        selection: { mode: "pool", pool: ["villager", "seer", "doctor"], balance: "even" },
+      possibleRoles: ["werewolf", "villager", "seer", "doctor"],
+          config: {
+        selection: { mode: "pool", overrides: {}, balance: "even" },
         revealRoleOnDeath: false,
         nightSummary: "discreet",
         peacefulFirstNight: true,

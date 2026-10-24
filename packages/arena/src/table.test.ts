@@ -1,11 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { werewolfRange } from "@party/werewolf";
+import { rolePool, werewolfRange } from "@party/werewolf";
 import { tableConfig, describeTable } from "./table.js";
 
 describe("the table", () => {
-  it("defaults to the classic pool", () => {
+  it("defaults to the shipped pool", () => {
     const config = tableConfig({ peaceful: true }, 7);
-    expect(config.selection).toMatchObject({ mode: "pool", pool: ["villager", "seer", "doctor"] });
+    expect(config.selection).toMatchObject({ mode: "pool", overrides: {} });
     expect(werewolfRange(config.selection, 7).min).toBe(2);
   });
 
@@ -25,7 +25,8 @@ describe("the table", () => {
 
   it("takes a custom pool and balance", () => {
     const config = tableConfig({ roles: "villager, seer, hunter", balance: "wolves" }, 9);
-    expect(config.selection).toMatchObject({ mode: "pool", pool: ["villager", "seer", "hunter"], balance: "wolves" });
+    expect(rolePool(config.selection as Extract<typeof config.selection, { mode: "pool" }>, 9)).toEqual(["villager", "seer", "hunter"]);
+    expect(config.selection).toMatchObject({ balance: "wolves" });
   });
 
   it("carries the first-night rule through", () => {

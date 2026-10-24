@@ -12,6 +12,7 @@ export const ROLES: Record<string, RoleDef> = {
   villager: {
     id: "villager",
     weight: 1,
+    autoFrom: 0,
     name: "Villager",
     team: "village",
     emoji: "🧑‍🌾",
@@ -21,6 +22,7 @@ export const ROLES: Record<string, RoleDef> = {
   werewolf: {
     id: "werewolf",
     weight: -6,
+    autoFrom: 0,
     name: "Werewolf",
     team: "werewolf",
     emoji: "🐺",
@@ -31,6 +33,7 @@ export const ROLES: Record<string, RoleDef> = {
   henchman: {
     id: "henchman",
     weight: -4,
+    autoFrom: 8,
     name: "Henchman",
     team: "werewolf",
     emoji: "🦹",
@@ -41,6 +44,7 @@ export const ROLES: Record<string, RoleDef> = {
   infector: {
     id: "infector",
     weight: -8,
+    autoFrom: 11,
     name: "Infector",
     team: "werewolf",
     emoji: "🧛",
@@ -51,6 +55,7 @@ export const ROLES: Record<string, RoleDef> = {
   seer: {
     id: "seer",
     weight: 7,
+    autoFrom: 0,
     name: "Seer",
     team: "village",
     emoji: "🔮",
@@ -61,6 +66,7 @@ export const ROLES: Record<string, RoleDef> = {
   auraSeer: {
     id: "auraSeer",
     weight: 4,
+    autoFrom: 10,
     name: "Aura Seer",
     team: "village",
     emoji: "👁️",
@@ -71,6 +77,7 @@ export const ROLES: Record<string, RoleDef> = {
   doctor: {
     id: "doctor",
     weight: 4,
+    autoFrom: 0,
     name: "Doctor",
     team: "village",
     emoji: "💉",
@@ -82,6 +89,7 @@ export const ROLES: Record<string, RoleDef> = {
   hunter: {
     id: "hunter",
     weight: 3,
+    autoFrom: 6,
     name: "Hunter",
     team: "village",
     emoji: "🏹",
@@ -94,6 +102,7 @@ export const ROLES: Record<string, RoleDef> = {
   drunk: {
     id: "drunk",
     weight: -1,
+    autoFrom: 12,
     name: "Village Drunk",
     team: "village",
     emoji: "🍺",
@@ -106,6 +115,7 @@ export const ROLES: Record<string, RoleDef> = {
   tanner: {
     id: "tanner",
     weight: -2,
+    autoFrom: 8,
     name: "Tanner",
     team: "solo",
     emoji: "🃏",
@@ -115,6 +125,7 @@ export const ROLES: Record<string, RoleDef> = {
   prince: {
     id: "prince",
     weight: 3,
+    autoFrom: 7,
     name: "Prince",
     team: "village",
     emoji: "👑",
@@ -125,6 +136,7 @@ export const ROLES: Record<string, RoleDef> = {
   apprenticeSeer: {
     id: "apprenticeSeer",
     weight: 4,
+    autoFrom: 9,
     name: "Apprentice Seer",
     team: "village",
     emoji: "🔭",
@@ -135,6 +147,7 @@ export const ROLES: Record<string, RoleDef> = {
   cursed: {
     id: "cursed",
     weight: -3,
+    autoFrom: 8,
     name: "Cursed",
     team: "village",
     emoji: "😈",
@@ -145,6 +158,7 @@ export const ROLES: Record<string, RoleDef> = {
   poisoner: {
     id: "poisoner",
     weight: -5,
+    autoFrom: 9,
     name: "Poisoner",
     team: "werewolf",
     emoji: "🍄",
@@ -156,6 +170,7 @@ export const ROLES: Record<string, RoleDef> = {
   witch: {
     id: "witch",
     weight: 4,
+    autoFrom: 7,
     name: "Witch",
     team: "village",
     emoji: "🧪",
@@ -166,6 +181,7 @@ export const ROLES: Record<string, RoleDef> = {
   troublemaker: {
     id: "troublemaker",
     weight: -1,
+    autoFrom: 12,
     name: "Troublemaker",
     team: "village",
     emoji: "🎭",
@@ -178,6 +194,7 @@ export const ROLES: Record<string, RoleDef> = {
   silencer: {
     id: "silencer",
     weight: 1,
+    autoFrom: 10,
     name: "Gossip",
     team: "village",
     emoji: "🗣️",
@@ -189,6 +206,7 @@ export const ROLES: Record<string, RoleDef> = {
   detective: {
     id: "detective",
     weight: 4,
+    autoFrom: 9,
     name: "Detective",
     team: "village",
     emoji: "🕵️",
@@ -200,6 +218,7 @@ export const ROLES: Record<string, RoleDef> = {
   medium: {
     id: "medium",
     weight: 2,
+    autoFrom: 10,
     name: "Medium",
     team: "village",
     emoji: "👻",

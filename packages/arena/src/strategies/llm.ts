@@ -422,21 +422,17 @@ export class LlmStrategy implements Strategy {
 }
 
 /**
- * What every player knows before a word is said: the size of the table, how
- * many wolves are in it, which roles can appear, and the house rules. Public
- * knowledge at a real table — and without it an agent cannot count the wolves
- * down, or tell a quiet night caused by a house rule from one caused by a
- * doctor. It goes in the system prompt because it never changes during a game.
+ * What every player knows before a word is said: the size of the table,
+ * which roles can appear, and the house rules — without it an agent can't
+ * tell a quiet night caused by a house rule from one caused by a doctor. It
+ * goes in the system prompt because it never changes during a game.
  */
 function setup(view: PlayerView): string {
-  const { min, max } = view.wolfCount; // exactly what the table is told
-  const parts = [
-    `The game: ${view.players.length} players, ${min === max ? min : `${min} or ${max}`} of them werewolves.`,
-  ];
+  const parts = [`The game: ${view.players.length} players. How many are werewolves isn't announced.`];
 
   const sel = view.config.selection;
   if (sel.mode === "pool") {
-    const names = sel.pool.map((id) => ROLES[id]?.name ?? id).join(", ");
+    const names = view.possibleRoles.filter((id) => id !== "werewolf").map((id) => ROLES[id]?.name ?? id).join(", ");
     parts.push(`Everyone else is drawn from: ${names}.`);
   } else {
     const named = Object.entries(sel.roleCounts)

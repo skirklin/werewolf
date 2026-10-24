@@ -2,6 +2,7 @@ import { useState, type ReactNode } from "react";
 import {
   assignableSpecialRoles,
   poolEligibleRoles,
+  rolePool,
   recommendedConfig,
   validateConfig,
   dealPreview,
@@ -95,7 +96,7 @@ export function RoleConfigEditor({
           </button>
         </div>
         {sel.mode === "pool" ? (
-          <PoolEditor sel={sel} onChange={setSelection} />
+          <PoolEditor sel={sel} playerCount={playerCount} onChange={setSelection} />
         ) : (
           <ExactEditor sel={sel} onChange={setSelection} />
         )}
@@ -135,21 +136,25 @@ export function RoleConfigEditor({
 
 function PoolEditor({
   sel,
+  playerCount,
   onChange,
 }: {
   sel: Extract<RoleSelection, { mode: "pool" }>;
+  playerCount: number;
   onChange: (s: RoleSelection) => void;
 }) {
   // The last role tapped, so its description shows without crowding the grid.
   const [shown, setShown] = useState<string | null>(null);
   const shownRole = poolEligibleRoles().find((r) => r.id === shown);
-  const toggle = (roleId: string) =>
-    onChange({
-      ...sel,
-      pool: sel.pool.includes(roleId)
-        ? sel.pool.filter((r) => r !== roleId)
-        : [...sel.pool, roleId],
-    });
+  const inPool = new Set(rolePool(sel, playerCount));
+  // Each tap moves a role along: automatic -> always -> never -> automatic.
+  const cycle = (roleId: string) => {
+    const { [roleId]: current, ...rest } = sel.overrides;
+    const next = current === undefined ? true : current ? false : undefined;
+    onChange({ ...sel, overrides: next === undefined ? rest : { ...rest, [roleId]: next } });
+  };
+  const setting = (role: RoleDef) =>
+    sel.overrides[role.id] === true ? "Always" : sel.overrides[role.id] === false ? "Never" : role.autoFrom > 3 ? `Auto · ${role.autoFrom}+` : "Auto";
 
   return (
     <div className="stack">
@@ -173,27 +178,36 @@ function PoolEditor({
         </div>
       </div>
 
-      <div className="muted small">
-        Tap the roles that could be dealt. Each game draws from these at random, so you can pick more than there are
-        players.
+      <div className="spread">
+        <div className="muted small">
+          Roles join the pool automatically as your group grows. Tap one to set it to always or never.
+        </div>
+        {Object.keys(sel.overrides).length > 0 && (
+          <button className="ghost small" onClick={() => onChange({ ...sel, overrides: {} })}>
+            All auto
+          </button>
+        )}
       </div>
       <TeamGroups
         grid
         roles={poolEligibleRoles()}
         render={(role) => {
-          const on = sel.pool.includes(role.id);
+          const on = inPool.has(role.id);
           return (
             <button
               key={role.id}
               className={`role-toggle ${on ? "on" : ""}`}
               aria-pressed={on}
               onClick={() => {
-                toggle(role.id);
+                cycle(role.id);
                 setShown(role.id);
               }}
             >
               <span className="avatar">{role.emoji}</span>
-              <span className="clamp-1">{role.name}</span>
+              <span className="role-toggle-text">
+                <span className="clamp-1">{role.name}</span>
+                <span className="small muted">{setting(role)}</span>
+              </span>
               {on && <span className="check">✓</span>}
             </button>
           );
@@ -202,7 +216,9 @@ function PoolEditor({
       {shownRole && (
         <div className="role-detail">
           {shownRole.emoji} <b>{shownRole.name}</b> — {shownRole.blurb}{" "}
-          <span className="muted">Balance {signed(shownRole.weight)}.</span>
+          <span className="muted">
+            Balance {signed(shownRole.weight)}.{shownRole.autoFrom > 3 && ` In automatically from ${shownRole.autoFrom} players.`}
+          </span>
         </div>
       )}
     </div>
@@ -295,18 +311,6 @@ function SharedToggles({
 }) {
   return (
     <div className="card tight rules">
-      {config.selection.mode === "pool" && (
-        <Rule
-          icon="🎲"
-          label="Secret wolf count"
-          help="The table is told only how many wolves there could be (say, 2 or 3), not how many there are — so nobody can be sure the last wolf is gone."
-          checked={!!config.selection.secretWolfCount}
-          onChange={(on) =>
-            config.selection.mode === "pool" &&
-            onChange({ ...config, selection: { ...config.selection, secretWolfCount: on } })
-          }
-        />
-      )}
       <Rule
         icon="🕊️"
         label="Peaceful first night"

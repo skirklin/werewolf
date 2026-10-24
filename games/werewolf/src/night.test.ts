@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { onlyRoles } from "./setup.js";
 import type { GameState, Player, GameConfig } from "./types.js";
 import { createGame, reduce, nightIdlers } from "./engine.js";
 import { projectView } from "./views.js";
@@ -210,8 +211,8 @@ describe("possible roles", () => {
   });
 
   it("lists the whole pool in pool mode, even roles that may not be dealt", () => {
-    const c = config({ selection: { mode: "pool", pool: ["villager", "seer", "doctor", "tanner"] } });
-    expect(possibleRoles(c, 4)).toEqual(["werewolf", "villager", "seer", "doctor", "tanner"]);
+    const c = config({ selection: { mode: "pool", overrides: onlyRoles(["villager", "seer", "doctor", "tanner"]) } });
+    expect(possibleRoles(c, 6)).toEqual(["werewolf", "villager", "seer", "doctor", "tanner"]);
   });
 
   it("is in every player's view", () => {

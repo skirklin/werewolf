@@ -143,7 +143,7 @@ function LocalPlay({
         <TownNews log={publicLog(state)} voteHistory={view.voteHistory} round={state.round} players={publicPlayers(state)} />
         <ColdShoulderNote view={view} />
         <PlayerList players={publicPlayers(state)} youId="-" />
-        <RolesInPlay roleIds={view.possibleRoles} wolves={view.wolfCount} />
+        <RolesInPlay roleIds={view.possibleRoles} />
         <p className="muted center small">Talk it out. When you're ready, put it to a vote.</p>
         <button className="primary full lg" onClick={game.callVote}>Call a vote</button>
       </Public>
@@ -172,7 +172,7 @@ function LocalPlay({
     return (
       <div className="app">
         <RoleCard view={view} />
-        <div style={{ marginTop: 12 }}><RolesInPlay roleIds={view.possibleRoles} wolves={view.wolfCount} open /></div>
+        <div style={{ marginTop: 12 }}><RolesInPlay roleIds={view.possibleRoles} open /></div>
         <div className="spacer" />
         <p className="muted center small">Memorize it! You'll act on it now, then pass the phone along.</p>
         <button className="primary full lg" onClick={() => setSeenRole((s) => new Set(s).add(seatId))}>

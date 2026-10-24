@@ -1,6 +1,8 @@
 import {
   getRole,
   dealPreview,
+  onlyRoles,
+  rolePool,
   recommendedConfig,
   validateConfig,
   type GameConfig,
@@ -44,7 +46,7 @@ export function tableConfig(args: TableArgs, players: number): GameConfig {
 
   const config: GameConfig = {
     ...base,
-    selection: { mode: "pool", pool: pool ?? (base.selection.mode === "pool" ? base.selection.pool : []), balance },
+    selection: { mode: "pool", overrides: pool ? onlyRoles(pool) : {}, balance },
     peacefulFirstNight: !!args.peaceful,
   };
 
@@ -66,7 +68,7 @@ export function describeTable(config: GameConfig, players: number): string {
   const span = ({ min, max }: { min: number; max: number }) => (min === max ? `${min}` : `${min}-${max}`);
   const fixed = [deal.werewolves, deal.specials, deal.villagers, deal.balance].every((r) => r.min === r.max);
   return (
-    `Table: pool [${config.selection.pool.join(", ")}], ${config.selection.balance ?? "even"} balance, ${night}\n` +
+    `Table: pool [${rolePool(config.selection, players).join(", ")}], ${config.selection.balance ?? "even"} balance, ${night}\n` +
     `  ${span(deal.werewolves)} werewolf · ${span(deal.specials)} special · ${span(deal.villagers)} villager` +
     ` · balance ${span(deal.balance)}` +
     (fixed ? "  (every game deals the same roles)" : "  (the specials vary game to game)")

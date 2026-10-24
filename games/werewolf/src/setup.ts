@@ -1,5 +1,5 @@
 import type { Balance, GameConfig, Player, RoleSelection } from "./types.js";
-import { getRole, isWolf, onWolfTeam, VILLAGER_ROLE_ID } from "./roles.js";
+import { getRole, isWolf, onWolfTeam, poolEligibleRoles, VILLAGER_ROLE_ID } from "./roles.js";
 import { shuffle, makeRng } from "@party/core";
 
 /**
@@ -8,8 +8,6 @@ import { shuffle, makeRng } from "@party/core";
  */
 const WOLF_SHARE_BAND = { min: 0.22, max: 0.36 } as const;
 
-/** A conservative, familiar default pool (the rest can be toggled on). */
-const DEFAULT_POOL = ["villager", "seer", "doctor"];
 
 function clamp(n: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, n));
@@ -34,7 +32,7 @@ export function recommendedConfig(_playerCount: number): GameConfig {
   return {
     selection: {
       mode: "pool",
-      pool: [...DEFAULT_POOL],
+      overrides: {},
     },
     revealRoleOnDeath: false,
     nightSummary: "discreet",
@@ -69,16 +67,12 @@ export function validateConfig(config: GameConfig, playerCount: number): ConfigP
     if (assigned.filter(onWolfTeam).length * 2 >= playerCount)
       problems.push({ message: "Too many on the wolf team — the wolves would start already winning." });
   } else {
-    for (const roleId of sel.pool) {
+    for (const roleId of Object.keys(sel.overrides)) {
       getRole(roleId); // throws on unknown
       if (roleId === "werewolf")
         problems.push({ message: "Werewolves are added automatically — no need to pool them." });
     }
-    if (sel.pool.length === 0) problems.push({ message: "Add at least one role to the pool." });
-    const hasVillageSide = sel.pool.some(
-      (id) => id === VILLAGER_ROLE_ID || getRole(id).team === "village"
-    );
-    if (sel.pool.length > 0 && !hasVillageSide)
+    if (!rolePool(sel, playerCount).some((id) => getRole(id).team === "village"))
       problems.push({ message: "Add a Villager or a village role so the town has a side." });
   }
   return problems;
@@ -114,6 +108,18 @@ function balanceTarget(sel: RoleSelection): number {
   return BALANCE_TARGETS[(sel.mode === "pool" && sel.balance) || "even"];
 }
 
+/** The roles a pool deal may use at this table size: the host's overrides, else each role's autoFrom. */
+export function rolePool(sel: Extract<RoleSelection, { mode: "pool" }>, playerCount: number): string[] {
+  return poolEligibleRoles()
+    .filter((r) => sel.overrides[r.id] ?? playerCount >= r.autoFrom)
+    .map((r) => r.id);
+}
+
+/** Overrides that make the pool exactly these roles (for tools and tests). */
+export function onlyRoles(ids: readonly string[]): Record<string, boolean> {
+  return Object.fromEntries(poolEligibleRoles().map((r) => [r.id, ids.includes(r.id)]));
+}
+
 /** Specials that can fill a wolf seat (Infector), and the rest of the pool (village, solo, Henchman). */
 function splitPool(pool: readonly string[]) {
   const wolfSpecials = pool.filter((id) => id !== "werewolf" && isWolf(id));
@@ -136,10 +142,11 @@ function splitPool(pool: readonly string[]) {
 function balancedDecks(config: GameConfig, playerCount: number, rng: () => number): string[][] {
   const sel = config.selection;
   if (sel.mode !== "pool") return [];
-  const { wolfSpecials, restPool } = splitPool(sel.pool);
+  const pool = rolePool(sel, playerCount);
+  const { wolfSpecials, restPool } = splitPool(pool);
   const wolves = werewolfRange(sel, playerCount);
   // Without Villagers in the pool, specials fill every seat they can.
-  const villagerAllowed = sel.pool.includes(VILLAGER_ROLE_ID);
+  const villagerAllowed = pool.includes(VILLAGER_ROLE_ID);
   const target = balanceTarget(sel);
   const randInt = (lo: number, hi: number) => lo + Math.floor(rng() * (hi - lo + 1));
   const villagers = (deck: string[]) => deck.filter((id) => id === VILLAGER_ROLE_ID).length;
@@ -226,11 +233,12 @@ export function possibleRoles(config: GameConfig, playerCount: number): string[]
     }
     if (total < playerCount) ids.add(VILLAGER_ROLE_ID);
   } else {
+    const pool = rolePool(sel, playerCount);
     ids.add("werewolf");
-    for (const id of sel.pool) ids.add(id);
+    for (const id of pool) ids.add(id);
     // Seats the pool's specials can't fill go to Villagers (roles never repeat),
     // so they're possible even when the Villager isn't ticked.
-    const { restPool } = splitPool(sel.pool);
+    const { restPool } = splitPool(pool);
     if (restPool.length < playerCount - werewolfRange(sel, playerCount).min) ids.add(VILLAGER_ROLE_ID);
   }
   // Wolves first, then village, then solo — the order players read a setup in.

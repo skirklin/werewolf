@@ -66,6 +66,12 @@ export interface RoleDef {
   /** Emoji used as the role's avatar in the UI. */
   emoji: string;
   night?: NightAbility;
+  /**
+   * The table size from which this role is in the pool by default (the host
+   * can still force it on or off). Some roles swing a small game too hard: an
+   * Infector's bite at 7 players can end it overnight.
+   */
+  autoFrom: number;
   /** On death (night or vote), this player takes someone down with them. */
   onDeathShoot?: boolean;
   /** The first time the town votes this player out, they're revealed and spared (Prince). */
@@ -112,20 +118,17 @@ export interface Player {
  * How roles are chosen for a game. Two modes:
  *  - exact: enumerate how many of each special role; villagers fill the rest
  *    so the deck always matches the player count.
- *  - pool: list the roles you're willing to include (the pool may hold more
- *    roles than players). The dealer picks the wolf count (from a band that
- *    scales with the table) and the specials together, by balance points.
+ *  - pool: the roles that may be dealt — each role on by default once the
+ *    table reaches its size (RoleDef.autoFrom), unless the host forces it on
+ *    or off. The dealer picks the wolf count (from a band that scales with
+ *    the table) and the specials together, by balance points.
  */
 export type RoleSelection =
   | { mode: "exact"; roleCounts: Record<string, number> }
   | {
       mode: "pool";
-      pool: string[];
-      /**
-       * Keep the pack's size a secret: the table is told only the range the
-       * dealer could have picked (e.g. 2–3), not how many wolves it did.
-       */
-      secretWolfCount?: boolean;
+      /** The host's picks: true = always in the pool, false = never. Unlisted roles are automatic. */
+      overrides: Record<string, boolean>;
       /**
        * Which side the deal should favor; the dealer picks wolves and specials
        * so the deck's balance points land near this target. Absent means "even".

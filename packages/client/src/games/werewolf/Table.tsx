@@ -28,7 +28,7 @@ function renderPhase(view: PlayerView, send: Send, playAgain: () => void, onExit
       return (
         <div className="stack">
           <RoleCard view={view} />
-          <RolesInPlay roleIds={view.possibleRoles} wolves={view.wolfCount} open />
+          <RolesInPlay roleIds={view.possibleRoles} open />
           {imReady ? (
             <p className="center muted">
               Keep a straight face. Night falls once everyone's ready — waiting on {listNames(waiting)}.
@@ -59,7 +59,7 @@ function renderPhase(view: PlayerView, send: Send, playAgain: () => void, onExit
           </div>
           <InspectHistory view={view} />
           <DetectionHistory view={view} />
-          <RolesInPlay roleIds={view.possibleRoles} wolves={view.wolfCount} />
+          <RolesInPlay roleIds={view.possibleRoles} />
         </div>
       );
 

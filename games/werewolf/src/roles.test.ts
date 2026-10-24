@@ -4,7 +4,7 @@ import type { GameState, Player, GameConfig } from "./types.js";
 import { reduce, createGame, checkWinner, living, allVotesIn, validNightTargets, fabricatedInspect, fabricatedSameTeam, DRUNK_MIMIC_KINDS } from "./engine.js";
 import { getRole } from "./roles.js";
 import { projectView } from "./views.js";
-import { dealRoles, validateConfig } from "./setup.js";
+import { dealRoles, validateConfig, onlyRoles } from "./setup.js";
 import { mimicableRoleIds } from "./roles.js";
 import { makeRng } from "@party/core";
 
@@ -982,7 +982,7 @@ describe("wolf-team roles in the pool", () => {
   const players = (n: number): Player[] =>
     Array.from({ length: n }, (_, i) => ({ id: `p${i}`, name: `P${i}`, roleId: null, alive: true, connected: true, isHost: false }));
   const poolConfig = (pool: string[]): GameConfig => ({
-    selection: { mode: "pool", pool },
+    selection: { mode: "pool", overrides: onlyRoles(pool) },
     revealRoleOnDeath: false,
     nightSummary: "discreet", peacefulFirstNight: false,
   });
@@ -990,9 +990,9 @@ describe("wolf-team roles in the pool", () => {
   it("can draw the Infector into a wolf slot, always keeping a base Werewolf", () => {
     let infected = 0;
     for (let seed = 0; seed < 40; seed++) {
-      const counts = countRoles(dealRoles(players(8), poolConfig(["villager", "infector", "seer", "doctor", "witch", "auraSeer", "hunter"]), makeRng(seed)));
+      const counts = countRoles(dealRoles(players(10), poolConfig(["villager", "infector", "seer", "doctor", "witch", "auraSeer", "hunter", "detective", "prince", "tanner"]), makeRng(seed)));
       expect(counts.werewolf).toBeGreaterThanOrEqual(1);
-      expect([2, 3]).toContain((counts.werewolf ?? 0) + (counts.infector ?? 0)); // 2-3 wolf seats at 8 players
+      expect([2, 3, 4]).toContain((counts.werewolf ?? 0) + (counts.infector ?? 0)); // 2-4 wolf seats at 10 players
       infected += counts.infector ?? 0;
     }
     expect(infected).toBeGreaterThan(0);
@@ -1017,8 +1017,9 @@ describe("wolf-team roles in the pool", () => {
     expect(seen).toBeGreaterThan(0);
   });
 
-  it("rejects pooling the base Werewolf (it comes from the ratio)", () => {
-    expect(validateConfig(poolConfig(["werewolf", "villager"]), 6).length).toBeGreaterThan(0);
+  it("rejects pooling the base Werewolf (the dealer adds those)", () => {
+    const config = { ...poolConfig(["villager"]), selection: { mode: "pool" as const, overrides: { werewolf: true } } };
+    expect(validateConfig(config, 6).length).toBeGreaterThan(0);
   });
 });
 

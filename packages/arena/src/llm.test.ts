@@ -70,9 +70,9 @@ const view = {
   winner: null,
   soloWinnerId: null,
   code: "TEST",
-  wolfCount: { min: 1, max: 1 },
+  possibleRoles: ["werewolf", "villager", "seer", "doctor"],
   config: {
-    selection: { mode: "pool", pool: ["villager", "seer", "doctor"], balance: "even" },
+    selection: { mode: "pool", overrides: {}, balance: "even" },
     revealRoleOnDeath: false,
     nightSummary: "discreet",
     peacefulFirstNight: true,
@@ -139,14 +139,12 @@ describe("what an agent is allowed to say out loud", () => {
 });
 
 describe("what every agent is told about the game", () => {
-  it("states the table size, the wolf count and the roles in play", async () => {
+  it("states the table size and the roles in play, but not the wolf count", async () => {
     const asked: string[] = [];
     const s = new LlmStrategy({ client: recordingSystem(asked, "hello") });
     await s.speak(view);
     const system = asked.join("\n");
-    // Without the wolf count an agent cannot count the wolves down, which is
-    // the arithmetic the whole game turns on.
-    expect(system).toMatch(/2 players, 1 of them werewolves|players, \d+ of them werewolves/);
+    expect(system).toMatch(/\d+ players\. How many are werewolves isn't announced\./);
     expect(system).toContain("Seer");
     expect(system).toContain("Doctor");
   });
