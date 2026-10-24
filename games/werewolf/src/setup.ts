@@ -64,22 +64,22 @@ export function validateConfig(config: GameConfig, playerCount: number): ConfigP
   const sel = config.selection;
   if (sel.mode === "exact") {
     for (const [roleId, count] of Object.entries(sel.roleCounts)) {
-      if (count < 0) problems.push({ message: `${roleId} count cannot be negative.` });
+      if (count < 0) problems.push({ message: "A role can't be in the game fewer than zero times." });
       if (roleId === VILLAGER_ROLE_ID)
-        problems.push({ message: "Villagers are automatic; don't set them explicitly." });
+        problems.push({ message: "Villagers fill the empty seats on their own — no need to add them." });
       else getRole(roleId); // throws on unknown role id
     }
     const assigned = exactDeck(sel, 0);
     if (!assigned.some(isWolf)) problems.push({ message: "Need at least 1 werewolf." });
     if (assigned.length > playerCount)
-      problems.push({ message: `Assigned roles (${assigned.length}) exceed player count (${playerCount}).` });
+      problems.push({ message: `That's ${assigned.length} roles for ${playerCount} players.` });
     if (assigned.filter(onWolfTeam).length > maxWolfTeam(playerCount))
       problems.push({ message: "Too many on the wolf team — one death would hand them the game." });
   } else {
     for (const roleId of Object.keys(sel.overrides)) {
       getRole(roleId); // throws on unknown
       if (roleId === "werewolf")
-        problems.push({ message: "Werewolves are added automatically — no need to pool them." });
+        problems.push({ message: "Werewolves are always in — no need to add them." });
     }
   }
   return problems;

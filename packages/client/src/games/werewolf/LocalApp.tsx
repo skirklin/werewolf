@@ -91,7 +91,7 @@ function Setup({
         <RoleConfigEditor config={config} playerCount={filled.length} onChange={setConfig} />
 
         <button className="primary full lg" disabled={problems.length > 0} onClick={start}>
-          Deal the roles
+          Start the game
         </button>
       </div>
     </div>

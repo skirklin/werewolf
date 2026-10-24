@@ -1,49 +1,52 @@
 import { useState } from "react";
 
-/** The change log, newest first. Add a release at the top when you ship something players will notice. */
+/**
+ * The change log, newest first, in the village's own words (no cards, deals or
+ * tech talk). Add a release at the top when you ship something players will notice.
+ */
 const CHANGELOG: { date: string; changes: string[] }[] = [
   {
     date: "2026-10-24",
     changes: [
-      "🔄 Card seen, or a question gave a role away? The host can start over with a fresh deal at any point.",
-      "🍺 The Drunk can now believe they're the Hunter, Prince, Cursed, Tanner, Poisoner — or a Werewolf, hunting with a pack it imagines. The real pack never knows.",
-      "🍄 The Poisoner plays for themself now: they win if they're alive at the end, whoever wins.",
-      "🦠 The Infector's curse costs them: they die passing it on.",
-      "🃏 Deals are mostly special roles; Villagers only fill the gaps. The wolf count varies, but never so high that one death hands them the game.",
-      "🎲 Deals are picked at random among the balanced ones, so games vary. Roles join automatically as the table grows; the host can switch any of them On or Off.",
-      "🤫 Nobody is told how many wolves there are.",
-      "⚖️ When the wolves tie the village, the game goes on while someone still holds a power that could break the tie.",
-      "🗳️ The vote order is random each game (then rotates each day), so whoever joined last doesn't always vote last.",
+      "🔄 Someone let their role slip? The host can start the game over, with new roles for everyone, at any point.",
+      "🍺 The Village Drunk has wilder dreams: they may believe they're the Hunter, the Prince, the Cursed, the Tanner, the Poisoner — or a Werewolf, prowling with a pack only they can see. The real wolves never know.",
+      "🍄 The Poisoner answers to no one now. Stay alive to the end and you win, whoever else does.",
+      "🦠 The Infector's curse has a price: passing it on kills them.",
+      "🎭 More special roles in every village. Plain Villagers only fill the empty seats.",
+      "🎲 Every game is a different mix, chosen to keep it fair. Bigger groups bring more roles, and the host can switch any role on or off.",
+      "🤫 Nobody is told how many wolves are out there — and there are never so many that a single death hands them the game.",
+      "⚖️ When the wolves draw level with the village, the game isn't over while someone still holds a power that could turn it around.",
+      "🗳️ The voting order is shuffled each game, then moves round each day, so nobody is always last.",
     ],
   },
   {
     date: "2026-10-22",
     changes: [
-      "👑 New: Prince — spared (and revealed) the first time the town votes them out.",
-      "🔭 New: Apprentice Seer — becomes the Seer once there's no Seer left.",
-      "😈 New: Cursed — bitten by the wolves, they turn into one instead of dying.",
-      "🍄 New: Poisoner — each night, someone's power quietly fails the following night.",
+      "👑 New: the Prince. The first time the town votes them out, they reveal their crown and are spared.",
+      "🔭 New: the Apprentice Seer. When the Seer is gone, they take up the crystal ball.",
+      "😈 New: the Cursed. Bitten by the wolves, they don't die — they join them.",
+      "🍄 New: the Poisoner. Each night they spike someone's supper, and that player's power fails the next night.",
     ],
   },
   {
     date: "2026-10-21",
     changes: [
-      "⚖️ Deals balance themselves: every role is worth points, and the host picks Wolves favored, Even or Village favored.",
-      "🌅 Every night ends with a dawn announcement, plus a private note if something changed for you.",
-      "🏹 The Hunter picks a target every night; if they die, the shot fires on its own.",
-      "🗣️ The Silencer is now the Gossip: whoever gets the cold shoulder can't speak or vote that day.",
-      "🧪 The Witch's heal saves whoever the wolves attack, without her learning who.",
-      "🔀 The Troublemaker and Infector each get one use, on a night of their choosing.",
-      "✅ Night falls once everyone has tapped \"I know my role\". Each vote ends with a result screen.",
-      "🏷️ Nicknames show next to real names.",
+      "⚖️ The host chooses who the game should favor: the wolves, the village, or neither.",
+      "🌅 Each morning the village hears what happened in the night — and you hear privately if anything changed for you.",
+      "🏹 The Hunter chooses a target every night. If the Hunter dies, the shot goes off.",
+      "🗣️ Meet the Gossip: start a rumor at night, and tomorrow the town gives that player the cold shoulder — no talking, no vote.",
+      "🧪 The Witch's healing potion saves whoever the wolves attack, though she never learns who.",
+      "🔀 The Troublemaker and the Infector each have one use, on a night of their choosing.",
+      "✅ Night falls once everyone has said they know their role, and the town hears the verdict after every vote.",
+      "🏷️ Nicknames appear next to real names.",
     ],
   },
   {
     date: "2026-10-20",
     changes: [
-      "🗳️ Votes are cast one at a time, in order, and are final.",
-      "🤐 Everyone gets something to tap at night, so a busy phone gives nothing away.",
-      "💾 Games in progress survive server restarts.",
+      "🗳️ The town votes one at a time, in order, and every vote is final.",
+      "🤐 Everyone has something to do at night, so a busy phone gives nothing away.",
+      "💾 If the game drops out mid-round, it picks up right where you left off.",
     ],
   },
 ];

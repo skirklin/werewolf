@@ -126,7 +126,7 @@ export function RolesInPlay({ roleIds, open = false }: { roleIds: string[]; open
         </div>
       )}
       <div className="muted small">
-        Not every role listed was necessarily dealt. Everyone acts at once at night, and what happens lands at dawn,
+        Not every role listed is necessarily in this game. Everyone acts at once at night, and what happens lands at dawn,
         so a vision shows the table as it stood at nightfall.
       </div>
     </div>

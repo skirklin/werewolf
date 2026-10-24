@@ -214,7 +214,7 @@ export function reduce(state: GameState, action: Action): GameState {
     case "startGame":
       return startGame(state, action.config);
     case "startNight":
-      assert(state.phase === "roleReveal", "Roles not being revealed.");
+      assert(state.phase === "roleReveal", "Everyone's already past learning their roles.");
       return beginNight(state);
     case "ready":
       return ready(state, action.actorId);
@@ -284,7 +284,7 @@ function say(state: GameState, speakerId: PlayerId, text: string): GameState {
  * quiet (startNight).
  */
 function ready(state: GameState, actorId: PlayerId): GameState {
-  assert(state.phase === "roleReveal", "Roles not being revealed.");
+  assert(state.phase === "roleReveal", "Everyone's already past learning their roles.");
   assert(playerById(state, actorId), "You're not in this game.");
   if (state.ready.includes(actorId)) return state;
   const next = { ...state, ready: [...state.ready, actorId] };
@@ -320,7 +320,7 @@ function redeal(state: GameState): GameState {
 }
 
 function startGame(state: GameState, config: GameConfig): GameState {
-  assert(state.phase === "lobby", "Game already started.");
+  assert(state.phase === "lobby", "The game has already begun.");
   const rng = makeRng(state.seed);
   const players = dealRoles(state.players, config, rng);
   const witchPotions: GameState["witchPotions"] = {};
@@ -417,11 +417,11 @@ function beginNight(state: GameState): GameState {
 
 /** The step `actorId` takes tonight (of `kind`, if given), checked still open. */
 function openStep(state: GameState, actorId: PlayerId, kind?: NightActionKind): NightStep {
-  assert(state.phase === "night" && state.night, "Not night.");
+  assert(state.phase === "night" && state.night, "It isn't night.");
   assert(playerById(state, actorId)?.alive, "The dead don't act.");
   const step = state.night.steps.find((s) => s.actorIds.includes(actorId) && (!kind || s.kind === kind));
-  assert(step, "You have no night action.");
-  assert(!step.done, "You have already acted.");
+  assert(step, "You have nothing to do tonight.");
+  assert(!step.done, "You've already made your move tonight.");
   return step;
 }
 
@@ -442,7 +442,7 @@ function assertPair(state: GameState, actorId: PlayerId, aId: PlayerId, bId: Pla
 
 function nightChoice(state: GameState, actorId: PlayerId, targetId: PlayerId): GameState {
   const step = openStep(state, actorId);
-  assert(validNightTargets(state, actorId).some((t) => t.id === targetId), "Invalid target.");
+  assert(validNightTargets(state, actorId).some((t) => t.id === targetId), "You can't pick them tonight.");
   if (step.kind === "inspect") {
     const format = getRole(step.roleId).night!.reveal ?? "exactRole";
     const roleId = playerById(state, targetId)!.roleId!;
@@ -480,7 +480,7 @@ function witchAction(state: GameState, actorId: PlayerId, heal: boolean, poison:
  * table is busy at night, not to record anything.
  */
 function nightIdle(state: GameState, actorId: PlayerId, targetId: PlayerId): GameState {
-  assert(state.phase === "night" && state.night, "Not night.");
+  assert(state.phase === "night" && state.night, "It isn't night.");
   assert(nightIdlers(state).some((p) => p.id === actorId), "You have a real choice to make tonight.");
   assert(targetId !== actorId && playerById(state, targetId)?.alive, "Pick another living player.");
   if (state.night.idleDone.includes(actorId)) return state;
@@ -496,9 +496,9 @@ function nightSkip(state: GameState, actorId: PlayerId): GameState {
 
 /** An actor has read their private night result; the night may now move on. */
 function nightAck(state: GameState, actorId: PlayerId): GameState {
-  assert(state.phase === "night" && state.night, "Not night.");
+  assert(state.phase === "night" && state.night, "It isn't night.");
   if (state.night.acked.includes(actorId)) return state;
-  assert(unackedNightResults(state).includes(actorId), "Nothing to acknowledge.");
+  assert(unackedNightResults(state).includes(actorId), "There's nothing for you to read just now.");
   return { ...state, night: { ...state.night, acked: [...state.night.acked, actorId] } };
 }
 
@@ -662,7 +662,7 @@ export function packmatesOf(state: GameState, id: PlayerId): PlayerId[] {
 }
 
 function endNight(state: GameState): GameState {
-  assert(state.phase === "night" && state.night, "Not night.");
+  assert(state.phase === "night" && state.night, "It isn't night.");
   const rng = makeRng(state.seed + state.round);
   const steps = state.night.steps;
 
@@ -970,7 +970,7 @@ export function currentVoter(state: GameState): PlayerId | null {
 }
 
 function startVote(state: GameState): GameState {
-  assert(state.phase === "dayDiscussion", "Not in day discussion.");
+  assert(state.phase === "dayDiscussion", "The town isn't talking things over right now.");
   return { ...state, phase: "dayVote", votes: {}, voteOrder: voteOrderFor(state) };
 }
 
@@ -980,10 +980,10 @@ function startVote(state: GameState): GameState {
  * vote is final.
  */
 function castVote(state: GameState, voterId: PlayerId, targetId: PlayerId | null): GameState {
-  assert(state.phase === "dayVote", "Not voting.");
+  assert(state.phase === "dayVote", "The town isn't voting right now.");
   const voter = playerById(state, voterId);
   assert(voter?.alive, "Dead players can't vote.");
-  assert(!state.silenced.includes(voterId), "You've been silenced — no vote today.");
+  assert(!state.silenced.includes(voterId), "You're getting the cold shoulder today — no vote for you.");
   assert(!(voterId in state.votes), "You've already voted.");
   const turn = currentVoter(state);
   assert(turn === voterId, `It's ${playerById(state, turn ?? "")?.name ?? "someone else"}'s turn to vote.`);
@@ -997,7 +997,7 @@ function castVote(state: GameState, voterId: PlayerId, targetId: PlayerId | null
 
 /** Host recovery: the voter whose turn it is has wandered off — record an abstain. */
 function skipVoter(state: GameState): GameState {
-  assert(state.phase === "dayVote", "Not voting.");
+  assert(state.phase === "dayVote", "The town isn't voting right now.");
   const turn = currentVoter(state);
   assert(turn, "Everyone has voted.");
   return { ...state, votes: { ...state.votes, [turn]: null } };
@@ -1019,7 +1019,7 @@ export function allVotesIn(state: GameState): boolean {
  * whether the game is over, until the host continues (proceed).
  */
 function resolveVote(state: GameState): GameState {
-  assert(state.phase === "dayVote", "Not voting.");
+  assert(state.phase === "dayVote", "The town isn't voting right now.");
   // The ballot is open: keep who voted for whom, so the town can see it after.
   state = { ...state, voteHistory: [...state.voteHistory, { round: state.round, votes: state.votes }], votes: {} };
   const tally = new Map<PlayerId, number>();

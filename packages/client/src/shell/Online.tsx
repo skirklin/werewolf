@@ -30,7 +30,7 @@ export function Online({ game, onExit }: { game?: ClientGame; onExit: (gameId?: 
     return <Centered title="This room is for a game this app can't show yet." onExit={exit} error={error} />;
   const isHost = room.players.some((p) => p.id === net.playerId && p.isHost);
   if (room.phase === "lobby") return <Lobby game={playing} room={room} net={net} isHost={isHost} onExit={exit} />;
-  if (!view) return <Centered title="Dealing…" onExit={exit} error={error} />;
+  if (!view) return <Centered title="Starting…" onExit={exit} error={error} />;
 
   const Table = playing.Table;
   return (
