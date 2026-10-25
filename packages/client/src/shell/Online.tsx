@@ -245,6 +245,12 @@ function Lobby({
               </div>
             ))}
           </div>
+          {isHost && room.players.some((p) => !p.connected) && (
+            <p className="muted small" style={{ margin: 0 }}>
+              No green dot means away (a sleeping phone, say). They're still dealt in and pick up when they're back.
+              Tap ✕ to remove anyone who isn't playing.
+            </p>
+          )}
         </div>
 
         {Notes && <Notes />}
