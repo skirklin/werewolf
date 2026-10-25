@@ -74,6 +74,8 @@ export interface RoomSnapshot {
   seatIds: string[];
   tokens: [string, string][];
   devices: [string, string][];
+  /** Players who tapped Leave mid-game (absent in older saves). */
+  left?: string[];
 }
 
 /**
@@ -92,6 +94,11 @@ export class Room {
   private tokens = new Map<string, string>();
   /** playerId -> the joining browser's own id (see addPlayer). Never sent out. */
   private devices = new Map<string, string>();
+  /**
+   * Players who tapped Leave mid-game. Their seat stays for this game, but the
+   * rematch drops them — unlike someone whose phone merely went to sleep.
+   */
+  private left = new Set<string>();
   /** When the room last became empty (for sweeping), or null while occupied. */
   emptySince: number | null = null;
   /** Pending hand-off while the host is away, or null. */
@@ -115,6 +122,7 @@ export class Room {
       seatIds: [...this.seatIds],
       tokens: [...this.tokens],
       devices: [...this.devices],
+      left: [...this.left],
     };
   }
 
@@ -132,6 +140,7 @@ export class Room {
     room.seatIds = [...snap.seatIds];
     room.tokens = new Map(snap.tokens);
     room.devices = new Map(snap.devices);
+    room.left = new Set(snap.left ?? []);
     room.emptySince = now;
     if (room.state !== null) {
       // Prove the game can still read it before anyone tries to play on it.
@@ -194,6 +203,7 @@ export class Room {
   /** Put a client back in an existing seat. */
   private connect(seat: RosterEntry, client: Client) {
     seat.connected = true;
+    this.left.delete(seat.id);
     this.clients.set(seat.id, client);
     this.emptySince = null;
     this.rosterChanged();
@@ -223,8 +233,7 @@ export class Room {
       this.clients.delete(pid);
       const player = this.players.find((p) => p.id === pid);
       // Keep their seat, lobby or game: a locked phone or a flaky connection
-      // shouldn't cost anyone their place (or the room its code). A lobby
-      // seat still empty when the game starts is dropped then.
+      // shouldn't cost anyone their place (or the room its code).
       if (player) player.connected = false;
       if (this.empty) this.emptySince = Date.now();
       this.rosterChanged();
@@ -252,7 +261,7 @@ export class Room {
         if (this.inLobby) {
           this.remove(playerId);
           this.broadcast();
-        }
+        } else this.left.add(playerId);
         return;
       }
       case "kick": {
@@ -266,9 +275,9 @@ export class Room {
       case "startGame": {
         hostOnly();
         if (!this.inLobby) throw new GameError("Game already started.");
-        // Anyone whose device is gone when the host deals sits this one out
-        // (they'd only stall the game). They can join the next one.
-        for (const p of [...this.players]) if (!this.clients.has(p.id)) this.remove(p.id);
+        // Everyone in the lobby is dealt in, connected or not: a phone that
+        // was asleep at the deal picks its seat back up when it wakes. The
+        // host removes anyone who isn't really playing before starting.
         const n = this.players.length;
         if (n < this.game.minPlayers)
           throw new GameError(`Need at least ${this.game.minPlayers} players to start.`);
@@ -286,9 +295,10 @@ export class Room {
       case "playAgain": {
         hostOnly();
         if (this.inLobby || !this.game.isOver(this.state)) throw new GameError("The game isn't over yet.");
-        // Back to the lobby with the same room. Anyone whose device left during
-        // the last game is dropped now, as they would have been from a lobby.
-        for (const p of [...this.players]) if (!p.connected) this.remove(p.id);
+        // Back to the lobby with the same room. Anyone who tapped Leave during
+        // the last game is dropped now; a phone that's just asleep keeps its seat.
+        for (const id of [...this.left]) this.remove(id);
+        this.left.clear();
         this.state = null;
         this.seatIds = [];
         this.broadcast();

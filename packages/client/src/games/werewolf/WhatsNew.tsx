@@ -11,6 +11,7 @@ const CHANGELOG: { date: string; changes: string[] }[] = [
       "💀 Once you're dead, your screen turns red and there's nothing left to tap.",
       "🗳️ Nobody has to call the vote: whoever votes first casts their vote when the talking's done, and that opens it for everyone.",
       "👑 If the host dies, the first living player moves the table on instead.",
+      "😴 A phone that's asleep when the game starts no longer loses its seat. It's dealt in like everyone else and picks up when it wakes.",
       "🤐 The in-app chat starts switched off — most tables just talk out loud. The host can turn it on.",
     ],
   },

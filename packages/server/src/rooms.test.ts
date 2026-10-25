@@ -251,12 +251,13 @@ describe("rooms", () => {
     expect(room.rejoin(clients[2].playerId, clients[2].token, clients[2])).toBe(false);
   });
 
-  it("drops lobby seats that are still empty when the game starts", () => {
+  it("deals in a lobby seat whose phone is asleep, and hands it back when it wakes", () => {
     const { room, clients } = seatPlayers(3, "counter");
     room.disconnect(clients[2]);
     room.handle(clients[0].playerId, { type: "startGame", config: { target: 3 } });
-    expect(clients[0].room!.players.map((p) => p.id)).toEqual([clients[0].playerId, clients[1].playerId]);
-    expect(room.rejoin(clients[2].playerId, clients[2].token, clients[2])).toBe(false);
+    expect(clients[0].room!.players.map((p) => p.id)).toEqual(clients.map((c) => c.playerId));
+    expect(room.rejoin(clients[2].playerId, clients[2].token, clients[2])).toBe(true);
+    expect(clients[2].view).toBeDefined();
   });
 
   it("hands off host to a connected player if the host leaves mid-game, and tells the game", () => {
@@ -355,13 +356,22 @@ describe("rematch", () => {
     expect(() => room.handle(clients[1].playerId, { type: "playAgain" })).toThrow(/host/i);
   });
 
-  it("drops anyone who left before it, and retires their token", () => {
+  it("drops anyone who tapped Leave before it, and retires their token", () => {
     const { room, clients } = finishedCounter(3);
     const gone = clients[2];
-    room.disconnect(gone);
+    room.handle(gone.playerId, { type: "leave" });
     room.handle(clients[0].playerId, { type: "playAgain" });
     expect(room.players).toHaveLength(2);
     expect(room.rejoin(gone.playerId, gone.token, gone)).toBe(false);
+  });
+
+  it("keeps the seat of a phone that's just asleep", () => {
+    const { room, clients } = finishedCounter(3);
+    const asleep = clients[2];
+    room.disconnect(asleep);
+    room.handle(clients[0].playerId, { type: "playAgain" });
+    expect(room.players).toHaveLength(3);
+    expect(room.rejoin(asleep.playerId, asleep.token, asleep)).toBe(true);
   });
 
   it("still lets a mid-game dropout rejoin if they beat the rematch back", () => {
