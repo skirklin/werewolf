@@ -1,16 +1,19 @@
 import type { PlayerView, WerewolfAction } from "@party/werewolf";
 import type { TableProps } from "../../shell/game.js";
-import { RoleCard, RolesInPlay, TimeBadge, TownNews, useTimeTheme, nameOf } from "./ui.js";
+import { RoleCard, RolesInPlay, TimeBadge, TownNews, useTimeTheme, useDeadTheme, nameOf } from "./ui.js";
 import {
-  NightAction, NightResult, IdleNight, AnnouncementScreen, DayBoard, VoteAction, InspectHistory, DetectionHistory,
-  GameOver, PlayerList, type Send,
+  NightAction, NightResult, IdleNight, AnnouncementScreen, DayBoard, VoteAction, VoteOrder, InspectHistory,
+  DetectionHistory, ChatPanel, GameOver, PlayerList, type Send,
 } from "./phases.js";
 
 /** A Werewolf game in progress, on one player's own device. */
 export function WerewolfTable({ view, act, playAgain, onExit }: TableProps<PlayerView, WerewolfAction>) {
   useTimeTheme(view.phase);
+  const out = !view.you.alive && view.phase !== "gameOver";
+  useDeadTheme(out);
   return (
     <>
+      {out && <div className="dead-strip">💀 You're dead</div>}
       <TimeBadge phase={view.phase} round={view.round} />
       {renderPhase(view, act, playAgain, onExit)}
       <HostRecovery view={view} send={act} />
@@ -48,7 +51,7 @@ function renderPhase(view: PlayerView, send: Send, playAgain: () => void, onExit
     }
 
     case "night":
-      if (dead) return <Spectator view={view} label="The night goes on without you. No hints, no faces." />;
+      if (dead) return <Spectator view={view} send={send} label="🌙 The village sleeps." />;
       if (view.nightPrompt) return <NightAction view={view} send={send} />;
       if (view.nightAwaitingAck) return <NightResult view={view} send={send} />;
       if (view.idlePrompt) return <IdleNight view={view} send={send} />;
@@ -66,10 +69,11 @@ function renderPhase(view: PlayerView, send: Send, playAgain: () => void, onExit
       );
 
     case "dayDiscussion":
+      if (dead) return <Spectator view={view} send={send} label="☀️ The town is talking." />;
       return <DayBoard view={view} send={send} isHost={view.you.isHost} />;
 
     case "dayVote":
-      if (dead) return <Spectator view={view} label="🗳️ The town is deliberating…" />;
+      if (dead) return <Spectator view={view} send={send} label="🗳️ The town is voting." />;
       if (view.silencedIds.includes(view.you.id))
         return (
           <div className="stack">
@@ -80,7 +84,8 @@ function renderPhase(view: PlayerView, send: Send, playAgain: () => void, onExit
       return <VoteAction view={view} send={send} />;
 
     case "announce":
-      return <AnnouncementScreen view={view} onContinue={view.you.isHost ? () => send({ type: "proceed" }) : null} />;
+      // The host moves everyone on — unless they're dead, then the first living player does.
+      return <AnnouncementScreen view={view} onContinue={view.you.id === view.leaderId ? () => send({ type: "proceed" }) : null} />;
 
     case "gameOver":
       // The host deals a rematch in place — everyone stays in the room, so no
@@ -109,9 +114,17 @@ function HostRecovery({ view, send }: { view: PlayerView; send: Send }) {
       ? { label: "Start the night anyway", hint: "if someone's not answering", msg: { type: "startNight" } }
       : view.phase === "night"
         ? { label: "End the night now", hint: "if someone has wandered off", msg: { type: "endNight" } }
-        : view.phase === "dayVote" && view.voteTurn
-          ? { label: `Skip ${nameOf(view.players, view.voteTurn)}'s vote`, hint: "counts as an abstain", msg: { type: "skipVoter" } }
-          : null;
+        : view.phase === "dayDiscussion"
+          ? {
+              label: "Open the vote",
+              hint: view.voteTurn ? `if ${nameOf(view.players, view.voteTurn)} isn't voting` : "nobody can vote today",
+              msg: { type: "startVote" },
+            }
+          : view.phase === "dayVote" && view.voteTurn
+            ? { label: `Skip ${nameOf(view.players, view.voteTurn)}'s vote`, hint: "counts as an abstain", msg: { type: "skipVoter" } }
+            : view.phase === "announce" && view.leaderId !== view.you.id
+              ? { label: "Move everyone on", hint: `if ${nameOf(view.players, view.leaderId ?? "")} has wandered off`, msg: { type: "proceed" } }
+              : null;
   if (!action) return null;
   return (
     <div className="host-tools">
@@ -145,11 +158,14 @@ function listNames(names: string[]): string {
   return names.length <= 1 ? names.join("") : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
 }
 
-function Spectator({ view, label }: { view: PlayerView; label: string }) {
+/** The dead watch: nothing to tap. */
+function Spectator({ view, send, label }: { view: PlayerView; send: Send; label: string }) {
   return (
     <div className="stack">
-      <div className="phase-banner"><div className="big">💀</div><h2>You're out</h2><p className="muted">{label}</p></div>
+      <p className="muted center">{label}</p>
+      {view.phase === "dayVote" && <VoteOrder view={view} name={(id) => nameOf(view.players, id)} />}
       <TownNews log={view.log} voteHistory={view.voteHistory} round={view.round} players={view.players} />
+      {view.phase !== "night" && view.config.chat !== false && <ChatPanel view={view} send={send} />}
       <PlayerList players={view.players} youId={view.you.id} />
     </div>
   );

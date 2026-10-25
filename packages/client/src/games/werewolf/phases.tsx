@@ -473,7 +473,7 @@ export function AnnouncementScreen({
           {next.button}
         </button>
       ) : (
-        <p className="center muted small">{hostName(view.players)} will move everyone on.</p>
+        <p className="center muted small">{view.leaderId ? nameOf(view.players, view.leaderId) : hostName(view.players)} will move everyone on.</p>
       )}
     </div>
   );
@@ -535,16 +535,38 @@ export function DayBoard({
       {view.config.chat !== false && <ChatPanel view={view} send={send} />}
       <PlayerList players={view.players} youId={view.you.id} showPresence={isHost} />
       <RolesInPlay roleIds={view.possibleRoles} />
-      {isHost && (
-        <button className="primary full lg" onClick={() => send({ type: "startVote" })}>
-          Call a vote
-        </button>
-      )}
-      {!isHost && (
-        <p className="muted center small">
-          {hostName(view.players)} calls the vote when the talking's done.
-        </p>
-      )}
+      <OpenTheVote view={view} send={send} />
+    </div>
+  );
+}
+
+/**
+ * Nobody calls the vote: whoever votes first today casts their vote when the
+ * talking's done, and that opens it for everyone. Pick then confirm, since
+ * the ballot sits on the board all through the talk.
+ */
+function OpenTheVote({ view, send }: { view: PlayerView; send: Send }) {
+  const [picked, setPicked] = useState<string | null>(null);
+  const first = view.voteTurn;
+  if (!first) return <p className="muted center small">Nobody can vote today. {hostName(view.players)} will move things on.</p>;
+  if (first !== view.you.id)
+    return (
+      <p className="muted center small">
+        🗳️ <b>{nameOf(view.players, first)}</b> votes first, once the talking's done. Their vote opens the vote.
+      </p>
+    );
+  const others = view.players.filter((p) => p.alive && p.id !== view.you.id).map((p) => p.id);
+  return (
+    <div className="card tight stack">
+      <b>🗳️ You vote first today</b>
+      <p className="muted small" style={{ margin: 0 }}>When the talking's done, cast your vote. That opens the vote for everyone else.</p>
+      <TargetGrid view={view} ids={others} selected={picked} onPick={(id) => setPicked((p) => (p === id ? null : id))} />
+      <button className="primary full lg" disabled={!picked} onClick={() => picked && send({ type: "castVote", targetId: picked })}>
+        {picked ? `Vote for ${nameOf(view.players, picked)}` : "Pick someone"}
+      </button>
+      <button className="ghost full" onClick={() => send({ type: "castVote", targetId: null })}>
+        Abstain
+      </button>
     </div>
   );
 }
@@ -641,7 +663,7 @@ export function VoteAction({ view, send }: { view: PlayerView; send: Send }) {
  * The whole vote in one list: the order, who's up, each vote as it's cast,
  * and a one-line standing at the top (a tie eliminates nobody — a wasted day).
  */
-function VoteOrder({ view, name }: { view: PlayerView; name: (id: string) => string }) {
+export function VoteOrder({ view, name }: { view: PlayerView; name: (id: string) => string }) {
   if (view.voteOrder.length === 0) return null;
   const standing = Object.entries(view.voteTally)
     .filter(([, n]) => n > 0)

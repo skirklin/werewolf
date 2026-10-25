@@ -30,6 +30,17 @@ export function useTimeTheme(phase: Phase | null) {
   }, [time]);
 }
 
+/** Turn the whole page red while you're dead, so nobody mistakes it for a live screen. */
+export function useDeadTheme(dead: boolean) {
+  useEffect(() => {
+    if (dead) document.body.dataset.dead = "true";
+    else delete document.body.dataset.dead;
+    return () => {
+      delete document.body.dataset.dead;
+    };
+  }, [dead]);
+}
+
 /** Which night or day it is, and whether the table may talk. */
 export function timeLabel(time: "day" | "night", round: number): string {
   if (time === "night") return `🌙 ${round > 0 ? `Night ${round}` : "Before nightfall"} · no talking`;

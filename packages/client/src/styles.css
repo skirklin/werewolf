@@ -336,6 +336,32 @@ body[data-time="day"]::before {
 }
 body[data-time="day"] button.primary { color: #2a1700; }
 
+/* Dead: the whole page goes blood red, day or night, so a dead player's
+ * screen is unmistakable across the table. */
+body[data-dead="true"],
+body[data-dead="true"][data-time] {
+  --bg: #2a0508;
+  --bg-2: #3a090e;
+  --panel: #4a0e15;
+  --panel-2: #5e141d;
+  --line: #8a2431;
+  --text: #ffe8eb;
+  --muted: #e6a3ad;
+  --accent: #d92d43;
+  --accent-2: #ff6b7e;
+  color-scheme: dark;
+}
+body[data-dead="true"]::before,
+body[data-dead="true"][data-time]::before {
+  background: radial-gradient(120% 80% at 50% -10%, #7a0f1c 0%, var(--bg) 65%);
+}
+body[data-dead="true"][data-time] button.primary { color: #fff; }
+.dead-strip {
+  align-self: stretch; text-align: center;
+  padding: 10px 14px; border-radius: 12px;
+  background: #b3122a; color: #fff; font-weight: 800;
+}
+
 .time-badge {
   align-self: center;
   display: inline-flex; align-items: center; gap: 8px;

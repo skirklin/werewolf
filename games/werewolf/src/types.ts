@@ -180,7 +180,7 @@ export interface GameConfig {
   peacefulFirstNight: boolean;
   /**
    * The in-app town square. Off suits a table playing in person, where people
-   * just talk out loud. Absent means on.
+   * just talk out loud. Off by default; absent (an older game) means on.
    */
   chat?: boolean;
 }
