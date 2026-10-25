@@ -13,7 +13,7 @@ export function WerewolfTable({ view, act, playAgain, onExit }: TableProps<Playe
   useDeadTheme(out);
   return (
     <>
-      {out && <div className="dead-strip">💀 You're dead — just watching. Nothing to tap; put your phone down.</div>}
+      {out && <div className="dead-strip">💀 You're dead</div>}
       <TimeBadge phase={view.phase} round={view.round} />
       {renderPhase(view, act, playAgain, onExit)}
       <HostRecovery view={view} send={act} />
@@ -51,7 +51,7 @@ function renderPhase(view: PlayerView, send: Send, playAgain: () => void, onExit
     }
 
     case "night":
-      if (dead) return <Spectator view={view} send={send} label="The night goes on without you. No hints, no faces." />;
+      if (dead) return <Spectator view={view} send={send} label="🌙 The village sleeps." />;
       if (view.nightPrompt) return <NightAction view={view} send={send} />;
       if (view.nightAwaitingAck) return <NightResult view={view} send={send} />;
       if (view.idlePrompt) return <IdleNight view={view} send={send} />;
@@ -69,7 +69,7 @@ function renderPhase(view: PlayerView, send: Send, playAgain: () => void, onExit
       );
 
     case "dayDiscussion":
-      if (dead) return <Spectator view={view} send={send} label="The town is talking it over. You can't say a word." />;
+      if (dead) return <Spectator view={view} send={send} label="☀️ The town is talking." />;
       return <DayBoard view={view} send={send} isHost={view.you.isHost} />;
 
     case "dayVote":
@@ -158,11 +158,11 @@ function listNames(names: string[]): string {
   return names.length <= 1 ? names.join("") : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
 }
 
-/** The dead watch: nothing to tap, so they can put the phone down. */
+/** The dead watch: nothing to tap. */
 function Spectator({ view, send, label }: { view: PlayerView; send: Send; label: string }) {
   return (
     <div className="stack">
-      <div className="phase-banner"><div className="big">💀</div><h2>You're out</h2><p className="muted">{label}</p></div>
+      <p className="muted center">{label}</p>
       {view.phase === "dayVote" && <VoteOrder view={view} name={(id) => nameOf(view.players, id)} />}
       <TownNews log={view.log} voteHistory={view.voteHistory} round={view.round} players={view.players} />
       {view.phase !== "night" && view.config.chat !== false && <ChatPanel view={view} send={send} />}
