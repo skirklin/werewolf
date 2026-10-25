@@ -116,7 +116,7 @@ async function main() {
 }
 
 function configFor(players: number, wolves: number, args: Args): GameConfig {
-  const base = recommendedConfig(players);
+  const base = { ...recommendedConfig(players), chat: true }; // the bots talk
   const pool = parseRoles(args) ?? ["villager", "seer", "doctor"];
   const roleCounts: Record<string, number> = { werewolf: wolves };
   for (const id of pool) if (id !== "villager") roleCounts[id] = 1;

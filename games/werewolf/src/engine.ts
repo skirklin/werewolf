@@ -30,6 +30,16 @@ export function playerById(state: GameState, id: PlayerId): Player | undefined {
 }
 
 /**
+ * Who moves the table on (past an announcement): the host while they're alive,
+ * else the first living player at the table, so a dead host can put their
+ * phone down.
+ */
+export function leaderId(state: GameState): PlayerId | null {
+  const host = state.players.find((p) => p.isHost);
+  return host?.alive ? host.id : (living(state)[0]?.id ?? null);
+}
+
+/**
  * True if this player's power does nothing tonight: the Drunk always, and
  * anyone the Poisoner got to last night. They act as normal; effects are
  * dropped at dawn and info comes back fake, so they can't tell.
@@ -996,7 +1006,7 @@ function applyConverts(
  * one place further round it each day — going last (seeing every other vote)
  * shouldn't always fall to the same people.
  */
-function voteOrderFor(state: GameState): PlayerId[] {
+export function voteOrderFor(state: GameState): PlayerId[] {
   const n = state.players.length;
   if (n === 0) return [];
   const order = shuffle(state.players, makeRng(state.seed));
@@ -1006,8 +1016,12 @@ function voteOrderFor(state: GameState): PlayerId[] {
   return seats.filter((p) => eligible.has(p.id)).map((p) => p.id);
 }
 
-/** Whose turn it is to vote, or null once everyone has. */
+/**
+ * Whose turn it is to vote, or null once everyone has. During the day's talk
+ * it's whoever votes first: casting their vote is what opens the vote.
+ */
 export function currentVoter(state: GameState): PlayerId | null {
+  if (state.phase === "dayDiscussion") return voteOrderFor(state)[0] ?? null;
   if (state.phase !== "dayVote") return null;
   return state.voteOrder.find((id) => !(id in state.votes)) ?? null;
 }
@@ -1023,6 +1037,8 @@ function startVote(state: GameState): GameState {
  * vote is final.
  */
 function castVote(state: GameState, voterId: PlayerId, targetId: PlayerId | null): GameState {
+  // Nobody has to call the vote: the first voter opens it by voting.
+  if (state.phase === "dayDiscussion" && currentVoter(state) === voterId) state = startVote(state);
   assert(state.phase === "dayVote", "The town isn't voting right now.");
   const voter = playerById(state, voterId);
   assert(voter?.alive, "Dead players can't vote.");

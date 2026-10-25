@@ -25,6 +25,8 @@ import {
   unackedNightResults,
   nightIdlers,
   currentVoter,
+  voteOrderFor,
+  leaderId,
   packmatesOf,
 } from "./engine.js";
 
@@ -140,8 +142,13 @@ export interface PlayerView {
   voteTally: Record<PlayerId, number>;
   /** Today's voting order (public). Votes are cast one at a time, in this order. */
   voteOrder: PlayerId[];
-  /** Whose turn it is to vote, or null (public). */
+  /**
+   * Whose turn it is to vote, or null (public). During the day's talk, the
+   * first voter: their vote opens the vote.
+   */
   voteTurn: PlayerId | null;
+  /** Who moves the table on past an announcement: the host, or the first living player once the host is dead. */
+  leaderId: PlayerId | null;
   /** Who has voted for whom so far today (public — votes are open). */
   votes: Record<PlayerId, PlayerId | null>;
   /** Every past day's ballot, voter by voter (public). */
@@ -303,8 +310,9 @@ export function projectView(state: GameState, viewerId: PlayerId): PlayerView {
     myVote: viewerId in state.votes ? state.votes[viewerId] : undefined,
     chat: state.chat.slice(-CHAT_IN_VIEW),
     voteTally,
-    voteOrder: state.phase === "dayVote" ? state.voteOrder : [],
+    voteOrder: state.phase === "dayVote" ? state.voteOrder : state.phase === "dayDiscussion" ? voteOrderFor(state) : [],
     voteTurn: currentVoter(state),
+    leaderId: leaderId(state),
     votes: state.phase === "dayVote" ? { ...state.votes } : {},
     voteHistory: state.voteHistory,
     announcement: publicAnnouncement(state),

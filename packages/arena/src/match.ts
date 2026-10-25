@@ -67,7 +67,8 @@ export class Arena {
 
   async play(opts: MatchOptions): Promise<MatchResult> {
     const { strategies } = opts;
-    const config = opts.config ?? recommendedConfig(strategies.length);
+    // The bots talk in the town square, so they need the chat on.
+    const config = opts.config ?? { ...recommendedConfig(strategies.length), chat: true };
     const rounds = opts.discussionRounds ?? 2;
     const say = opts.onEvent ?? (() => {});
     const transcript: Said[] = [];

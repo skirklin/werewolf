@@ -774,3 +774,44 @@ describe("the town square", () => {
   });
 });
 
+
+describe("opening the vote and moving on", () => {
+  /** Day 1 discussion, with p1 eaten in the night. */
+  function daytime(): GameState {
+    let s = gameWith(["werewolf", "villager", "villager", "villager", "villager"]);
+    s = reduce(s, { type: "startNight" });
+    s = reduce(s, { type: "nightChoice", actorId: "p0", targetId: "p1" });
+    return settleNight(s);
+  }
+
+  it("lets whoever votes first open the vote by voting — nobody has to call it", () => {
+    const s = daytime();
+    expect(s.phase).toBe("dayDiscussion");
+    const view = projectView(s, "p2");
+    const first = view.voteTurn!;
+    expect(first).toBe(view.voteOrder[0]);
+    const other = view.voteOrder.find((id) => id !== first)!;
+    expect(() => reduce(s, { type: "castVote", voterId: other, targetId: null })).toThrow(/voting/i);
+    const opened = reduce(s, { type: "castVote", voterId: first, targetId: null });
+    expect(opened.phase).toBe("dayVote");
+    expect(opened.votes).toEqual({ [first]: null });
+    expect(opened.voteOrder).toEqual(view.voteOrder);
+  });
+
+  it("hands the host's 'move on' to the first living player once the host is dead", () => {
+    // The wolves eat the host (p0 is a villager here; p1 the wolf).
+    let s = gameWith(["villager", "werewolf", "villager", "villager", "villager"]);
+    s = reduce(s, { type: "startNight" });
+    s = reduce(s, { type: "nightChoice", actorId: "p1", targetId: "p0" });
+    s = reduce(s, { type: "endNight" });
+    expect(s.phase).toBe("announce");
+    expect(projectView(s, "p2").leaderId).toBe("p1");
+    expect(() => toEngineAction("p2", { type: "proceed" }, false, false)).toThrow("Only the host");
+    expect(toEngineAction("p1", { type: "proceed" }, false, true)).toEqual({ type: "proceed" });
+    expect(toEngineAction("p0", { type: "proceed" }, true, false)).toEqual({ type: "proceed" });
+  });
+
+  it("starts with the chat off", () => {
+    expect(recommendedConfig(6).chat).toBe(false);
+  });
+});

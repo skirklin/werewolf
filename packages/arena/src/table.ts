@@ -37,7 +37,7 @@ export function parseRoles(args: Pick<TableArgs, "roles">): string[] | null {
 
 /** Build the game config from `--roles` / `--balance` / `--peaceful`. */
 export function tableConfig(args: TableArgs, players: number): GameConfig {
-  const base = recommendedConfig(players);
+  const base = { ...recommendedConfig(players), chat: true }; // the bots talk
   const pool = parseRoles(args);
 
   const balance = typeof args.balance === "string" ? args.balance : "even";

@@ -2,7 +2,7 @@ import { GameError, type GameModule, type RosterEntry } from "@party/core";
 import type { GameConfig, GameState, Player } from "./types.js";
 import type { PlayerView } from "./views.js";
 import type { WerewolfAction } from "./protocol.js";
-import { createGame, reduce, nightReadyToEnd, allVotesIn, type Action } from "./engine.js";
+import { createGame, reduce, nightReadyToEnd, allVotesIn, leaderId, type Action } from "./engine.js";
 import { validateConfig } from "./setup.js";
 import { projectView } from "./views.js";
 import { toGameRecord, type GameRecord } from "./record.js";
@@ -48,7 +48,7 @@ export const werewolfModule: GameModule<GameConfig, GameState, PlayerView> & {
   },
 
   act(state, seatId, raw, { isHost }) {
-    const action = toEngineAction(seatId, raw as WerewolfAction, isHost);
+    const action = toEngineAction(seatId, raw as WerewolfAction, isHost, seatId === leaderId(state));
     let next = reduce(state, action);
     // Auto-resolve phases so play flows without manual prompting.
     // The night waits for every actor to act AND to dismiss any private result,
@@ -78,7 +78,7 @@ export const werewolfModule: GameModule<GameConfig, GameState, PlayerView> & {
 };
 
 /** Translate a move off the wire into an engine action, checking who may make it. */
-export function toEngineAction(actorId: string, msg: WerewolfAction, isHost: boolean): Action {
+export function toEngineAction(actorId: string, msg: WerewolfAction, isHost: boolean, isLeader = isHost): Action {
   const hostOnly = () => {
     if (!isHost) throw new GameError("Only the host can do that.");
   };
@@ -109,7 +109,7 @@ export function toEngineAction(actorId: string, msg: WerewolfAction, isHost: boo
       hostOnly();
       return { type: "endNight" };
     case "startVote":
-      hostOnly();
+      hostOnly(); // recovery: the first voter opens the vote by voting
       return { type: "startVote" };
     case "castVote":
       return { type: "castVote", voterId: actorId, targetId: msg.targetId ?? null };
@@ -120,7 +120,9 @@ export function toEngineAction(actorId: string, msg: WerewolfAction, isHost: boo
       hostOnly();
       return { type: "resolveVote" };
     case "proceed":
-      hostOnly(); // the host moves the table on once everyone has read the news
+      // The host moves the table on once everyone has read the news — or, once
+      // the host is dead, the first living player (see leaderId).
+      if (!isHost && !isLeader) throw new GameError("Only the host can do that.");
       return { type: "proceed" };
     case "redeal":
       hostOnly();

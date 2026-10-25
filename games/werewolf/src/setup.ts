@@ -48,7 +48,8 @@ export function recommendedConfig(_playerCount: number): GameConfig {
     nightSummary: "discreet",
     // Nobody dies before the town has said a word — the friendlier default.
     peacefulFirstNight: true,
-    chat: true,
+    // Most tables play in person and just talk out loud.
+    chat: false,
   };
 }
 
